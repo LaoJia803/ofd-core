@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>ofd.js 开放 API 示例</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.6 "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #1f2937; display: flex; flex-direction: column; overflow: hidden; }
+  header { background: linear-gradient(135deg, #0b57d0, #0842a0); color: #fff; padding: 8px 16px; flex: none; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 11px; opacity: .85; }
+  .layout { display: flex; gap: 14px; padding: 14px; flex: 1; min-height: 0; }
+
+  /* 左侧：渲染区 */
+  .viewer-box { flex: 1; min-width: 0; background: #fff; border-radius: 10px; overflow: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px; }
+  #pageContainer { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  #pageContainer svg { max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,.15); background: #fff; display: block; }
+  .page-wrap { text-align: center; }
+  .page-wrap .page-no { font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+
+  /* 印章预览卡片 */
+  .seal-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .seal-img-box { width: 130px; height: 130px; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed #d1d5db; border-radius: 8px; overflow: hidden; background: #fafbfc; }
+  .seal-img-box img { max-width: 100%; max-height: 100%; }
+  .seal-name { font-size: 13px; font-weight: 600; color: #1f2937; }
+  .seal-meta { font-size: 11px; color: #9ca3af; text-align: center; }
+
+  /* 右侧：控制 + 输出 */
+  aside { width: 380px; flex: none; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 10px 14px; flex: none; }
+  .card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #0b57d0; }
+  .card .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .card select, .card input[type=text], .card input[type=number] { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; transition: border-color .15s, box-shadow .15s; }
+  .card select:focus, .card input[type=text]:focus, .card input[type=number]:focus { outline: 0; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+  .card select { flex: 1; min-width: 0; }
+  .width-label { font-size: 12px; color: #6b7280; flex: none; }
+  .width-unit { font-size: 11px; color: #9ca3af; flex: none; }
+  .card #widthInput { width: 90px; flex: none; }
+  .card button { padding: 6px 12px; border: 0; border-radius: 6px; background: #0b57d0; color: #fff; cursor: pointer; font-size: 13px; transition: background .15s; }
+  .card button:hover { background: #0842a0; }
+  .card button.sub { background: #e5e7eb; color: #333; }
+  .card button.sub:hover { background: #d1d5db; }
+  .card .hint { font-size: 11px; color: #9ca3af; margin-top: 6px; }
+
+  /* 输出区：弹性填满 */
+  #outputCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #outputCard h2 { flex: none; }
+  #output { flex: 1; overflow: auto; font-family: Consolas, Monaco, monospace; font-size: 12px;
+    background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 10px; margin: 0; white-space: pre-wrap; word-break: break-all; }
+  .log-ok { color: #4ade80; }
+  .log-err { color: #f87171; }
+  .log-info { color: #93c5fd; }
+  .log-warn { color: #fbbf24; }
+  .log-dim { color: #9ca3af; }
+
+  /* 点击印章弹窗 */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(17,24,39,.5); z-index: 9999;
+    display: flex; align-items: center; justify-content: center; }
+  .modal-overlay.hidden { display: none; }
+  .modal { width: 400px; max-height: 80vh; overflow: auto; background: #fff; border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid #f0f2f5; font-size: 14px; font-weight: 600; color: #1f2937; }
+  .modal-close { border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: #9ca3af; }
+  .modal-close:hover { color: #1f2937; }
+  #stampModalBody { padding: 16px; }
+  #stampModalBody .seal-preview { text-align: center; margin-bottom: 12px; }
+  #stampModalBody .seal-preview img { max-width: 160px; max-height: 160px; }
+  #stampModalBody .kv { display: flex; margin-bottom: 6px; font-size: 13px; }
+  #stampModalBody .kv .k { width: 90px; flex: none; color: #6b7280; }
+  #stampModalBody .kv .v { flex: 1; color: #1f2937; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ofd.js 开放 API 示例</h1>
+  <p>演示 load / renderPage / getPageCount / getPageDimensions / getDocumentInfo / getSignatures / verifySignature 等接口</p>
+</header>
+
+<div class="layout">
+  <!-- 左：渲染区 -->
+  <div class="viewer-box">
+    <div id="pageContainer">
+      <div class="page-no">请选择 OFD 文件并点击「加载并渲染」</div>
+    </div>
+  </div>
+
+  <!-- 右：控制 + 输出 -->
+  <aside>
+    <div class="card">
+      <h2>文件源</h2>
+      <div class="row">
+        <select id="fileSel">
+          <option value="ofdFile/999.ofd">999.ofd（发票）</option>
+          <option value="ofdFile/2.ofd">2.ofd</option>
+          <option value="ofdFile/h.ofd">h.ofd</option>
+          <option value="ofdFile/n.ofd">n.ofd</option>
+          <option value="ofdFile/6.1.001 Entry全部不压缩.ofd">6.1.001 不压缩</option>
+          <option value="ofdFile/6.1.002 Entry全部压缩.ofd">6.1.002 全压缩</option>
+          <option value="ofdFile/6.1.003 Entry合理压缩.ofd">6.1.003 合理压缩</option>
+          <option value="ofdFile/6.1.004 Entry不合理压缩.ofd">6.1.004 不合理压缩</option>
+          <option value="ofdFile/6.1.005 OFD和Document在ZIP流后部.ofd">6.1.005 ZIP流后部</option>
+          <option value="ofdFile/6.2.001 正常文件结构.ofd">6.2.001 正常结构</option>
+          <option value="ofdFile/6.2.002 平行结构文件.ofd">6.2.002 平行结构</option>
+          <option value="ofdFile/6.2.003 使用相对路径.ofd">6.2.003 相对路径</option>
+          <option value="ofdFile/6.2.004_1 文件目录结构与推荐的不符.ofd">6.2.004-1 目录不符</option>
+          <option value="ofdFile/6.2.004_2 路径中含有空格.ofd">6.2.004-2 含空格</option>
+          <option value="ofdFile/6.2.004_3 路径中含有转义字符.ofd">6.2.004-3 转义字符</option>
+          <option value="ofdFile/6.2.005 文件目录结构乱序.ofd">6.2.005 目录乱序</option>
+          <option value="ofdFile/6.2.006 各级目录下有无用内容.ofd">6.2.006 无用内容</option>
+        </select>
+        <input type="file" id="fileInput" accept=".ofd" style="flex:1;min-width:120px;font-size:12px;">
+      </div>
+      <div class="row">
+        <label class="width-label">渲染宽度</label>
+        <input type="number" id="widthInput" min="50" step="50" value="" placeholder="自动">
+        <span class="width-unit">px</span>
+      </div>
+      <div class="row">
+        <button id="loadBtn">加载并渲染</button>
+        <button id="profileBtn" class="sub">开启性能打点</button>
+      </div>
+      <div class="hint">支持 URL、本地文件。渲染宽度留空时按 OFD 物理尺寸(mm)×96/25.4 计算。</div>
+    </div>
+
+    <div class="card">
+      <h2>API 操作</h2>
+      <div class="row">
+        <button id="infoBtn" class="sub">getDocumentInfo</button>
+        <button id="dimBtn" class="sub">getPageDimensions</button>
+      </div>
+      <div class="row">
+        <button id="sigsBtn" class="sub">getSignatures</button>
+        <button id="verifyBtn" class="sub">verifySignature</button>
+      </div>
+      <div class="row">
+        <button id="renderAllBtn" class="sub">renderAll（全部渲染）</button>
+      </div>
+      <div class="hint">先「加载并渲染」后再调用这些接口。签名相关接口依赖文档是否含签名；verifySignature 仅做文件摘要比对。</div>
+    </div>
+
+    <div class="card" id="outputCard">
+      <h2>输出 <button id="clearBtn" class="sub" style="float:right;padding:2px 8px;font-size:11px;">清空</button></h2>
+      <pre id="output"></pre>
+    </div>
+  </aside>
+</div>
+
+<!-- 点击印章弹窗 -->
+<div id="stampModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <span>印章信息</span>
+      <button id="stampModalClose" class="modal-close" type="button">×</button>
+    </div>
+    <div id="stampModalBody"></div>
+  </div>
+</div>
+
+<script src="../build/ofd.min.js?v=29"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const out = $('output');
+  const pageContainer = $('pageContainer');
+  let currentOfd = null;       // 加载后的 ofd 对象
+  let currentSource = null;    // 当前源（URL 或 File）
+  let renderToken = 0;         // 渲染竞态令牌：每次加载递增，旧流程检测到过期则退出
+
+  // ---------- 输出工具 ----------
+  function log(msg, cls) {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = msg + '\n';
+    out.appendChild(span);
+    out.scrollTop = out.scrollHeight;
+  }
+  function logObj(label, obj) {
+    log('▸ ' + label, 'log-info');
+    log(JSON.stringify(obj, null, 2));
+  }
+  function clearLog() { out.innerHTML = ''; }
+
+  // ---------- 点击印章：定位并展示信息 ----------
+  // 方案 B：渲染后把印章对象引用挂到 DOM 元素（el._stamp），点击时直接读取，免数组反查
+  function bindStampClick(svg, pageIndex) {
+    // ① 遍历本页 SVG 内所有带 data-stamp-idx 的元素，挂载对应印章对象
+    const doc = currentOfd.document;
+    const pageId = doc.pages[pageIndex] && doc.pages[pageIndex].id;
+    const stamps = (doc.stamps || []).filter(s => s.pageRef === pageId);
+    svg.querySelectorAll('[data-stamp-idx]').forEach(el => {
+      const idx = parseInt(el.getAttribute('data-stamp-idx'), 10);
+      el._stamp = stamps[idx] || null;
+    });
+    // ② 点击事件：直接读取已挂载的对象
+    svg.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-stamp-idx]');
+      if (!el || !el._stamp) return;
+      showStampModal(el._stamp, pageIndex);
+    });
+  }
+
+  // 弹窗展示印章信息
+  function showStampModal(stamp, pageIndex) {
+    const b = stamp.boundary || {};
+    const rows = [
+      ['所在页', '第 ' + (pageIndex + 1) + ' 页'],
+      ['印章名称', stamp.sealName || '-'],
+      ['位置', Math.round(b.x) + ', ' + Math.round(b.y) + ' mm'],
+      ['尺寸', Math.round(b.w) + ' × ' + Math.round(b.h) + ' mm'],
+      ['印章类型', stamp.sealOfd ? 'OFD 矢量印章' : (stamp.sealDataUrl ? 'PNG 位图' : '占位符')],
+      ['图片', '']
+    ];
+    const body = $('stampModalBody');
+    body.innerHTML = '';
+    rows.forEach(([k, v]) => {
+      const kv = document.createElement('div');
+      kv.className = 'kv';
+      const kk = document.createElement('span');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('span');
+      vv.className = 'v';
+      vv.textContent = v;
+      kv.appendChild(kk);
+      kv.appendChild(vv);
+      body.appendChild(kv);
+    });
+    if (stamp.sealDataUrl) {
+      const prev = document.createElement('div');
+      prev.className = 'seal-preview';
+      const img = document.createElement('img');
+      img.src = stamp.sealDataUrl;
+      img.alt = '印章';
+      prev.appendChild(img);
+      body.appendChild(prev);
+    }
+    $('stampModal').classList.remove('hidden');
+    log('点击印章：' + (stamp.sealName || '#' + (stamp.pageRef || '')) + '（第 ' + (pageIndex + 1) + ' 页）', 'log-info');
+  }
+
+  // ---------- 文件源 ----------
+  function currentFileSource() {
+    if ($('fileInput').files && $('fileInput').files[0]) return $('fileInput').files[0];
+    return $('fileSel').value;
+  }
+  function sourceName(src) {
+    return typeof src === 'string' ? src.split('/').pop() : src.name;
+  }
+
+  // 读取用户输入的渲染宽度（px）；留空返回 null，表示按物理尺寸自动计算
+  function inputWidthPx() {
+    const v = parseInt($('widthInput').value, 10);
+    return v > 0 ? v : null;
+  }
+
+  // 计算渲染宽度：优先用户输入，否则按 OFD 物理尺寸(mm)× 96/25.4
+  async function resolveRenderWidth(ofd, pageIndex) {
+    const manual = inputWidthPx();
+    if (manual) return manual;
+    const dim = await OFD.getPageDimensions(ofd, pageIndex);
+    return Math.round(dim.width * (96 / 25.4));
+  }
+
+  // ---------- 1. load + renderPage：加载并渲染所有页 ----------
+  async function loadAndRender() {
+    const token = ++renderToken; // 本次渲染序号；之后若序号变化，说明已重新加载，旧流程立即退出
+    clearLog();
+    const src = currentFileSource();
+    currentSource = src;
+    log('== OFD.load(\'' + sourceName(src) + '\') ==', 'log-info');
+    const t0 = performance.now();
+    try {
+      const ofd = await OFD.load(src);
+      if (token !== renderToken) return; // 已重新加载，放弃本次
+      currentOfd = ofd;
+      const cost = (performance.now() - t0).toFixed(1);
+      log('加载完成，耗时 ' + cost + ' ms', 'log-ok');
+
+      // getPageCount
+      const count = OFD.getPageCount(ofd);
+      log('getPageCount → ' + count + ' 页', 'log-ok');
+
+      // 渲染所有页到容器：宽度 = 用户输入 px 或 OFD 物理尺寸(mm)× 96/25.4
+      pageContainer.innerHTML = '';
+      const widthSrc = inputWidthPx() ? ('手动 ' + inputWidthPx() + 'px') : '自动(物理尺寸)';
+      for (let i = 0; i < count; i++) {
+        const pxW = await resolveRenderWidth(ofd, i);
+        if (token !== renderToken) return;
+        const dim = await OFD.getPageDimensions(ofd, i);
+        if (token !== renderToken) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'page-wrap';
+        const no = document.createElement('div');
+        no.className = 'page-no';
+        no.textContent = '第 ' + (i + 1) + ' / ' + count + ' 页 · ' + dim.width + '×' + dim.height + 'mm → ' + pxW + 'px';
+        wrap.appendChild(no);
+        const svg = await OFD.renderPage(ofd, i, { width: pxW });
+        if (token !== renderToken) return;
+        bindStampClick(svg, i);
+        wrap.appendChild(svg);
+        pageContainer.appendChild(wrap);
+      }
+      if (token !== renderToken) return;
+      log('renderPage 渲染 ' + count + ' 页完成，宽度：' + widthSrc, 'log-ok');
+
+      // 性能打点
+      const profile = OFD.getLastProfile();
+      if (profile) {
+        log('\n[性能打点]', 'log-info');
+        log(JSON.stringify(profile, null, 2), 'log-dim');
+      }
+    } catch (e) {
+      if (token !== renderToken) return;
+      log('加载失败：' + e.message, 'log-err');
+    }
+  }
+
+  // ---------- 2. getDocumentInfo ----------
+  async function showDocInfo() {
+    if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+    const info = OFD.getDocumentInfo(currentOfd);
+    logObj('getDocumentInfo', info);
+  }
+
+  // ---------- 3. getPageDimensions ----------
+  async function showPageDimensions() {
+    if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+    const count = OFD.getPageCount(currentOfd);
+    log('\n== getPageDimensions（全部页）==', 'log-info');
+    for (let i = 0; i < count; i++) {
+      const dim = await OFD.getPageDimensions(currentOfd, i);
+      log('第 ' + (i + 1) + ' 页：' + dim.width + ' × ' + dim.height + ' ' + dim.unit);
+    }
+  }
+
+  // ---------- 4. getSignatures：查看印章信息 ----------
+  async function showSignatures() {
+    if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+    log('\n== getSignatures ==', 'log-info');
+    try {
+      const sigs = await OFD.getSignatures(currentOfd);
+      if (!sigs.length) { log('文档不含数字签名/印章', 'log-dim'); return; }
+
+      // 左侧：渲染印章预览卡片（图片 + 名称 + 位置）
+      pageContainer.innerHTML = '';
+      sigs.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = 'seal-card';
+
+        const box = document.createElement('div');
+        box.className = 'seal-img-box';
+        if (s.sealDataUrl) {
+          const img = document.createElement('img');
+          img.src = s.sealDataUrl;
+          img.alt = '印章' + (i + 1);
+          box.appendChild(img);
+        } else if (s.sealOfd) {
+          box.textContent = '矢量印章';
+        } else {
+          box.textContent = '无印章位图';
+        }
+        card.appendChild(box);
+
+        const nm = document.createElement('div');
+        nm.className = 'seal-name';
+        nm.textContent = (s.sealAttrs && s.sealAttrs.name) || s.signer || ('印章 ' + (i + 1));
+        card.appendChild(nm);
+
+        const meta = document.createElement('div');
+        meta.className = 'seal-meta';
+        const pos = (s.positions || []).map(p =>
+          '页' + (s.pages.indexOf(p.pageRef) >= 0 ? s.pages.indexOf(p.pageRef) + 1 : '?') +
+          '(' + Math.round(p.boundary.x) + ',' + Math.round(p.boundary.y) + ')').join('  ');
+        meta.textContent = pos || '未记录位置';
+        card.appendChild(meta);
+
+        pageContainer.appendChild(card);
+      });
+
+      // 日志：完整印章信息（图片只报大小，避免 base64 刷屏）
+      sigs.forEach((s, i) => {
+        log('\n── 印章 ' + (i + 1) + ' ──', 'log-info');
+        logObj('signature', {
+          id: s.id,
+          signer: s.signer,
+          signTime: s.signTime,
+          provider: s.provider,
+          signatureMethod: s.signatureMethod,
+          sealAttrs: s.sealAttrs,        // 印章属性：id/name/type/createTime/有效期
+          pages: s.pages,
+          positions: s.positions,        // 盖章位置（boundary）
+          hasSealImage: !!s.sealDataUrl,
+          sealImageSizeKB: s.sealDataUrl ? Math.round(s.sealDataUrl.length / 1024) : 0,
+          hasVectorSeal: !!s.sealOfd,
+          referencesCount: (s.references || []).length,
+          signedValueSize: s.signedValueSize
+        });
+      });
+    } catch (e) {
+      log('签名解析失败：' + e.message, 'log-err');
+    }
+  }
+
+  // ---------- 5. verifySignature ----------
+  async function verifySigs() {
+    if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+    log('\n== verifySignature ==', 'log-info');
+    try {
+      const sigs = await OFD.getSignatures(currentOfd);
+      if (!sigs.length) { log('文档不含数字签名，无法验证', 'log-dim'); return; }
+      for (const s of sigs) {
+        const r = await OFD.verifySignature(currentOfd, s.index);
+        const tag = r.valid ? 'log-ok' : (r.status === 'invalid' ? 'log-err' : 'log-dim');
+        log('签名[' + s.index + '] ' + (r.status || '') + '：' + r.message, tag);
+      }
+      log('（验签边界：仅文件摘要比对，未验证签名值/证书链/时间戳；valid 只代表文件自洽）', 'log-dim');
+    } catch (e) {
+      log('验证失败：' + e.message, 'log-err');
+    }
+  }
+
+  // ---------- 6. renderAll ----------
+  async function renderAllPages() {
+    if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+    const token = ++renderToken;
+    const manual = inputWidthPx();
+    log(manual ? '== renderAll（统一宽度 ' + manual + 'px）==' : '== renderAll（不传 width，由 CSS 控制）==', 'log-info');
+    const t0 = performance.now();
+    const opts = manual ? { width: manual } : undefined;
+    const els = await OFD.renderAll(currentOfd, opts);
+    if (token !== renderToken) return;
+    log('renderAll 完成，共 ' + els.length + ' 页，耗时 ' + (performance.now() - t0).toFixed(1) + ' ms', 'log-ok');
+    log(manual ? '（已渲染到下方容器，宽度固定 ' + manual + 'px）' : '（已渲染到下方容器，宽度由 CSS max-width:100% 自适应）', 'log-dim');
+    pageContainer.innerHTML = '';
+    els.forEach((svg, i) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'page-wrap';
+      const no = document.createElement('div');
+      no.className = 'page-no';
+      no.textContent = '第 ' + (i + 1) + ' / ' + els.length + ' 页（renderAll' + (manual ? ' ' + manual + 'px' : '') + '）';
+      wrap.appendChild(no);
+      bindStampClick(svg, i);
+      wrap.appendChild(svg);
+      pageContainer.appendChild(wrap);
+    });
+  }
+
+  // ---------- 性能打点开关 ----------
+  let profilingOn = false;
+  function toggleProfile() {
+    profilingOn = !profilingOn;
+    OFD.setProfiling(profilingOn);
+    $('profileBtn').textContent = profilingOn ? '关闭性能打点' : '开启性能打点';
+    $('profileBtn').classList.toggle('sub', !profilingOn);
+    log('性能打点：' + (profilingOn ? '已开启' : '已关闭'), 'log-info');
+  }
+
+  // ---------- 事件绑定 ----------
+  $('loadBtn').addEventListener('click', loadAndRender);
+  $('infoBtn').addEventListener('click', showDocInfo);
+  $('dimBtn').addEventListener('click', showPageDimensions);
+  $('sigsBtn').addEventListener('click', showSignatures);
+  $('verifyBtn').addEventListener('click', verifySigs);
+  $('renderAllBtn').addEventListener('click', renderAllPages);
+  $('profileBtn').addEventListener('click', toggleProfile);
+  $('clearBtn').addEventListener('click', clearLog);
+  $('fileSel').addEventListener('change', () => { $('fileInput').value = ''; });
+  // 输入宽度后按 Enter 直接重新渲染
+  $('widthInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadAndRender();
+  });
+  // 印章弹窗关闭：按钮或点击遮罩
+  $('stampModalClose').addEventListener('click', () => $('stampModal').classList.add('hidden'));
+  $('stampModal').addEventListener('click', (e) => {
+    if (e.target === $('stampModal')) $('stampModal').classList.add('hidden');
+  });
+
+  log('就绪。选择文件后点击「加载并渲染」开始。', 'log-info');
+  log('可用 API：load / renderPage / renderAll / getPageCount / getPageDimensions / getDocumentInfo / getSignatures / verifySignature / setProfiling', 'log-dim');
+</script>
+</body>
+</html>
+

@@ -1,0 +1,444 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>OFD 性能剖析测试页</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.6 "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #f5f7fa; color: #1f2937; display: flex; flex-direction: column; overflow: hidden; }
+  header { background: linear-gradient(135deg, #0b57d0, #0842a0); color: #fff; padding: 8px 16px; flex: none; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 11px; opacity: .85; }
+
+  .layout { display: flex; gap: 14px; padding: 14px; flex: 1; min-height: 0; }
+
+  /* 主区：剖析结果 */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 10px 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #0b57d0; display: flex; align-items: center; gap: 8px; }
+  .card h2 .tag { font-size: 11px; font-weight: 400; color: #9ca3af; }
+  .card h2 .status { margin-left: auto; font-size: 11px; font-weight: 400; color: #9ca3af; }
+
+  /* 摘要网格 */
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .summary .item { background: #f8fafc; border: 1px solid #eef1f5; border-radius: 8px; padding: 8px 10px; }
+  .summary .item .k { font-size: 11px; color: #9ca3af; }
+  .summary .item .v { font-size: 16px; font-weight: 600; color: #0b57d0; font-variant-numeric: tabular-nums; }
+  .summary .item .v small { font-size: 11px; font-weight: 400; color: #9ca3af; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: right; padding: 5px 8px; white-space: nowrap; }
+  th { color: #9ca3af; font-weight: 500; border-bottom: 1px solid #eef1f5; }
+  td:first-child, th:first-child { text-align: left; }
+  td:last-child, th:last-child { text-align: left; }
+  td { font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: #f8fafc; }
+  .num-dim { color: #9ca3af; }
+
+  /* 耗时对比条 */
+  .bar { width: 120px; height: 10px; background: #f1f3f6; border-radius: 5px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, #4d8df0, #0b57d0); border-radius: 5px; }
+  .bar-hot i { background: linear-gradient(90deg, #f5a524, #ea580c); }
+  .bar-dim i { background: #d1d5db; }
+
+  .empty { color: #9ca3af; font-size: 12px; padding: 8px 0; }
+  .err-box { color: #dc2626; font-size: 12px; }
+
+  /* 侧栏 */
+  aside { width: 360px; flex: none; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  aside .card .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  aside select, aside input[type=file] { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 100%; }
+  aside select:focus, aside input[type=file]:focus { outline: 0; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+  aside button { padding: 6px 14px; border: 0; border-radius: 6px; background: #0b57d0; color: #fff;
+    cursor: pointer; font-size: 13px; transition: background .15s; }
+  aside button:hover { background: #0842a0; }
+  aside button:disabled { background: #9ca3af; cursor: default; }
+  aside .hint { font-size: 11px; color: #9ca3af; margin-top: 6px; }
+  aside .run-state { font-size: 12px; color: #0b57d0; margin-top: 6px; min-height: 18px; }
+  aside .run-state.error { color: #dc2626; }
+
+  /* 日志 */
+  #logCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow: auto; font-family: Consolas, Monaco, monospace; font-size: 11px;
+    background: #0f172a; color: #94a3b8; border-radius: 6px; padding: 8px 10px; margin: 0; white-space: pre-wrap; word-break: break-all; }
+  .log-info { color: #93c5fd; }
+  .log-err { color: #f87171; }
+  .log-ok { color: #4ade80; }
+  .log-dim { color: #64748b; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OFD 性能剖析测试页</h1>
+  <p>分阶段计时：load / 模板解析 / 页面解析 / 签名解析 / 页面渲染（含缓存对比），明细同步输出到控制台</p>
+</header>
+
+<div class="layout">
+  <!-- 主区：剖析结果 -->
+  <main class="main">
+    <div class="card" id="summaryCard">
+      <h2>文档摘要 <span class="tag" id="summaryFile"></span><span class="status" id="summaryStatus"></span></h2>
+      <div class="summary" id="summaryGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>模板解析细分</h2>
+      <div id="tplBox"><div class="empty">等待剖析…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>页面 XML 解析细分 <span class="tag">首次解析</span></h2>
+      <div id="pageBox"><div class="empty">等待剖析…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>签名解析细分</h2>
+      <div id="sigBox"><div class="empty">等待剖析…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>页面渲染总耗时 <span class="tag">首次 vs 再次（缓存）</span></h2>
+      <div id="renderBox"><div class="empty">等待剖析…</div></div>
+    </div>
+  </main>
+
+  <!-- 侧栏：控制 + 日志 -->
+  <aside>
+    <div class="card">
+      <h2>文件源</h2>
+      <div class="row">
+        <select id="fileSel">
+          <option value="ofdFile/999.ofd">999.ofd（重庆增值税电子普通发票）</option>
+          <option value="ofdFile/2.ofd">2.ofd</option>
+          <option value="ofdFile/h.ofd">h.ofd</option>
+          <option value="ofdFile/n.ofd">n.ofd</option>
+          <option value="ofdFile/6.1.001 Entry全部不压缩.ofd">6.1.001 Entry全部不压缩</option>
+          <option value="ofdFile/6.1.002 Entry全部压缩.ofd">6.1.002 Entry全部压缩</option>
+          <option value="ofdFile/6.1.003 Entry合理压缩.ofd">6.1.003 Entry合理压缩</option>
+          <option value="ofdFile/6.1.004 Entry不合理压缩.ofd">6.1.004 Entry不合理压缩</option>
+          <option value="ofdFile/6.1.005 OFD和Document在ZIP流后部.ofd">6.1.005 OFD和Document在ZIP流后部</option>
+          <option value="ofdFile/6.2.001 正常文件结构.ofd">6.2.001 正常文件结构</option>
+          <option value="ofdFile/6.2.002 平行结构文件.ofd">6.2.002 平行结构文件</option>
+          <option value="ofdFile/6.2.003 使用相对路径.ofd">6.2.003 使用相对路径</option>
+          <option value="ofdFile/6.2.004_1 文件目录结构与推荐的不符.ofd">6.2.004_1 文件目录结构与推荐的不符</option>
+          <option value="ofdFile/6.2.004_2 路径中含有空格.ofd">6.2.004_2 路径中含有空格</option>
+          <option value="ofdFile/6.2.004_3 路径中含有转义字符.ofd">6.2.004_3 路径中含有转义字符</option>
+          <option value="ofdFile/6.2.005 文件目录结构乱序.ofd">6.2.005 文件目录结构乱序</option>
+          <option value="ofdFile/6.2.006 各级目录下有无用内容.ofd">6.2.006 各级目录下有无用内容</option>
+        </select>
+      </div>
+      <div class="row">
+        <input type="file" id="fileInput" accept=".ofd">
+      </div>
+      <div class="row">
+        <button id="runBtn">开始剖析</button>
+      </div>
+      <div class="run-state" id="runState"></div>
+      <div class="hint">切换文件或选择本地文件后自动重新剖析。剖析结果同样输出到浏览器控制台。</div>
+    </div>
+
+    <div class="card" id="logCard">
+      <h2>控制台日志 <button id="clearBtn" style="margin-left:auto;padding:2px 8px;font-size:11px;">清空</button></h2>
+      <pre id="log"></pre>
+    </div>
+  </aside>
+</div>
+
+<script src="../build/ofd.js?v=27"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const out = $('log');
+  const runState = $('runState');
+  let runToken = 0; // 剖析竞态令牌：切换文件时丢弃在途旧流程
+
+  // ---------- 日志 ----------
+  function log(msg, cls) {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = msg + '\n';
+    out.appendChild(span);
+    out.scrollTop = out.scrollHeight;
+    console.log(msg);
+  }
+
+  // ---------- 表格工具 ----------
+  // 生成剖析表：headers + rows(每行 [label, ...cells])；
+  // barIdx 指定用哪一列画耗时对比条，barMax 为对比基准（该列最大值）
+  function buildTable(headers, rows, barIdx, barMax) {
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    headers.forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      row.forEach((cell, ci) => {
+        const td = document.createElement('td');
+        if (ci === 0) td.textContent = cell;                       // 首列：名称
+        else if (ci === barIdx && barMax > 0) {                    // 耗时对比条列
+          const val = parseFloat(cell);
+          const pct = Math.min(100, Math.max(1, Math.round(val / barMax * 100)));
+          const div = document.createElement('div');
+          div.style.display = 'inline-flex'; div.style.alignItems = 'center'; div.style.gap = '6px';
+          const b = document.createElement('span');
+          b.className = 'bar' + (pct >= 50 ? ' bar-hot' : (pct < 5 ? ' bar-dim' : ''));
+          b.innerHTML = '<i style="width:' + pct + '%"></i>';
+          const t = document.createElement('span');
+          t.className = 'num-dim';
+          t.textContent = cell + ' ms';
+          div.appendChild(b); div.appendChild(t);
+          td.appendChild(div);
+        } else {
+          td.textContent = cell;
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    return table;
+  }
+  function renderBox(id, el) {
+    const box = $(id);
+    box.innerHTML = '';
+    box.appendChild(el);
+  }
+  function emptyBox(id, msg) {
+    const box = $(id);
+    box.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = msg;
+    box.appendChild(d);
+  }
+  function errBox(id, msg) {
+    const box = $(id);
+    box.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'err-box';
+    d.textContent = msg;
+    box.appendChild(d);
+  }
+
+  // ---------- 文件源 ----------
+  const fileSel = $('fileSel');
+  const fileInput = $('fileInput');
+  function currentSource() {
+    if (fileInput.files && fileInput.files[0]) return fileInput.files[0];
+    return fileSel.value;
+  }
+  function sourceName(src) { return typeof src === 'string' ? src.split('/').pop() : src.name; }
+
+  // ---------- 摘要 ----------
+  function renderSummary(ofd, loadMs) {
+    const doc = ofd.document;
+    const items = [
+      ['文件大小', fmtBytes(ofd.zip.data.byteLength), ''],
+      ['页数', doc.pages.length, ' 页'],
+      ['模板数', doc.templates.length, ' 个'],
+      ['印章数', doc.stamps.length, ' 枚'],
+      ['签名数', doc.signatures.length, ' 个'],
+      ['load 总耗时', loadMs, ' ms']
+    ];
+    const grid = $('summaryGrid');
+    grid.innerHTML = '';
+    for (const [k, v, unit] of items) {
+      const item = document.createElement('div');
+      item.className = 'item';
+      const kk = document.createElement('div');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('div');
+      vv.className = 'v';
+      vv.textContent = v;
+      if (unit) {
+        const sm = document.createElement('small');
+        sm.textContent = unit;
+        vv.appendChild(sm);
+      }
+      item.appendChild(kk);
+      item.appendChild(vv);
+      grid.appendChild(item);
+    }
+  }
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+
+  // ---------- 主流程 ----------
+  async function run(source) {
+    const token = ++runToken;
+    $('summaryFile').textContent = sourceName(source);
+    $('summaryStatus').textContent = '剖析中…';
+    runState.textContent = '正在加载 ' + sourceName(source) + '…';
+    runState.className = 'run-state';
+    emptyBox('tplBox', '剖析中…');
+    emptyBox('pageBox', '剖析中…');
+    emptyBox('sigBox', '剖析中…');
+    emptyBox('renderBox', '剖析中…');
+    log('\n========== 剖析开始：' + sourceName(source) + ' ==========', 'log-info');
+
+    try {
+      OFD.setProfiling(false);
+      let t = performance.now();
+      const ofd = await OFD.load(source);
+      if (token !== runToken) return;
+      const loadMs = performance.now() - t;
+      log('== load 总耗时: ' + loadMs.toFixed(1) + ' ms', 'log-info');
+      renderSummary(ofd, loadMs.toFixed(1));
+      $('summaryStatus').textContent = 'load ' + loadMs.toFixed(0) + ' ms';
+      runState.textContent = '加载完成，开始剖析各阶段…';
+
+      // 1) 模板解析细分
+      log('\n== 模板解析细分 ==', 'log-info');
+      const tplRows = [];
+      for (const tpl of ofd.document.templates) {
+        let a = performance.now();
+        const xml = await OFD._internals.readEntryText(ofd.zip, tpl.baseLoc);
+        let b = performance.now();
+        const doc = OFD._internals.parseXml(xml);
+        let c = performance.now();
+        const page = await OFD._internals.parsePage(tpl.baseLoc, ofd.zip);
+        let d = performance.now();
+        let objs = 0;
+        for (const l of page.layers) objs += l.objects.length;
+        tplRows.push([tpl.baseLoc, (b - a).toFixed(2), (c - b).toFixed(2), (d - c).toFixed(2), objs, (d - a).toFixed(2)]);
+        log(tpl.baseLoc + '  解压' + (b - a).toFixed(2) + 'ms  XML解析' + (c - b).toFixed(2) + 'ms  parsePage' + (d - c).toFixed(2) + 'ms  对象数=' + objs);
+      }
+      if (token !== runToken) return;
+      if (tplRows.length) {
+        const maxT = Math.max.apply(null, tplRows.map(r => parseFloat(r[5])));
+        renderBox('tplBox', buildTable(
+          ['模板', '解压(ms)', 'XML解析(ms)', 'parsePage(ms)', '对象数', '耗时对比'],
+          tplRows, 5, maxT));
+      } else {
+        emptyBox('tplBox', '该文档没有模板页');
+      }
+
+      // 2) 页面 XML 解析细分（首次）
+      log('\n== 页面 XML 解析细分 ==', 'log-info');
+      const pageRows = [];
+      for (const p of ofd.document.pages) {
+        let a = performance.now();
+        const xml = await OFD._internals.readEntryText(ofd.zip, p.baseLoc);
+        let b = performance.now();
+        const doc = OFD._internals.parseXml(xml);
+        let c = performance.now();
+        const page = await OFD._internals.parsePage(p.baseLoc, ofd.zip);
+        let d = performance.now();
+        let objs = 0;
+        for (const l of page.layers) objs += l.objects.length;
+        pageRows.push([p.baseLoc, (b - a).toFixed(2), (c - b).toFixed(2), (d - c).toFixed(2), objs, (d - a).toFixed(2)]);
+        log(p.baseLoc + '  解压' + (b - a).toFixed(2) + 'ms  XML解析' + (c - b).toFixed(2) + 'ms  parsePage' + (d - c).toFixed(2) + 'ms  对象数=' + objs);
+      }
+      if (token !== runToken) return;
+      if (pageRows.length) {
+        const maxP = Math.max.apply(null, pageRows.map(r => parseFloat(r[5])));
+        renderBox('pageBox', buildTable(
+          ['页面', '解压(ms)', 'XML解析(ms)', 'parsePage(ms)', '对象数', '耗时对比'],
+          pageRows, 5, maxP));
+      } else {
+        emptyBox('pageBox', '该文档没有页面');
+      }
+
+      // 3) 签名解析细分
+      log('\n== 签名解析细分 ==', 'log-info');
+      const sig = ofd.document.signatures[0];
+      log('签名: ' + (sig && sig.id));
+      const sigRows = [];
+      const sigPath = sig && sig.signaturePath;
+      if (sigPath) {
+        let a = performance.now();
+        const raw = await OFD._internals.readEntry(ofd.zip, sigPath.slice(1));
+        let b = performance.now();
+        const d1 = await OFD._internals.hashBytes(raw, 'SM3');
+        let c = performance.now();
+        sigRows.push(['Signature.xml 读取', (b - a).toFixed(2)]);
+        sigRows.push(['SM3 摘要（' + raw.length + ' B）', (c - b).toFixed(2)]);
+        log('Signature.xml 读' + (b - a).toFixed(2) + 'ms  SM3摘要' + (c - b).toFixed(2) + 'ms');
+      }
+      if (sig && sig.signedValuePath) {
+        let a = performance.now();
+        const svPath = OFD._internals.resolvePath(sigPath, sig.signedValuePath);
+        const sv = await OFD._internals.readEntry(ofd.zip, svPath);
+        let b = performance.now();
+        sigRows.push(['SignedValue.dat 读取（' + (sv && sv.length) + ' B）', (b - a).toFixed(2)]);
+        log('SignedValue.dat 读' + (b - a).toFixed(2) + 'ms  大小=' + (sv && sv.length) + 'B');
+      }
+      if (token !== runToken) return;
+      if (sigRows.length) {
+        const maxS = Math.max.apply(null, sigRows.map(r => parseFloat(r[1])));
+        renderBox('sigBox', buildTable(['步骤', '耗时(ms)', '耗时对比'], sigRows, 2, maxS));
+      } else {
+        emptyBox('sigBox', '该文档没有签名');
+      }
+
+      // 4) 每页渲染总耗时（连续两次，观察缓存效果）
+      log('\n== 页面渲染总耗时 ==', 'log-info');
+      const firstCost = [], secondCost = [];
+      for (let i = 0; i < ofd.document.pages.length; i++) {
+        let a = performance.now();
+        await OFD.renderPage(ofd, i);
+        firstCost.push(performance.now() - a);
+        log('第 ' + (i + 1) + ' 页 首次渲染: ' + firstCost[i].toFixed(1) + ' ms');
+      }
+      for (let i = 0; i < ofd.document.pages.length; i++) {
+        let a = performance.now();
+        await OFD.renderPage(ofd, i);
+        secondCost.push(performance.now() - a);
+        log('第 ' + (i + 1) + ' 页 再次渲染: ' + secondCost[i].toFixed(1) + ' ms');
+      }
+      if (token !== runToken) return;
+      const barRows = firstCost.map((f, i) => {
+        const s = secondCost[i];
+        const speedup = s >= 0.05 ? (f / s).toFixed(1) + 'x' : '缓存命中';
+        return ['第 ' + (i + 1) + ' 页', f.toFixed(1), s.toFixed(1), speedup, f.toFixed(1)];
+      });
+      renderBox('renderBox', buildTable(
+        ['页面', '首次(ms)', '再次(ms)', '加速比', '首次耗时对比'],
+        barRows, 4, Math.max.apply(null, firstCost)));
+
+      log('\n== 完成 ==', 'log-ok');
+      runState.textContent = '剖析完成';
+      runState.className = 'run-state';
+      $('summaryStatus').textContent = '完成';
+    } catch (e) {
+      if (token !== runToken) return;
+      const msg = '剖析失败：' + e.message;
+      log(msg, 'log-err');
+      runState.textContent = msg;
+      runState.className = 'run-state error';
+      $('summaryStatus').textContent = '失败';
+      errBox('tplBox', msg);
+      errBox('pageBox', '');
+      errBox('sigBox', '');
+      errBox('renderBox', '');
+    }
+  }
+
+  // ---------- 事件绑定 ----------
+  function start() {
+    run(currentSource()).catch(e => log('出错: ' + e, 'log-err'));
+  }
+  fileSel.addEventListener('change', () => { fileInput.value = ''; start(); });
+  fileInput.addEventListener('change', start);
+  $('runBtn').addEventListener('click', start);
+  $('clearBtn').addEventListener('click', () => { out.innerHTML = ''; });
+  start();
+})();
+</script>
+</body>
+</html>

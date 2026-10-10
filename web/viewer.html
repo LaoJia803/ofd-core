@@ -1,0 +1,245 @@
+﻿<!DOCTYPE html>
+<!--
+  OFD 预览器 — 参考 PDF.js viewer.html 的布局与交互风格
+  使用 SVG 渲染 OFD 文档（GB/T 33190）
+-->
+<html dir="ltr" lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>OFD 预览器</title>
+    <link rel="stylesheet" href="viewer.css?v=31">
+  </head>
+
+  <body tabindex="0">
+    <div id="outerContainer">
+
+      <!-- ============================ 侧边栏 ============================ -->
+      <div id="sidebarContainer">
+        <div id="toolbarSidebar" class="toolbarHorizontalGroup">
+          <button id="viewThumbnail" class="sidebarTab active" type="button" title="缩略图"><span>缩略图</span></button>
+          <button id="viewOutline" class="sidebarTab" type="button" title="目录"><span>目录</span></button>
+          <button id="viewSignatures" class="sidebarTab" type="button" title="签名"><span>签名</span></button>
+          <div style="flex:1"></div>
+          <button id="sidebarCloseButton" class="toolbarButton" type="button" title="关闭侧边栏">
+            <span>关闭</span>
+          </button>
+        </div>
+        <div id="sidebarContent">
+          <div id="thumbnailView"></div>
+          <div id="outlineView" class="hidden"></div>
+          <div id="signatureView" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- ============================ 主容器 ============================ -->
+      <div id="mainContainer">
+        <div class="toolbar">
+          <div id="toolbarContainer">
+            <div id="toolbarViewer">
+
+              <!-- 左侧 -->
+              <div id="toolbarViewerLeft" class="toolbarHorizontalGroup">
+                <button id="sidebarToggle" class="toolbarButton" type="button" title="切换侧边栏" aria-expanded="false" aria-controls="sidebarContainer"></button>
+                <button id="outlineToggle" class="toolbarButton" type="button" title="目录" aria-expanded="false" aria-controls="sidebarContainer"></button>
+                <button id="signatureToggle" class="toolbarButton" type="button" title="数字签名" aria-expanded="false" aria-controls="sidebarContainer"></button>
+                <div id="findToolbarToggle" class="toolbarButtonWithContainer">
+                  <button id="findButton" class="toolbarButton" type="button" title="查找" aria-expanded="false" aria-haspopup="true" aria-controls="findbar"></button>
+                  <div id="findbar" class="hidden">
+                    <div id="findbarContainer">
+                      <input id="findInput" class="toolbarField" type="text" placeholder="在文档中查找…" autocomplete="off">
+                      <button id="findPrevious" class="toolbarButton" type="button" title="上一个匹配"></button>
+                      <button id="findNext" class="toolbarButton" type="button" title="下一个匹配"></button>
+                      <span id="findResultsCount" class="toolbarLabel hidden"></span>
+                      <div style="flex:1"></div>
+                      <button id="findClose" class="toolbarButton" type="button" title="关闭搜索"></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="toolbarHorizontalGroup">
+                  <button id="previousButton" class="toolbarButton" type="button" title="上一页"></button>
+                  <div class="splitToolbarButtonSeparator"></div>
+                  <button id="nextButton" class="toolbarButton" type="button" title="下一页"></button>
+                </div>
+                <div class="toolbarHorizontalGroup">
+                  <span class="loadingInput">
+                    <input type="number" id="pageNumber" class="toolbarField" value="1" min="1" autocomplete="off">
+                  </span>
+                  <span id="numPages" class="toolbarLabel">/ 0</span>
+                </div>
+              </div>
+
+              <!-- 中间 -->
+              <div id="toolbarViewerMiddle" class="toolbarHorizontalGroup">
+                <div class="toolbarHorizontalGroup">
+                  <button id="zoomOutButton" class="toolbarButton" type="button" title="缩小"></button>
+                  <div class="splitToolbarButtonSeparator"></div>
+                  <button id="zoomInButton" class="toolbarButton" type="button" title="放大"></button>
+                </div>
+                <span id="scaleSelectContainer" class="dropdownToolbarButton">
+                  <select id="scaleSelect" tabindex="0">
+                    <option id="pageAutoOption" value="auto" selected>自动缩放</option>
+                    <option id="pageActualOption" value="page-actual">实际大小</option>
+                    <option id="pageFitOption" value="page-fit">适合页面</option>
+                    <option id="pageWidthOption" value="page-width">适合页宽</option>
+                    <option id="customScaleOption" value="custom" disabled hidden>100%</option>
+                    <option value="0.5">50%</option>
+                    <option value="0.75">75%</option>
+                    <option value="1">100%</option>
+                    <option value="1.25">125%</option>
+                    <option value="1.5">150%</option>
+                    <option value="2">200%</option>
+                    <option value="3">300%</option>
+                    <option value="4">400%</option>
+                  </select>
+                </span>
+              </div>
+
+              <!-- 右侧 -->
+              <div id="toolbarViewerRight" class="toolbarHorizontalGroup">
+                <button id="printButton" class="toolbarButton" type="button" title="打印"></button>
+                <button id="downloadButton" class="toolbarButton" type="button" title="下载"></button>
+                <button id="stampButton" class="toolbarButton" type="button" title="盖章（添加数字签名印章）"></button>
+                <button id="pdfButton" class="toolbarButton" type="button" title="转换为 PDF"></button>
+                <button id="openFileButton" class="toolbarButton" type="button" title="打开 OFD 文件"></button>
+                <div class="verticalToolbarSeparator"></div>
+                <div id="secondaryToolbarToggle" class="toolbarButtonWithContainer">
+                  <button id="secondaryToolbarToggleButton" class="toolbarButton" type="button" title="工具" aria-expanded="false" aria-haspopup="true" aria-controls="secondaryToolbar"></button>
+                  <div id="secondaryToolbar" class="hidden">
+                    <div id="secondaryToolbarButtonContainer" class="menuContainer">
+                      <button id="secondaryOpenFile" class="toolbarButton labeled" type="button" title="打开 OFD 文件">打开 OFD 文件</button>
+                      <button id="secondaryDownload" class="toolbarButton labeled" type="button" title="下载">下载</button>
+                      <button id="secondaryPrint" class="toolbarButton labeled" type="button" title="打印">打印</button>
+
+                      <div id="secondaryOpenDownloadSeparator" class="horizontalToolbarSeparator"></div>
+
+                      <button id="firstPage" class="toolbarButton labeled" type="button" title="转到第一页">转到第一页</button>
+                      <button id="lastPage" class="toolbarButton labeled" type="button" title="转到最后一页">转到最后一页</button>
+
+                      <div class="horizontalToolbarSeparator"></div>
+
+                      <button id="pageRotateCw" class="toolbarButton labeled" type="button" title="顺时针旋转">顺时针旋转</button>
+                      <button id="pageRotateCcw" class="toolbarButton labeled" type="button" title="逆时针旋转">逆时针旋转</button>
+
+                      <div class="horizontalToolbarSeparator"></div>
+
+                      <button id="documentProperties" class="toolbarButton labeled" type="button" title="文档属性">文档属性</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 加载进度条 -->
+            <div id="loadingBar">
+              <div class="progress">
+                <div class="glimmer"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 查看器主区域 -->
+        <div id="viewerContainer" tabindex="0">
+          <div id="viewer"></div>
+        </div>
+
+        <!-- 状态提示 -->
+        <div id="statusBar"></div>
+
+        <!-- 错误提示 -->
+        <div id="errorWrapper">
+          <h3 id="errorTitle">加载失败</h3>
+          <p id="errorMessage"></p>
+          <button id="errorRetry" type="button">重试</button>
+        </div>
+
+        <!-- 文档属性对话框 -->
+        <div id="documentInfoDialog">
+          <h3>文档属性</h3>
+          <div class="row"><span class="label">文档ID</span><span class="value" id="info-docId">-</span></div>
+          <div class="row"><span class="label">标题</span><span class="value" id="info-title">-</span></div>
+          <div class="row"><span class="label">作者</span><span class="value" id="info-author">-</span></div>
+          <div class="row"><span class="label">主题</span><span class="value" id="info-subject">-</span></div>
+          <div class="row"><span class="label">创建者</span><span class="value" id="info-creator">-</span></div>
+          <div class="row"><span class="label">创建时间</span><span class="value" id="info-creationDate">-</span></div>
+          <div class="row"><span class="label">修改时间</span><span class="value" id="info-modDate">-</span></div>
+          <div class="row"><span class="label">页数</span><span class="value" id="info-pageCount">-</span></div>
+          <button class="close-btn" id="infoCloseBtn" type="button">关闭</button>
+        </div>
+
+        <!-- 签名信息模态框 -->
+        <div id="sigModalOverlay" class="hidden">
+          <div id="sigModal" role="dialog" aria-label="数字签名">
+            <div class="sig-modal-head">
+              <div id="sigModalSeal" class="sig-seal"></div>
+              <div class="sig-modal-info">
+                <span id="sigModalStatus" class="sig-status"></span>
+                <div class="sig-modal-actions">
+                  <button id="sigModalVerify" class="sig-verify" type="button">验证</button>
+                </div>
+              </div>
+              <button id="sigModalClose" class="sig-modal-close" type="button" title="关闭">×</button>
+            </div>
+            <div id="sigModalSignInfo" class="sig-info sig-section"></div>
+            <div id="sigModalSealInfo" class="sig-info sig-section"></div>
+            <div id="sigModalMsg" class="sig-msg"></div>
+          </div>
+        </div>
+
+        <!-- PDF 转换进度模态框 -->
+        <div id="pdfModalOverlay" class="hidden">
+          <div id="pdfModal" role="dialog" aria-label="转换为 PDF">
+            <div class="pdf-modal-head">
+              <span>转换为 PDF</span>
+              <button id="pdfModalClose" class="sig-modal-close" type="button" title="关闭">×</button>
+            </div>
+            <div id="pdfModalMsg" class="pdf-modal-msg"></div>
+            <div class="pdf-progress-bar"><div id="pdfProgressInner"></div></div>
+            <div id="pdfProgressText" class="pdf-progress-text">0%</div>
+          </div>
+        </div>
+
+        <!-- 隐藏的文件输入 -->
+        <input type="file" id="fileInput" accept=".ofd">
+
+        <!-- 测试文件选择器 -->
+        <div class="file-selector">
+          <span class="label">测试文件:</span>
+          <select id="fileSelect" title="选择测试文件">
+            <option value="">请选择</option>
+            <option value="2.ofd">2.ofd</option>
+            <option value="999.ofd">999.ofd</option>
+            <option value="h.ofd">h.ofd</option>
+            <option value="n.ofd">n.ofd</option>
+            <option value="6.1.001 Entry全部不压缩.ofd">6.1.001 不压缩</option>
+            <option value="6.1.002 Entry全部压缩.ofd">6.1.002 全压缩</option>
+            <option value="6.1.003 Entry合理压缩.ofd">6.1.003 合理压缩</option>
+            <option value="6.1.004 Entry不合理压缩.ofd">6.1.004 不合理压缩</option>
+            <option value="6.1.005 OFD和Document在ZIP流后部.ofd">6.1.005 ZIP流后部</option>
+            <option value="6.2.001 正常文件结构.ofd">6.2.001 正常结构</option>
+            <option value="6.2.002 平行结构文件.ofd">6.2.002 平行结构</option>
+            <option value="6.2.003 使用相对路径.ofd">6.2.003 相对路径</option>
+            <option value="6.2.004_1 文件目录结构与推荐的不符.ofd">6.2.004-1 目录不符</option>
+            <option value="6.2.004_2 路径中含有空格.ofd">6.2.004-2 含空格</option>
+            <option value="6.2.004_3 路径中含有转义字符.ofd">6.2.004-3 转义字符</option>
+            <option value="6.2.005 文件目录结构乱序.ofd">6.2.005 目录乱序</option>
+            <option value="6.2.006 各级目录下有无用内容.ofd">6.2.006 无用内容</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 已放置印章的右键菜单 -->
+    <div id="sealMenu" class="seal-context-menu hidden">
+      <button id="sealMenuDelete" type="button">删除印章</button>
+    </div>
+
+    <script src="../build/ofd.js?v=31"></script>
+    <script src="../build/toPdf.js?v=28"></script>
+    <script src="viewer.js?v=32"></script>
+  </body>
+</html>
+
+

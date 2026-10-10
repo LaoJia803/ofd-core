@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<!--
+  第三方接入 OFD 预览器 — 盖章（数字签名印章）完整示例
+  ============================================================
+  演示流程：
+    1. 以 iframe 方式嵌入 OFD 预览器（viewer.html）
+    2. 用户点击预览器工具栏「盖章」按钮
+    3. 预览器回调 onGetSeal → 本页弹出「印章密码」弹窗
+    4. 用户输入密码 → 校验（可调后端，本示例带 MOCK 模式）
+    5. 校验通过 → 获取印章图片与尺寸 → 调用 OFD.setSeal() 进入盖章模式
+    6. 用户在文档页面上移动鼠标（印章跟随）→ 点击放置
+    7. 放置/删除统一回调 OFD.onSealChange(cb)，list 为全部签章位置
+    8. 本页上报后端记录签章位置
+
+  注意：
+    - 同域 iframe 才能直接访问 contentWindow.OFD；跨域部署需改为 postMessage 桥接
+    - MOCK_MODE = true 时不发真实请求，用内置假数据演示全流程
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>OFD 盖章 - 第三方接入示例</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font: 14px/1.6 "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #1f2937; display: flex; flex-direction: column; overflow: hidden; }
+    header { background: linear-gradient(135deg, #0b57d0, #0842a0); color: #fff; padding: 8px 16px; flex: none; }
+    header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    header p { margin: 2px 0 0; font-size: 11px; opacity: .85; }
+    .layout { display: flex; gap: 14px; padding: 14px; flex: 1; min-height: 0; }
+    .viewer-box { flex: 1; min-width: 0; background: #fff; border-radius: 10px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04); }
+    .viewer-box iframe { width: 100%; height: 100%; border: 0; }
+    aside { width: 340px; flex: none; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04); padding: 10px 14px; flex: none; }
+    .card .flow { font-size: 12px; color: #666; margin: 0; }
+    .card ol.flow { padding-left: 18px; line-height: 1.5; }
+    .card ol.flow li { margin-bottom: 1px; }
+    #logPanel { flex: 1; font-size: 12px; display: flex; flex-direction: column; min-height: 0; padding-bottom: 12px; }
+    .card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #0b57d0; letter-spacing: .2px; }
+    .card code { background: #eef2ff; color: #0b57d0; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    .card input[type=text] { width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 6px; font-size: 13px; transition: border-color .15s, box-shadow .15s; }
+    .card input[type=text]:focus { outline: 0; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+    .card button { margin-top: 6px; padding: 6px 14px; border: 0; border-radius: 6px; background: #0b57d0; color: #fff; cursor: pointer; font-size: 13px; transition: background .15s; }
+    .card button:hover { background: #0842a0; }
+    #logPanel h2 { margin: 0 0 8px; padding-bottom: 10px; border-bottom: 1px solid #f0f2f5; }
+    #logList { margin: 0; padding: 0; list-style: none; flex: 1; overflow-y: auto; min-height: 0; }
+    #logList:empty::before { content: '暂无日志'; display: block; color: #9ca3af; font-size: 12px; padding: 8px 0; text-align: center; }
+    #logList li { padding: 6px 0; border-bottom: 1px solid #f0f2f5; word-break: break-all; line-height: 1.5; }
+    #logList li:hover { background: #fafbfc; }
+    #logList .tag { display: inline-block; min-width: 40px; margin-right: 8px; padding: 1px 6px;
+      border-radius: 4px; text-align: center; color: #fff; font-size: 11px; vertical-align: middle; }
+    .tag-ok { background: #16a34a; } .tag-info { background: #0b57d0; } .tag-warn { background: #d97706; }
+    /* ---------- 密码弹窗 ---------- */
+    #pwOverlay { position: fixed; inset: 0; background: rgba(17,24,39,.5); display: none;
+      align-items: center; justify-content: center; z-index: 9999; }
+    #pwOverlay.show { display: flex; }
+    #pwBox { width: 360px; background: #fff; border-radius: 12px; padding: 22px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+    #pwBox h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+    #pwBox .sub { margin: 0 0 16px; font-size: 12px; color: #9ca3af; }
+    #pwBox input[type=password] { width: 100%; padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; transition: border-color .15s, box-shadow .15s; }
+    #pwBox input[type=password]:focus { outline: 0; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+    #pwBox .err { min-height: 18px; margin: 6px 0; color: #d32f2f; font-size: 12px; }
+    #pwBox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7280; margin-bottom: 12px; }
+    #pwBox .actions { display: flex; justify-content: flex-end; gap: 8px; }
+    #pwBox .actions button { padding: 8px 16px; border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .15s; }
+    #pwOk { background: #0b57d0; color: #fff; }
+    #pwOk:hover { background: #0842a0; }
+    #pwOk:disabled { background: #9db8e8; cursor: not-allowed; }
+    #pwCancel { background: #e5e7eb; color: #333; }
+    #pwCancel:hover { background: #d1d5db; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>OFD 盖章 · 第三方接入示例</h1>
+    <p>点击右侧预览器工具栏的「盖章」按钮 → 弹出密码验证 → 通过后进入盖章模式 → 点击页面放置印章</p>
+  </header>
+
+  <div class="layout">
+    <div class="viewer-box">
+      <iframe id="viewerFrame" src="../web/viewer.html?file=../test/ofdFile/999.ofd" title="OFD 预览器"></iframe>
+    </div>
+
+    <aside>
+      <div class="card">
+        <h2>接入流程</h2>
+        <ol class="flow">
+          <li><code>OFD.onGetSeal(cb)</code> 注册取章回调</li>
+          <li>点「盖章」按钮 → 回调触发 → 弹密码窗</li>
+          <li>密码校验通过 → 获取印章</li>
+          <li><code>OFD.setSeal({sealImg,width,height,sealId})</code></li>
+          <li>点击页面 → <code>OFD.onSealChange(cb)</code> 统一回调<b>全部签章位置</b></li>
+          <li>右键删除 → 同一回调，action=<code>'delete'</code>，list 为剩余签章</li>
+          <li>上报后端记录签章位置（右键可删除）</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>演示开关</h2>
+        <label class="flow">
+          <input type="checkbox" id="mockMode" checked> MOCK 模式（不发真实请求，用内置假印章演示）
+        </label>
+        <input type="text" id="sealIdInput" placeholder="sealId（默认自动生成）">
+        <button type="button" id="mockSealBtn">模拟后端下发印章（免密码）</button>
+        <p class="flow" style="margin-top:8px">「模拟下发」= 直接调用 setSeal，不弹密码窗，用于快速验证选位与回传。</p>
+      </div>
+
+      <div class="card" id="logPanel">
+        <h2>集成事件日志</h2>
+        <ul id="logList"></ul>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 印章密码弹窗 -->
+  <div id="pwOverlay">
+    <div id="pwBox">
+      <h3>印章密码验证</h3>
+      <p class="sub">请输入印章使用密码，验证通过后进入盖章模式</p>
+      <input type="password" id="pwInput" placeholder="请输入印章密码" autocomplete="off">
+      <div class="err" id="pwErr"></div>
+      <div class="row">
+        <input type="checkbox" id="pwRemember"> 本次会话内再次盖章免密
+      </div>
+      <div class="actions">
+        <button type="button" id="pwCancel">取消</button>
+        <button type="button" id="pwOk">验证并盖章</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =====================================================================
+     * 一、配置区 —— 换成你系统的真实接口地址
+     * ===================================================================== */
+    const CONFIG = {
+      API: {
+        verifyPassword: '/api/seal/verify',   // POST { password, sealId } → { success: true }
+        getSeal: '/api/seal/info',            // GET  → { sealImg, width, height, sealId }
+        recordPlace: '/api/sign/record'       // POST 完整签章位置列表 [{ page, x, y, width, height, sealId }, ...]
+      }
+    };
+
+    /* =====================================================================
+     * 二、工具函数
+     * ===================================================================== */
+    const $ = (id) => document.getElementById(id);
+    const log = (tag, msg) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="tag tag-' + tag + '">' +
+        ({ ok: '成功', info: '信息', warn: '提示' }[tag] || tag) + '</span>' + escapeHtml(msg);
+      $('logList').prepend(li);
+    };
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    // 日志展示用：剥离 base64 图片，避免长串刷屏
+    function sealForLog(s) {
+      return { sealId: s.sealId, page: s.page, x: s.x, y: s.y, width: s.width, height: s.height };
+    }
+
+    // 生成一个内置假印章（红色圆形，内嵌文字），MOCK 模式下使用
+    function makeMockSeal() {
+      const id = 'seal-demo-' + Date.now();
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">' +
+        '  <circle cx="200" cy="200" r="185" fill="none" stroke="#d32f2f" stroke-width="14"/>' +
+        '  <circle cx="200" cy="200" r="160" fill="none" stroke="#d32f2f" stroke-width="2"/>' +
+        '  <text x="200" y="190" text-anchor="middle" font-size="60" fill="#d32f2f" font-family="SimSun">示例</text>' +
+        '  <text x="200" y="270" text-anchor="middle" font-size="44" fill="#d32f2f" font-family="SimSun">电子印章</text>' +
+        '</svg>';
+      return {
+        sealImg: 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg))),
+        width: 36,          // 毫米
+        height: 36,         // 毫米
+        sealId: id
+      };
+    }
+
+    /* =====================================================================
+     * 三、密码校验 + 取章（真实接入时把 fetch 换成你的接口调用）
+     * ===================================================================== */
+    let rememberPw = false;   // 本次会话内免密
+
+    // 校验密码：MOCK 密码固定为 123456；真实接入时 POST 到后端
+    async function verifyPassword(password, sealId) {
+      if ($('mockMode').checked) {
+        await sleep(500); // 模拟网络耗时
+        if (password !== '123456') {
+          return { success: false, message: '密码错误，请重试' };
+        }
+        return { success: true };
+      }
+      const res = await fetch(CONFIG.API.verifyPassword, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, sealId })
+      });
+      return res.json();
+    }
+
+    // 获取印章：MOCK 模式返回内置假印章；真实接入时从后端拉取
+    async function fetchSeal(sealId) {
+      if ($('mockMode').checked) {
+        await sleep(300);
+        const mock = makeMockSeal();
+        if (sealId) mock.sealId = sealId;
+        return mock;
+      }
+      const res = await fetch(CONFIG.API.getSeal + (sealId ? '?sealId=' + encodeURIComponent(sealId) : ''));
+      return res.json(); // { sealImg, width, height, sealId }
+    }
+
+    /* =====================================================================
+     * 四、核心集成逻辑
+     * ===================================================================== */
+    let viewerWin = null;      // iframe 的 window（同域才可直接访问）
+    let placing = false;       // 防止重复进入取章流程
+
+    // 注册接入：iframe 加载完成后调用
+    function bindViewer(iframe) {
+      viewerWin = iframe.contentWindow;
+      const OFD = viewerWin.OFD;
+      if (!OFD || typeof OFD.onGetSeal !== 'function') {
+        log('warn', 'iframe 内未找到 OFD 接口，请确认 viewer 已加载且同域');
+        return;
+      }
+      // ① 注册取章回调：用户点击预览器工具栏「盖章」按钮时触发
+      OFD.onGetSeal(onStampButtonClick);
+      // ② 注册签章变化回调：放置/删除后都会回调「全部签章位置」
+      OFD.onSealChange(onSealChange);
+      log('info', '已注册 OFD.onGetSeal / OFD.onSealChange，现在可以去预览器里点「盖章」按钮');
+    }
+
+    // 点「盖章」按钮 → 触发本回调 → 密码验证 → setSeal 进入盖章模式
+    async function onStampButtonClick() {
+      if (placing) return;
+      if (rememberPw) {                 // 本会话已通过验证，免密直接取章
+        await doGetSealAndPlace('');
+        return;
+      }
+      openPwModal(async () => {
+        await doGetSealAndPlace($('sealIdInput').value.trim());
+      });
+    }
+
+    // 取章 → setSeal 进入选位模式（放置/删除统一由 onSealChange 回调）
+    async function doGetSealAndPlace(sealId) {
+      placing = true;
+      try {
+        const seal = await fetchSeal(sealId);
+        log('info', '获取印章成功 sealId=' + seal.sealId + '，尺寸 ' + seal.width + '×' + seal.height + 'mm，进入盖章模式');
+        // ② 调用开放接口：提供印章并进入盖章模式
+        viewerWin.OFD.setSeal(seal);
+      } catch (e) {
+        log('warn', '获取印章失败：' + e.message);
+      } finally {
+        placing = false;
+      }
+    }
+
+    // 统一回调：放置(place)或删除(delete)都会触发，list 为「全部签章位置」→ 同步后端
+    // list 为完整列表 [{ sealImg, width, height, sealId, page, x, y }, ...]
+
+    // 放置/删除统一回调：右键删除印章后同样触发
+    function onSealChange(list, action) {
+      syncSeals(list, action === 'delete' ? 'delete' : 'place');
+    }
+
+    // 用最新完整列表整体同步后端（replace-all 语义：后端每次用新列表覆盖旧记录）
+    function syncSeals(list, action) {
+      log(action === 'delete' ? 'warn' : 'ok',
+        '签章' + (action === 'delete' ? '删除' : '放置') + '，当前共 ' + list.length + ' 个：' +
+        (list.length ? list.map(p => '第' + p.page + '页(' + p.x + ', ' + p.y + ')mm').join('；') : '无'));
+      if ($('mockMode').checked) {
+        log('info', 'MOCK：未上报后端，签章列表 ' + JSON.stringify(list.map(sealForLog)));
+        return;
+      }
+      fetch(CONFIG.API.recordPlace, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list)
+      }).then(() => log('ok', '已上报后端同步 ' + list.length + ' 个签章'))
+        .catch(e => log('warn', '上报失败：' + e.message));
+    }
+
+    /* =====================================================================
+     * 五、密码弹窗控制
+     * ===================================================================== */
+    function openPwModal(onSuccess) {
+      $('pwOverlay').classList.add('show');
+      $('pwInput').value = '';
+      $('pwErr').textContent = '';
+      $('pwOk').disabled = false;
+      $('pwInput').focus();
+
+      const ok = () => submitPw(onSuccess);
+      $('pwOk').onclick = ok;
+      $('pwInput').onkeydown = (e) => { if (e.key === 'Enter') ok(); };
+      $('pwCancel').onclick = () => { $('pwOverlay').classList.remove('show'); };
+    }
+
+    async function submitPw(onSuccess) {
+      const password = $('pwInput').value;
+      if (!password) { $('pwErr').textContent = '请输入密码'; return; }
+      $('pwOk').disabled = true;
+      $('pwErr').textContent = '验证中…';
+      try {
+        const r = await verifyPassword(password, $('sealIdInput').value.trim());
+        if (!r.success) {
+          $('pwErr').textContent = r.message || '密码验证失败';
+          $('pwOk').disabled = false;
+          return;
+        }
+        rememberPw = $('pwRemember').checked;   // 免密选项由第三方自行控制
+        $('pwOverlay').classList.remove('show');
+        log('ok', '密码验证通过，开始取章');
+        await onSuccess();
+      } catch (e) {
+        $('pwErr').textContent = '验证出错：' + e.message;
+        $('pwOk').disabled = false;
+      }
+    }
+
+    /* =====================================================================
+     * 六、启动：等待 iframe 加载完成后再绑定
+     * ===================================================================== */
+    const frame = $('viewerFrame');
+    frame.addEventListener('load', () => bindViewer(frame));
+
+    // 演示辅助：免密码直接下发印章
+    $('mockSealBtn').addEventListener('click', async () => {
+      if (!viewerWin) { log('warn', '预览器尚未加载完成'); return; }
+      const seal = await fetchSeal($('sealIdInput').value.trim());
+      viewerWin.OFD.setSeal(seal);
+      log('info', '已直接下发印章进入盖章模式（未走密码验证）');
+    });
+
+    log('info', '页面已就绪，等待 iframe 加载…');
+  </script>
+</body>
+</html>

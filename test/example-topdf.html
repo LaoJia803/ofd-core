@@ -1,0 +1,236 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>toPdf.js 示例 — OFD 转 PDF</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.6 "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #1f2937; display: flex; flex-direction: column; overflow: hidden; }
+  header { background: linear-gradient(135deg, #0b57d0, #0842a0); color: #fff; padding: 8px 16px; flex: none; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 11px; opacity: .85; }
+  .layout { display: flex; gap: 14px; padding: 14px; flex: 1; min-height: 0; }
+
+  /* 左侧：OFD 预览 + PDF 预览 */
+  .viewer-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .preview-panel { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 10px 14px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .preview-panel h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #0b57d0; flex: none; }
+  .preview-body { flex: 1; overflow: auto; min-height: 0; }
+  #svgContainer { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  #svgContainer svg { max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,.15); background: #fff; display: block; }
+  .page-wrap { text-align: center; }
+  .page-wrap .page-no { font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+  #pdfFrame { width: 100%; height: 100%; border: 0; border-radius: 6px; background: #eceff3; display: block; }
+
+  /* 右侧：控制 + 输出 */
+  aside { width: 380px; flex: none; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 10px 14px; flex: none; }
+  .card h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #0b57d0; }
+  .card .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .card select, .card input[type=file] { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; transition: border-color .15s, box-shadow .15s; }
+  .card select:focus { outline: 0; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+  .card select { flex: 1; min-width: 0; }
+  .width-label { font-size: 12px; color: #6b7280; flex: none; }
+  .width-unit { font-size: 11px; color: #9ca3af; flex: none; }
+  .card #widthInput { width: 90px; flex: none; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+  .card button { padding: 6px 12px; border: 0; border-radius: 6px; background: #0b57d0; color: #fff; cursor: pointer; font-size: 13px; transition: background .15s; }
+  .card button:hover { background: #0842a0; }
+  .card button.sub { background: #e5e7eb; color: #333; }
+  .card button.sub:hover { background: #d1d5db; }
+  .card button:disabled { background: #cbd5e1; cursor: not-allowed; }
+  .card .hint { font-size: 11px; color: #9ca3af; margin-top: 6px; }
+  #progress { display: none; }
+  #progressBar { width: 100%; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  #progressInner { height: 100%; width: 0; background: #0b57d0; transition: width .2s; }
+
+  /* 输出区：弹性填满 */
+  #outputCard { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #outputCard h2 { flex: none; }
+  #output { flex: 1; overflow: auto; font-family: Consolas, Monaco, monospace; font-size: 12px;
+    background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 10px; margin: 0; white-space: pre-wrap; word-break: break-all; }
+  .log-ok { color: #4ade80; }
+  .log-err { color: #f87171; }
+  .log-info { color: #93c5fd; }
+  .log-warn { color: #fbbf24; }
+  .log-dim { color: #9ca3af; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>toPdf.js 示例 — OFD 转 PDF</h1>
+  <p>演示 ofdToPdf 接口：加载 OFD → 逐页渲染 SVG → 映射为 PDF → 下载/预览</p>
+</header>
+
+<div class="layout">
+  <!-- 左：OFD 原页 + PDF 预览 -->
+  <div class="viewer-box">
+    <div class="preview-panel" style="flex:2;">
+      <h2>OFD 原页预览（renderPage）</h2>
+      <div class="preview-body">
+        <div id="svgContainer">
+          <div class="page-no">选择 OFD 文件并点击「加载并转换」</div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-panel" style="flex:3;">
+      <h2>PDF 预览（ofdToPdf 产物）</h2>
+      <div class="preview-body">
+        <iframe id="pdfFrame" title="PDF 预览"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右：控制 + 输出 -->
+  <aside>
+    <div class="card">
+      <h2>文件源</h2>
+      <div class="row">
+        <select id="fileSel">
+          <option value="ofdFile/999.ofd">999.ofd（发票）</option>
+          <option value="ofdFile/2.ofd">2.ofd</option>
+          <option value="ofdFile/h.ofd">h.ofd</option>
+          <option value="ofdFile/n.ofd">n.ofd</option>
+        </select>
+        <input type="file" id="fileInput" accept=".ofd" style="flex:1;min-width:120px;font-size:12px;">
+      </div>
+      <div class="row">
+        <label class="width-label">预览宽度</label>
+        <input type="number" id="widthInput" min="50" step="50" value="" placeholder="自动">
+        <span class="width-unit">px</span>
+      </div>
+      <div class="row">
+        <button id="convertBtn">加载并转换</button>
+        <button id="downloadBtn" class="sub" disabled>下载 PDF</button>
+      </div>
+      <div id="progress">
+        <div id="progressBar"><div id="progressInner"></div></div>
+      </div>
+      <div class="hint">转换在浏览器本地完成，不上传文件。中文文本使用阅读器内置宋体（Type0 字体，无需嵌入）。</div>
+    </div>
+
+    <div class="card" id="outputCard">
+      <h2>输出 <button id="clearBtn" class="sub" style="float:right;padding:2px 8px;font-size:11px;">清空</button></h2>
+      <pre id="output"></pre>
+    </div>
+  </aside>
+</div>
+
+<script src="../build/ofd.js"></script>
+<script src="../build/toPdf.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const out = $('output');
+  const svgContainer = $('svgContainer');
+  let currentOfd = null;        // 加载后的 ofd 对象
+  let currentPdf = null;        // 转换后的 PDF (Uint8Array)
+  let currentName = '';         // 当前文件名（用于下载命名）
+
+  // ---------- 输出工具 ----------
+  function log(msg, cls) {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = msg + '\n';
+    out.appendChild(span);
+    out.scrollTop = out.scrollHeight;
+  }
+  function clearLog() { out.innerHTML = ''; }
+
+  // ---------- 文件源 ----------
+  function currentFileSource() {
+    if ($('fileInput').files && $('fileInput').files[0]) return $('fileInput').files[0];
+    return $('fileSel').value;
+  }
+  function sourceName(src) {
+    return typeof src === 'string' ? src.split('/').pop() : src.name;
+  }
+  function inputWidthPx() {
+    const v = parseInt($('widthInput').value, 10);
+    return v > 0 ? v : null;
+  }
+
+  // ---------- 转换 ----------
+  async function convert() {
+    clearLog();
+    $('downloadBtn').disabled = true;
+    $('pdfFrame').removeAttribute('src');
+    currentPdf = null;
+
+    const src = currentFileSource();
+    currentName = sourceName(src).replace(/\.ofd$/i, '') + '.pdf';
+    log('== OFD.load(\'' + sourceName(src) + '\') ==', 'log-info');
+
+    try {
+      const t0 = performance.now();
+      const ofd = await OFD.load(src);
+      currentOfd = ofd;
+      log('加载完成，' + OFD.getPageCount(ofd) + ' 页，耗时 ' + (performance.now() - t0).toFixed(1) + ' ms', 'log-ok');
+
+      // 预览 OFD 原页（宽度 = 手动 px 或物理尺寸 mm×96/25.4）
+      svgContainer.innerHTML = '';
+      const manual = inputWidthPx();
+      const count = OFD.getPageCount(ofd);
+      for (let i = 0; i < count; i++) {
+        const dim = await OFD.getPageDimensions(ofd, i);
+        const pxW = manual || Math.round(dim.width * (96 / 25.4));
+        const wrap = document.createElement('div');
+        wrap.className = 'page-wrap';
+        const no = document.createElement('div');
+        no.className = 'page-no';
+        no.textContent = '第 ' + (i + 1) + ' / ' + count + ' 页 · ' + dim.width + '×' + dim.height + 'mm';
+        wrap.appendChild(no);
+        wrap.appendChild(await OFD.renderPage(ofd, i, { width: pxW }));
+        svgContainer.appendChild(wrap);
+      }
+
+      // 转换
+      log('\n== TOPDF.ofdToPdf(ofd, { title }) ==', 'log-info');
+      $('progress').style.display = 'block';
+      $('progressInner').style.width = '0';
+      const t1 = performance.now();
+      const pdf = await TOPDF.ofdToPdf(ofd, {
+        title: currentName,
+        onProgress: (done, total) => {
+          $('progressInner').style.width = Math.round(done / total * 100) + '%';
+        }
+      });
+      const cost = (performance.now() - t1).toFixed(1);
+      $('progress').style.display = 'none';
+      currentPdf = pdf;
+      log('转换完成：' + (pdf.length / 1024).toFixed(1) + ' KB，' + count + ' 页，耗时 ' + cost + ' ms', 'log-ok');
+
+      // PDF 预览（浏览器内建 PDF 阅读器渲染 blob）
+      const blob = new Blob([pdf], { type: 'application/pdf' });
+      $('pdfFrame').src = URL.createObjectURL(blob);
+      $('downloadBtn').disabled = false;
+      log('已生成 PDF 预览。若浏览器未内嵌阅读器，可点击「下载 PDF」查看。', 'log-dim');
+    } catch (e) {
+      $('progress').style.display = 'none';
+      log('失败：' + e.message, 'log-err');
+    }
+  }
+
+  function download() {
+    if (!currentPdf) return;
+    const blob = new Blob([currentPdf], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = currentName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    log('已下载：' + currentName, 'log-ok');
+  }
+
+  // ---------- 事件绑定 ----------
+  $('convertBtn').addEventListener('click', convert);
+  $('downloadBtn').addEventListener('click', download);
+  $('clearBtn').addEventListener('click', clearLog);
+  $('fileSel').addEventListener('change', () => { $('fileInput').value = ''; });
+
+  log('就绪。选择 OFD 文件后点击「加载并转换」，产物 PDF 会在右侧内嵌预览并支持下载。', 'log-info');
+  log('可用 API：TOPDF.ofdToPdf / TOPDF.svgToPdf', 'log-dim');
+</script>
+</body>
+</html>
+

@@ -1,0 +1,717 @@
+﻿﻿﻿﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ofd.js — OFD 解析与渲染核心引擎</title>
+<style>
+  :root {
+    --c-primary: #0b57d0;
+    --c-primary-dark: #0842a0;
+    --c-bg: #f8fafc;
+    --c-card: #fff;
+    --c-border: #e2e8f0;
+    --c-text: #1e293b;
+    --c-text2: #64748b;
+    --c-success: #16a34a;
+    --c-error: #dc2626;
+    --c-info: #0b57d0;
+    --c-warn: #d97706;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 6px rgba(0,0,0,.05), 0 2px 4px rgba(0,0,0,.04);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body { font: 15px/1.7 "Microsoft YaHei", "Segoe UI", system-ui, sans-serif; color: var(--c-text); background: var(--c-bg); }
+
+  /* === Header === */
+  .hero { background: linear-gradient(135deg, #0b57d0 0%, #0842a0 50%, #1a237e 100%); color: #fff; padding: 48px 24px 40px; text-align: center; }
+  .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
+  .hero h1 span { opacity: .7; font-weight: 400; font-size: 20px; margin-left: 8px; }
+  .hero p { font-size: 16px; opacity: .85; max-width: 640px; margin: 0 auto; }
+  .hero .badges { margin-top: 16px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .hero .badge { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2); border-radius: 20px; padding: 4px 14px; font-size: 13px; backdrop-filter: blur(4px); }
+
+  /* === Nav === */
+  .nav { position: sticky; top: 0; z-index: 100; background: var(--c-card); border-bottom: 1px solid var(--c-border); box-shadow: var(--shadow); }
+  .nav-inner { max-width: 1100px; margin: 0 auto; display: flex; gap: 0; overflow-x: auto; padding: 0 16px; }
+  .nav a { display: block; padding: 12px 16px; font-size: 13px; color: var(--c-text2); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; transition: all .15s; }
+  .nav a:hover, .nav a.active { color: var(--c-primary); border-bottom-color: var(--c-primary); }
+
+  /* === Container === */
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 22px; font-weight: 700; color: var(--c-text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .section-title .icon { width: 28px; height: 28px; border-radius: 6px; background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .section-desc { font-size: 14px; color: var(--c-text2); margin-bottom: 20px; }
+
+  /* === Feature Grid === */
+  .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .feat-card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); transition: box-shadow .2s, transform .2s; }
+  .feat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .feat-card .feat-icon { font-size: 28px; margin-bottom: 10px; }
+  .feat-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .feat-card p { font-size: 13px; color: var(--c-text2); line-height: 1.6; }
+
+  /* === Architecture Table === */
+  .arch-table { width: 100%; border-collapse: collapse; background: var(--c-card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); font-size: 14px; }
+  .arch-table th { background: #f1f5f9; text-align: left; padding: 10px 16px; font-weight: 600; border-bottom: 2px solid var(--c-border); }
+  .arch-table td { padding: 10px 16px; border-bottom: 1px solid var(--c-border); vertical-align: top; }
+  .arch-table tr:last-child td { border-bottom: none; }
+  .arch-table code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 12px; font-family: Consolas, Monaco, monospace; }
+
+  /* === Flow Diagram === */
+  .flow-box { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); overflow-x: auto; }
+  .flow-box pre { font-family: Consolas, Monaco, monospace; font-size: 13px; line-height: 1.7; color: var(--c-text); white-space: pre; margin: 0; }
+
+  /* === API Cards === */
+  .api-list { display: flex; flex-direction: column; gap: 12px; }
+  .api-card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .api-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; user-select: none; transition: background .15s; }
+  .api-header:hover { background: #f8fafc; }
+  .api-method { background: var(--c-primary); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: Consolas, Monaco, monospace; font-weight: 600; flex-shrink: 0; }
+  .api-name { font-family: Consolas, Monaco, monospace; font-size: 14px; font-weight: 600; }
+  .api-brief { font-size: 13px; color: var(--c-text2); margin-left: auto; }
+  .api-body { padding: 0 16px 16px; display: none; }
+  .api-card.open .api-body { display: block; }
+  .api-card.open .api-header { border-bottom: 1px solid var(--c-border); }
+  .api-body p { font-size: 14px; margin: 8px 0; }
+  .api-body .param-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  .api-body .param-table th { text-align: left; padding: 6px 10px; background: #f1f5f9; border-radius: 4px; }
+  .api-body .param-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+  .api-body pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; overflow-x: auto; margin: 8px 0; font-family: Consolas, Monaco, monospace; }
+
+  /* === Interactive Demo === */
+  .demo-area { display: grid; grid-template-columns: 300px 1fr; gap: 16px; min-height: 400px; }
+  @media (max-width: 768px) { .demo-area { grid-template-columns: 1fr; } }
+  .demo-sidebar { display: flex; flex-direction: column; gap: 12px; }
+  .demo-panel { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+  .demo-panel h3 { font-size: 13px; font-weight: 600; color: var(--c-primary); margin-bottom: 8px; }
+  .demo-panel select, .demo-panel input { width: 100%; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 6px; font-size: 13px; }
+  .demo-panel select:focus, .demo-panel input:focus { outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(11,87,208,.12); }
+  .demo-panel button { padding: 8px 14px; border: 0; border-radius: 6px; background: var(--c-primary); color: #fff; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; width: 100%; margin-top: 8px; }
+  .demo-panel button:hover { background: var(--c-primary-dark); }
+  .demo-panel button.secondary { background: #e2e8f0; color: var(--c-text); }
+  .demo-panel button.secondary:hover { background: #cbd5e1; }
+  .demo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .demo-main { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+  .demo-render { flex: 1; overflow: auto; padding: 16px; text-align: center; min-height: 300px; }
+  .demo-render svg { max-width: 100%; height: auto; box-shadow: var(--shadow-md); background: #fff; display: inline-block; }
+  .demo-log { height: 180px; overflow: auto; background: #0f172a; color: #e2e8f0; padding: 10px 14px; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; flex: none; }
+  .log-ok { color: #4ade80; }
+  .log-err { color: #f87171; }
+  .log-info { color: #93c5fd; }
+  .log-dim { color: #9ca3af; }
+  .page-label { font-size: 12px; color: var(--c-text2); margin-bottom: 6px; }
+
+  /* === Internal Mechanism === */
+  .mech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+  .mech-item { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .mech-item h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--c-primary); }
+  .mech-item p { font-size: 13px; color: var(--c-text2); line-height: 1.6; }
+  .mech-item code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: Consolas, Monaco, monospace; }
+
+  /* === Notes === */
+  .notes-list { background: var(--c-card); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow); }
+  .notes-list li { font-size: 14px; margin: 6px 0; padding-left: 4px; color: var(--c-text2); line-height: 1.7; }
+  .notes-list li strong { color: var(--c-text); }
+
+  /* === Footer === */
+  .footer { text-align: center; padding: 24px; font-size: 13px; color: var(--c-text2); border-top: 1px solid var(--c-border); margin-top: 48px; }
+  .footer a { color: var(--c-primary); text-decoration: none; }
+
+  /* Stamp modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+  .modal-overlay.hidden { display: none; }
+  .modal { width: 400px; max-height: 80vh; overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #f0f2f5; font-size: 14px; font-weight: 600; }
+  .modal-close { border: 0; background: none; font-size: 18px; cursor: pointer; color: #9ca3af; }
+  .modal-close:hover { color: #1e293b; }
+  #stampModalBody { padding: 16px; }
+  #stampModalBody .kv { display: flex; margin-bottom: 6px; font-size: 13px; }
+  #stampModalBody .kv .k { width: 90px; flex: none; color: #64748b; }
+  #stampModalBody .kv .v { flex: 1; color: #1e293b; word-break: break-all; }
+  #stampModalBody .seal-preview { text-align: center; margin: 12px 0; }
+  #stampModalBody .seal-preview img { max-width: 160px; max-height: 160px; }
+
+  /* empty state */
+  .empty-hint { color: var(--c-text2); font-size: 14px; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<!-- ==================== Hero ==================== -->
+<div class="hero">
+  <h1>ofd.js <span>OFD 解析与渲染核心引擎</span></h1>
+  <p>零依赖、纯前端、IIFE 单文件<br>支持 OFD（GB/T 33190）文档的完整解析、SVG 矢量渲染与数字签名验证</p>
+  <div class="badges">
+    <span class="badge">Zero Dependencies</span>
+    <span class="badge">Browser + Node.js</span>
+    <span class="badge">SVG Vector</span>
+    <span class="badge">SM3 Signature</span>
+    <span class="badge">Lazy Parse</span>
+  </div>
+</div>
+
+<!-- ==================== Nav ==================== -->
+<div class="nav">
+  <div class="nav-inner">
+    <a href="#features">功能特性</a>
+    <a href="#architecture">分层架构</a>
+    <a href="#flow">调用流程</a>
+    <a href="#api">公开 API</a>
+    <a href="#demo">在线演示</a>
+    <a href="#internals">内部机制</a>
+    <a href="#notes">注意事项</a>
+  </div>
+</div>
+
+<!-- ==================== Content ==================== -->
+<div class="container">
+
+  <!-- 功能特性 -->
+  <div class="section" id="features">
+    <div class="section-title"><span class="icon">1</span>功能特性</div>
+    <div class="section-desc">引擎覆盖 OFD 文档处理的完整生命周期</div>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-icon">&#128269;</div>
+        <h3>ZIP 解压</h3>
+        <p>自实现 ZIP 解析（Store / Deflate），浏览器依赖原生 <code>DecompressionStream</code>，Node 依赖内置 <code>zlib</code>。</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">&#128196;</div>
+        <h3>OFD 解析</h3>
+        <p>解析 OFD.xml → Document.xml → 页面 XML → 资源（字体/颜色/图片），懒加载、按页缓存。</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">&#127912;</div>
+        <h3>SVG 渲染</h3>
+        <p>矢量缩放不失真，文本可选可搜索。支持路径、文本、图像、模板、印章与注释。</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">&#128274;</div>
+        <h3>数字签名</h3>
+        <p>SM3 摘要校验、ASN.1 证书/签名结构解析、签章数据提取与验证。</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">&#128278;</div>
+        <h3>印章处理</h3>
+        <p>支持 OFD 矢量印章与 PNG/JPEG 位图印章，椭圆弧文字排布，点击可交互。</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">&#128196;</div>
+        <h3>注释渲染</h3>
+        <p>高亮、下划线、删除线、画笔、矩形等注释类型，BlendMode 映射 mix-blend-mode。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分层架构 -->
+  <div class="section" id="architecture">
+    <div class="section-title"><span class="icon">2</span>分层架构</div>
+    <div class="section-desc">IO → 解析 → 渲染，三层无反向依赖</div>
+    <table class="arch-table">
+      <thead><tr><th>层次</th><th>职责</th><th>代表函数</th></tr></thead>
+      <tbody>
+        <tr><td><strong>IO 层</strong></td><td>ZIP 解压、条目读取</td><td><code>readZip</code>、<code>readEntry</code>、<code>readEntryText</code></td></tr>
+        <tr><td><strong>解析层</strong></td><td>XML → 结构化对象</td><td><code>parseDocument</code>、<code>parsePage</code>、<code>parseRes</code>、<code>parseSignatures</code></td></tr>
+        <tr><td><strong>渲染层</strong></td><td>结构化对象 → SVG</td><td><code>renderPageToString</code>、<code>renderObject</code>、<code>renderStamp</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 调用流程 -->
+  <div class="section" id="flow">
+    <div class="section-title"><span class="icon">3</span>函数调用流程</div>
+    <div class="section-desc">从加载到渲染的完整数据流</div>
+
+    <h4 style="margin-bottom:8px;font-size:15px;">加载阶段</h4>
+    <div class="flow-box" style="margin-bottom:16px;">
+      <pre>OFD.load(source)
+  ├─ 读取文件数据 (fetch / Blob / ArrayBuffer → Uint8Array)
+  ├─ readZip(data)                        → ZIP 句柄
+  └─ parseOFD(zip)
+       └─ parseDocument(zip)
+            ├─ readEntryText(zip, 'OFD.xml')     → 解析文档信息
+            ├─ readEntryText(zip, docPath)       → 解析 Document.xml
+            │    ├─ parseBox()                   → 页面物理尺寸
+            │    ├─ parseRes(publicRes)          → 公共资源（字体/颜色/图片引用）
+            │    ├─ parseRes(documentRes)        → 文档资源
+            │    ├─ parseSignatures()             → 签名与印章（含 Seal.esl / SignedValue.dat）
+             │    └─ parseAnnotations()           → 注解（印章 + 高亮/下划线等文本注释）
+             └─ 返回 { info, document, zip }</pre>
+    </div>
+
+    <h4 style="margin-bottom:8px;font-size:15px;">渲染阶段</h4>
+    <div class="flow-box" style="margin-bottom:16px;">
+      <pre>OFD.renderPageToString(ofd, pageIndex, opts)
+  ├─ ensurePageParsed(ofd, pageIndex)        → 命中缓存或 parsePage()
+  │    └─ parsePage(pagePath, zip)
+  │         ├─ readEntryText(zip, pagePath)
+  │         ├─ parseXml() → parseBox()       → 页面尺寸
+  │         └─ parseLayer() × N              → 图层对象列表
+  │
+  ├─ 收集模板图层
+  │    └─ getTemplateLayers(tpl, ofd) × N
+  │
+  ├─ 图像预取（并行）
+  │    └─ Promise.all([ ensureImageDataUrl(mm), ... ])
+  │
+  ├─ 字体预取（未映射字体从 font/ 目录加载）
+  │    └─ Promise.all([ ensureFontLoaded(name), ... ])
+  │
+  ├─ 逐图层渲染对象
+  │    └─ renderObject(obj, res)
+  │         ├─ renderPathObject()            → SVG &lt;path&gt;
+  │         ├─ renderTextObject()            → SVG &lt;text&gt;/&lt;tspan&gt;
+  │         └─ renderImageObject()           → SVG &lt;image&gt;
+  │
+  ├─ 渲染本页的印章与注释
+  │    ├─ renderStamp(stamp, stampIdx) × N    → 印章（矢量印章直接遍历 sealOfd 图层渲染）
+  │    └─ renderAnnot(annot) × N              → 文本注释（高亮/下划线/删除线/画笔/矩形）
+  │
+  └─ 拼装 &lt;svg&gt; 字符串返回</pre>
+    </div>
+
+    <h4 style="margin-bottom:8px;font-size:15px;">签名验证阶段</h4>
+    <div class="flow-box">
+      <pre>OFD.verifySignature(ofd, index)
+  ├─ 直接读取 ofd.document.signatures[index]  → 签名项（含 references 摘要）
+  └─ 逐个 references 项校验
+       ├─ readEntry(zip, fileRef)             → 原始文件字节
+       ├─ hashBytes(data, checkMethod)        → 计算摘要（SM3 内置 / SHA-* 走 WebCrypto）
+       └─ bytesEqual(digest, base64ToBytes(checkValue)) → 比对
+  └─ 返回 { valid, status: 'valid'|'invalid'|'unknown', message }</pre>
+    </div>
+  </div>
+
+  <!-- 公开 API -->
+  <div class="section" id="api">
+    <div class="section-title"><span class="icon">4</span>公开 API</div>
+    <div class="section-desc">点击展开查看参数详情与示例代码</div>
+    <div class="api-list" id="apiList"></div>
+  </div>
+
+  <!-- 在线演示 -->
+  <div class="section" id="demo">
+    <div class="section-title"><span class="icon">5</span>在线演示</div>
+    <div class="section-desc">加载 OFD 文件，实时调用各 API 并查看结果</div>
+    <div class="demo-area">
+      <div class="demo-sidebar">
+        <div class="demo-panel">
+          <h3>文件源</h3>
+          <select id="fileSel">
+            <option value="ofdFile/999.ofd">999.ofd（发票）</option>
+            <option value="ofdFile/2.ofd">2.ofd</option>
+            <option value="ofdFile/h.ofd">h.ofd</option>
+            <option value="ofdFile/n.ofd">n.ofd</option>
+            <option value="ofdFile/6.1.001 Entry全部不压缩.ofd">6.1.001 不压缩</option>
+            <option value="ofdFile/6.1.002 Entry全部压缩.ofd">6.1.002 全压缩</option>
+            <option value="ofdFile/6.1.003 Entry合理压缩.ofd">6.1.003 合理压缩</option>
+            <option value="ofdFile/6.1.004 Entry不合理压缩.ofd">6.1.004 不合理压缩</option>
+            <option value="ofdFile/6.1.005 OFD和Document在ZIP流后部.ofd">6.1.005 ZIP流后部</option>
+            <option value="ofdFile/6.2.001 正常文件结构.ofd">6.2.001 正常结构</option>
+            <option value="ofdFile/6.2.002 平行结构文件.ofd">6.2.002 平行结构</option>
+            <option value="ofdFile/6.2.003 使用相对路径.ofd">6.2.003 相对路径</option>
+            <option value="ofdFile/6.2.004_1 文件目录结构与推荐的不符.ofd">6.2.004-1 目录不符</option>
+            <option value="ofdFile/6.2.004_2 路径中含有空格.ofd">6.2.004-2 含空格</option>
+            <option value="ofdFile/6.2.004_3 路径中含有转义字符.ofd">6.2.004-3 转义字符</option>
+            <option value="ofdFile/6.2.005 文件目录结构乱序.ofd">6.2.005 目录乱序</option>
+            <option value="ofdFile/6.2.006 各级目录下有无用内容.ofd">6.2.006 无用内容</option>
+          </select>
+          <input type="file" id="fileInput" accept=".ofd" style="margin-top:8px;font-size:12px;">
+          <div style="margin-top:8px;">
+            <label style="font-size:12px;color:var(--c-text2);">渲染宽度 (px)</label>
+            <input type="number" id="widthInput" min="50" step="50" value="" placeholder="自动" style="margin-top:4px;">
+          </div>
+          <button id="loadBtn">加载并渲染全部页</button>
+          <div class="demo-btns" style="margin-top:8px;">
+            <button class="secondary" id="infoBtn">getDocumentInfo</button>
+            <button class="secondary" id="dimBtn">getPageDimensions</button>
+            <button class="secondary" id="sigsBtn">getSignatures</button>
+            <button class="secondary" id="verifyBtn">verifySignature</button>
+          </div>
+          <button class="secondary" id="renderAllBtn" style="margin-top:6px;">renderAll</button>
+          <button class="secondary" id="profileBtn" style="margin-top:6px;">开启性能打点</button>
+        </div>
+      </div>
+
+      <div class="demo-main">
+        <div class="demo-render" id="pageContainer">
+          <div class="empty-hint">选择文件后点击「加载并渲染」</div>
+        </div>
+        <div class="demo-log" id="output"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 内部机制 -->
+  <div class="section" id="internals">
+    <div class="section-title"><span class="icon">6</span>关键内部机制</div>
+    <div class="mech-grid">
+      <div class="mech-item">
+        <h4>ZIP 读取</h4>
+        <p>自实现 ZIP 解析（Store / Deflate），<code>readEntry</code> 按名取二进制，<code>readEntryText</code> 取文本。</p>
+      </div>
+      <div class="mech-item">
+        <h4>SM3 哈希</h4>
+        <p>纯 JS 实现 SM3 国密哈希算法，用于数字签名摘要校验。</p>
+      </div>
+      <div class="mech-item">
+        <h4>ASN.1 解析</h4>
+        <p>解析证书（<code>collectCerts</code>）、签名值（<code>extractSignatureValue</code>）、签章名称（<code>extractSealName</code>，从 SignedValue.dat 的 UTF8String 提取）。</p>
+      </div>
+      <div class="mech-item">
+        <h4>印章图片</h4>
+        <p><code>extractSealPicture</code> 从 ESL/DAT 流提取 PNG/JPEG（带 magic bytes 回退）；<code>picture.type='ofd'</code> 时为内嵌 OFD 矢量印章，走 <code>parseSealOfd</code> 递归解析。</p>
+      </div>
+      <div class="mech-item">
+        <h4>印章文字</h4>
+        <p>椭圆弧上排布签章文字（如「重庆市税务局」沿下弧），顶部弧与文字遮挡问题已在渲染中校正。</p>
+      </div>
+      <div class="mech-item">
+        <h4>文本渲染</h4>
+        <p><code>TextCode</code> 逐字定位：可合并的文本输出为单 tspan（x/y 值列表保留每字符绝对坐标）；<code>readDirection=90/270</code> 时逐字符 <code>rotate()</code>。</p>
+      </div>
+      <div class="mech-item">
+        <h4>字体映射</h4>
+        <p><code>mapFontFamily</code> 按中文字符串包含关系匹配（如「小标宋体」含「宋」→ Song 系）；未映射字体从 <code>font/</code> 目录通过 <code>FontFace</code> API 动态加载。</p>
+      </div>
+      <div class="mech-item">
+        <h4>注释渲染</h4>
+        <p><code>parseAnnotations</code> 解析 <code>Annots/Annotations.xml</code>（印章 + 文本注释）；<code>renderAnnot</code> 将 PathObject 的 AbbreviatedData 经 <code>abbreviatedToSvgPath</code> 转 SVG path，<code>BlendMode=Darken</code> → <code>mix-blend-mode: darken</code>。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 注意事项 -->
+  <div class="section" id="notes">
+    <div class="section-title"><span class="icon">7</span>注意事项</div>
+    <ul class="notes-list">
+      <li><strong>依赖顺序</strong>：必须先加载 <code>ofd.js</code>，再加载依赖它的模块（如 toPdf.js）</li>
+      <li><strong>ZIP 解压</strong>：浏览器依赖 <code>DecompressionStream</code>（Chrome 80+），Node 依赖内置 <code>zlib</code></li>
+      <li><strong>坐标系统</strong>：Y 轴向下，不翻转；页面尺寸单位为毫米（mm）</li>
+      <li><strong>懒解析 + 缓存</strong>：<code>load()</code> 只解析文档元信息与签名/注解，每页 XML 在首次渲染时才解析，结果缓存到页面对象的 <code>_parsed</code></li>
+      <li><strong>文本坐标</strong>：CTM 变换分支使用局部坐标，非 CTM 分支按 <code>HScale</code> 修正 X 坐标</li>
+      <li><strong>签章验证</strong>：失败不阻塞渲染（解析异常被捕获并忽略）</li>
+      <li><strong>印章去重</strong>：签名中的 <code>SignatureInFile</code> 注解可能产生重复印章，渲染时按 Subtype 去重</li>
+      <li><strong>注释渲染</strong>：文本注释复用 <code>stamps</code> 数组（标记 <code>isAnnot</code>），不挂 <code>data-stamp-idx</code>，不影响盖章点击逻辑</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="footer">
+  ofd.js &middot; OFD 解析与渲染核心引擎 &middot;
+  <a href="https://gitee.com/LaoJia803/ofd-core">Gitee</a> &middot;
+  <a href="https://github.com/LaoJia803/ofd-core">GitHub</a>
+</div>
+
+<!-- 印章弹窗 -->
+<div id="stampModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <span>印章信息</span>
+      <button id="stampModalClose" class="modal-close" type="button">&times;</button>
+    </div>
+    <div id="stampModalBody"></div>
+  </div>
+</div>
+
+<script src="../build/ofd.min.js?v=29"></script>
+<script>
+// ==================== API 文档数据 ====================
+const apiData = [
+  {
+    method: 'API', name: 'OFD.load(source)', brief: '加载 OFD 文件并解析',
+    params: `<table class="param-table"><tr><th>参数</th><th>类型</th><th>说明</th></tr>
+<tr><td>source</td><td><code>string | Blob | File | ArrayBuffer | Uint8Array</code></td><td>字符串视为 URL（fetch 加载）；其余为二进制数据源</td></tr></table>`,
+    code: `// 从 URL 加载\nconst ofd = await OFD.load('999.ofd');\n\n// 从 <input type="file"> 加载\nconst file = document.getElementById('fileInput').files[0];\nconst ofd = await OFD.load(file);\n\n// 从 ArrayBuffer 加载\nconst buf = await fetch('999.ofd').then(r => r.arrayBuffer());\nconst ofd = await OFD.load(buf);`
+  },
+  {
+    method: 'API', name: 'OFD.renderPageToString(ofd, pageIndex, opts)', brief: '渲染指定页面为 SVG 字符串',
+    params: `<table class="param-table"><tr><th>参数</th><th>类型</th><th>说明</th></tr>
+<tr><td>ofd</td><td>object</td><td><code>load()</code> 的返回对象</td></tr>
+<tr><td>pageIndex</td><td>number</td><td>0-based 页码</td></tr>
+<tr><td>opts.width</td><td>number</td><td>可选，SVG 的 width 属性（不传则由容器决定）</td></tr></table>`,
+    code: `const svg = await OFD.renderPageToString(ofd, 0);\ndocument.getElementById('container').innerHTML = svg;`
+  },
+  {
+    method: 'API', name: 'OFD.renderPage(ofd, pageIndex, opts)', brief: '渲染指定页面为 SVG DOM 元素',
+    params: `<table class="param-table"><tr><th>参数</th><th>类型</th><th>说明</th></tr>
+<tr><td>ofd</td><td>object</td><td><code>load()</code> 的返回对象</td></tr>
+<tr><td>pageIndex</td><td>number</td><td>0-based 页码</td></tr>
+<tr><td>opts.width</td><td>number</td><td>可选，SVG 的 width 属性（像素）</td></tr></table>`,
+    code: `const svgEl = await OFD.renderPage(ofd, 0);\ndocument.getElementById('container').appendChild(svgEl);`
+  },
+  {
+    method: 'API', name: 'OFD.renderAll(ofd, opts)', brief: '渲染全部页面，返回 SVG 元素数组',
+    params: '',
+    code: `const pages = await OFD.renderAll(ofd);\npages.forEach(svg => container.appendChild(svg));`
+  },
+  {
+    method: 'API', name: 'OFD.getPageCount(ofd)', brief: '返回页数',
+    params: '',
+    code: `const total = OFD.getPageCount(ofd);\nconsole.log('共', total, '页');`
+  },
+  {
+    method: 'API', name: 'OFD.getPageDimensions(ofd, pageIndex)', brief: '返回页面尺寸 { width, height, unit: "mm" }',
+    params: '',
+    code: `const dim = await OFD.getPageDimensions(ofd, 0);\nconsole.log(dim.width + 'mm × ' + dim.height + 'mm');`
+  },
+  {
+    method: 'API', name: 'OFD.getDocumentInfo(ofd)', brief: '返回合并文档元信息',
+    params: '',
+    code: `const info = OFD.getDocumentInfo(ofd);\nconsole.log(info.title, info.author, info.pageCount + '页');`
+  },
+  {
+    method: 'API', name: 'OFD.getSignatures(ofd)', brief: '返回签名数组',
+    params: '',
+    code: `const sigs = await OFD.getSignatures(ofd);\nsigs.forEach((sig, i) => {\n  console.log(\`签名 \${i + 1}：\${sig.signer}，时间：\${sig.signTime}\`);\n  if (sig.sealImage) console.log('  印章：' + (sig.sealAttrs && sig.sealAttrs.name || sig.sealImage.type));\n});`
+  },
+  {
+    method: 'API', name: 'OFD.verifySignature(ofd, index)', brief: 'SM3 摘要校验',
+    params: `<table class="param-table"><tr><th>参数</th><th>类型</th><th>说明</th></tr>
+<tr><td>ofd</td><td>object</td><td><code>load()</code> 的返回对象</td></tr>
+<tr><td>index</td><td>number</td><td>签名索引（0-based）</td></tr></table>
+<p>返回：<code>{ valid, status, message, checked, failed }</code>（仅做文件摘要比对）</p>`,
+    code: `const result = await OFD.verifySignature(ofd, 0);\nif (result.valid) {\n  console.log('验证通过：', result.message);\n} else {\n  console.log('验证失败：', result.message);\n}`
+  },
+  {
+    method: 'API', name: 'OFD.expandDelta(str)', brief: '展开 DeltaX/DeltaY 增量串为数组',
+    params: '',
+    code: `const dx = OFD.expandDelta('0 5.2 3.1 -2.0');\n// [0, 5.2, 3.1, -2]`
+  },
+  {
+    method: 'API', name: 'OFD.setProfiling(on) / getLastProfile()', brief: '性能打点控制',
+    params: '',
+    code: `OFD.setProfiling(true);\nconst ofd = await OFD.load('999.ofd');\nawait OFD.renderPage(ofd, 0);\nconst profile = OFD.getLastProfile();\nOFD.setProfiling(false);`
+  },
+  {
+    method: 'API', name: 'OFD.setFontBase(base)', brief: '覆盖字体目录 URL 前缀',
+    params: '',
+    code: `OFD.setFontBase('../assets/font/');\nconst ofd = await OFD.load('999.ofd');`
+  },
+  {
+    method: 'INT', name: 'OFD._internals', brief: '暴露内部函数，便于扩展/调试',
+    params: '',
+    code: `const {\n  parseOFD, parsePage, renderPageToString,\n  readZip, readEntry, readEntryText,\n  sm3Hash, hashBytes, resolvePath,\n  parseXml, base64ToBytes, bytesToBase64,\n  // 与 toPdf.js 共享的工具\n  decodeEntities, escapeXml,\n  parseColor, colorToCss,\n  bytesToHex, hexToBytes\n} = OFD._internals;`
+  }
+];
+
+// ==================== 渲染 API 列表 ====================
+(function renderApiList() {
+  const list = document.getElementById('apiList');
+  apiData.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'api-card';
+    card.innerHTML = `
+      <div class="api-header" data-idx="${idx}">
+        <span class="api-method">${item.method}</span>
+        <span class="api-name">${item.name}</span>
+        <span class="api-brief">${item.brief}</span>
+      </div>
+      <div class="api-body">
+        ${item.params}
+        <pre><code>${item.code.replace(/</g, '&lt;')}</code></pre>
+      </div>`;
+    list.appendChild(card);
+    card.querySelector('.api-header').addEventListener('click', () => card.classList.toggle('open'));
+  });
+})();
+
+// ==================== 交互演示 ====================
+const $ = (id) => document.getElementById(id);
+const out = $('output');
+const pageContainer = $('pageContainer');
+let currentOfd = null;
+let renderToken = 0;
+
+function log(msg, cls) {
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = msg + '\n';
+  out.appendChild(span);
+  out.scrollTop = out.scrollHeight;
+}
+function logObj(label, obj) {
+  log('▸ ' + label, 'log-info');
+  log(JSON.stringify(obj, null, 2));
+}
+
+function currentFileSource() {
+  return ($('fileInput').files && $('fileInput').files[0]) || $('fileSel').value;
+}
+function sourceName(src) {
+  return typeof src === 'string' ? src.split('/').pop() : src.name;
+}
+function inputWidthPx() {
+  const v = parseInt($('widthInput').value, 10);
+  return v > 0 ? v : null;
+}
+async function resolveRenderWidth(ofd, pageIndex) {
+  const manual = inputWidthPx();
+  if (manual) return manual;
+  const dim = await OFD.getPageDimensions(ofd, pageIndex);
+  return Math.round(dim.width * (96 / 25.4));
+}
+
+// 印章点击
+function bindStampClick(svg, pageIndex) {
+  const doc = currentOfd.document;
+  const pageId = doc.pages[pageIndex] && doc.pages[pageIndex].id;
+  const stamps = (doc.stamps || []).filter(s => s.pageRef === pageId);
+  svg.querySelectorAll('[data-stamp-idx]').forEach(el => {
+    el._stamp = stamps[parseInt(el.getAttribute('data-stamp-idx'), 10)] || null;
+  });
+  svg.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-stamp-idx]');
+    if (!el || !el._stamp) return;
+    const stamp = el._stamp;
+    const b = stamp.boundary || {};
+    const body = $('stampModalBody');
+    body.innerHTML = [
+      ['所在页', '第 ' + (pageIndex + 1) + ' 页'],
+      ['印章名称', stamp.sealName || '-'],
+      ['位置', Math.round(b.x) + ', ' + Math.round(b.y) + ' mm'],
+      ['尺寸', Math.round(b.w) + ' × ' + Math.round(b.h) + ' mm'],
+      ['印章类型', stamp.sealOfd ? 'OFD 矢量印章' : (stamp.sealDataUrl ? 'PNG 位图' : '占位符')]
+    ].map(([k, v]) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') +
+    (stamp.sealDataUrl ? `<div class="seal-preview"><img src="${stamp.sealDataUrl}" alt="印章"></div>` : '');
+    $('stampModal').classList.remove('hidden');
+    log('点击印章：' + (stamp.sealName || '#') + '（第 ' + (pageIndex + 1) + ' 页）', 'log-info');
+  });
+}
+
+// 加载并渲染
+async function loadAndRender() {
+  const token = ++renderToken;
+  out.innerHTML = '';
+  const src = currentFileSource();
+  log('== OFD.load(\'' + sourceName(src) + '\') ==', 'log-info');
+  const t0 = performance.now();
+  try {
+    const ofd = await OFD.load(src);
+    if (token !== renderToken) return;
+    currentOfd = ofd;
+    log('加载完成，耗时 ' + (performance.now() - t0).toFixed(1) + ' ms', 'log-ok');
+    const count = OFD.getPageCount(ofd);
+    log('getPageCount → ' + count + ' 页', 'log-ok');
+
+    pageContainer.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const pxW = await resolveRenderWidth(ofd, i);
+      if (token !== renderToken) return;
+      const dim = await OFD.getPageDimensions(ofd, i);
+      if (token !== renderToken) return;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = '<div class="page-label">第 ' + (i + 1) + ' / ' + count + ' 页 · ' + dim.width + '×' + dim.height + 'mm → ' + pxW + 'px</div>';
+      const svg = await OFD.renderPage(ofd, i, { width: pxW });
+      if (token !== renderToken) return;
+      bindStampClick(svg, i);
+      wrap.appendChild(svg);
+      pageContainer.appendChild(wrap);
+    }
+    if (token !== renderToken) return;
+    log('renderPage 渲染 ' + count + ' 页完成', 'log-ok');
+    const profile = OFD.getLastProfile();
+    if (profile) { log('\n[性能打点]', 'log-info'); log(JSON.stringify(profile, null, 2), 'log-dim'); }
+  } catch (e) {
+    if (token !== renderToken) return;
+    log('加载失败：' + e.message, 'log-err');
+  }
+}
+
+// API 按钮
+$('infoBtn').addEventListener('click', () => {
+  if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+  logObj('getDocumentInfo', OFD.getDocumentInfo(currentOfd));
+});
+$('dimBtn').addEventListener('click', async () => {
+  if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+  const count = OFD.getPageCount(currentOfd);
+  log('\n== getPageDimensions ==', 'log-info');
+  for (let i = 0; i < count; i++) {
+    const dim = await OFD.getPageDimensions(currentOfd, i);
+    log('第 ' + (i + 1) + ' 页：' + dim.width + ' × ' + dim.height + ' ' + dim.unit);
+  }
+});
+$('sigsBtn').addEventListener('click', async () => {
+  if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+  log('\n== getSignatures ==', 'log-info');
+  try {
+    const sigs = await OFD.getSignatures(currentOfd);
+    if (!sigs.length) { log('文档不含数字签名/印章', 'log-dim'); return; }
+    sigs.forEach((s, i) => {
+      log('\n── 印章 ' + (i + 1) + ' ──', 'log-info');
+      logObj('signature', {
+        id: s.id, signer: s.signer, signTime: s.signTime,
+        provider: s.provider, signatureMethod: s.signatureMethod,
+        sealAttrs: s.sealAttrs, pages: s.pages, positions: s.positions,
+        hasSealImage: !!s.sealDataUrl,
+        sealImageSizeKB: s.sealDataUrl ? Math.round(s.sealDataUrl.length / 1024) : 0,
+        hasVectorSeal: !!s.sealOfd
+      });
+    });
+  } catch (e) { log('签名解析失败：' + e.message, 'log-err'); }
+});
+$('verifyBtn').addEventListener('click', async () => {
+  if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+  log('\n== verifySignature ==', 'log-info');
+  try {
+    const sigs = await OFD.getSignatures(currentOfd);
+    if (!sigs.length) { log('文档不含数字签名，无法验证', 'log-dim'); return; }
+    for (const s of sigs) {
+      const r = await OFD.verifySignature(currentOfd, s.index);
+      log('签名[' + s.index + '] ' + (r.status || '') + '：' + r.message, r.valid ? 'log-ok' : 'log-err');
+    }
+  } catch (e) { log('验证失败：' + e.message, 'log-err'); }
+});
+$('renderAllBtn').addEventListener('click', async () => {
+  if (!currentOfd) { log('请先加载文档', 'log-err'); return; }
+  const token = ++renderToken;
+  const manual = inputWidthPx();
+  log(manual ? '== renderAll（宽度 ' + manual + 'px）==' : '== renderAll ==', 'log-info');
+  const t0 = performance.now();
+  const els = await OFD.renderAll(currentOfd, manual ? { width: manual } : undefined);
+  if (token !== renderToken) return;
+  log('renderAll 完成，共 ' + els.length + ' 页，耗时 ' + (performance.now() - t0).toFixed(1) + ' ms', 'log-ok');
+  pageContainer.innerHTML = '';
+  els.forEach((svg, i) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="page-label">第 ' + (i + 1) + ' / ' + els.length + ' 页（renderAll）</div>';
+    bindStampClick(svg, i);
+    wrap.appendChild(svg);
+    pageContainer.appendChild(wrap);
+  });
+});
+
+// 性能打点
+let profilingOn = false;
+$('profileBtn').addEventListener('click', () => {
+  profilingOn = !profilingOn;
+  OFD.setProfiling(profilingOn);
+  $('profileBtn').textContent = profilingOn ? '关闭性能打点' : '开启性能打点';
+  log('性能打点：' + (profilingOn ? '已开启' : '已关闭'), 'log-info');
+});
+
+$('loadBtn').addEventListener('click', loadAndRender);
+$('widthInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAndRender(); });
+$('fileSel').addEventListener('change', () => { $('fileInput').value = ''; });
+$('stampModalClose').addEventListener('click', () => $('stampModal').classList.add('hidden'));
+$('stampModal').addEventListener('click', (e) => { if (e.target === $('stampModal')) $('stampModal').classList.add('hidden'); });
+
+// 导航高亮
+const navLinks = document.querySelectorAll('.nav a');
+const sections = document.querySelectorAll('.section[id]');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 60) current = s.id; });
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+});
+</script>
+</body>
+</html>
+

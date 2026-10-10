@@ -1,0 +1,1786 @@
+/*!
+ * viewer.css — OFD 预览器样式
+ * 参考 PDF.js viewer.css 的视觉风格，使用 PDF.js 的 SVG 图标资源。
+ */
+
+:root {
+  --body-bg-color: #f5f5f5;
+  --page-bg: #ffffff;
+  --sidebar-bg: rgba(0, 0, 0, 0.2);
+  --toolbar-bg: #f9f9f9;
+  --toolbar-border: #e0e0e0;
+  --toolbar-fg: #1c1c1c;
+  --toolbar-muted: #5f6368;
+  --toolbar-icon-bg-color: #1c1c1c;
+  --toolbar-icon-hover-bg-color: #1c1c1c;
+  --button-bg: rgba(12, 12, 13, 0);
+  --button-bg-hover: rgba(12, 12, 13, 0.1);
+  --button-bg-active: rgba(12, 12, 13, 0.2);
+  --button-toggled-bg: rgba(12, 12, 13, 0.25);
+  --button-toggled-fg: #1c1c1c;
+  --doorhanger-bg: #ffffff;
+  --doorhanger-border: rgba(0, 0, 0, 0.2);
+  --doorhanger-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  --field-color: #1c1c1c;
+  --field-bg: #ffffff;
+  --field-border: #b5b5b5;
+  --focus-outline: #0060df;
+  --accent: #0060df;
+  --separator-color: rgba(0, 0, 0, 0.1);
+  --loading-bar-color: #0060df;
+  --icon-size: 16px;
+
+  /* PDF.js SVG 图标路径（本地 images/ 目录） */
+  --toolbarButton-sidebarToggle-icon: url(images/toolbarButton-sidebarToggle.svg);
+  --toolbarButton-editorSignature-icon: url(images/toolbarButton-editorSignature.svg);
+  --toolbarButton-editorStamp-icon: url(images/toolbarButton-editorStamp.svg);
+  --toolbarButton-openFile-icon: url(images/toolbarButton-openFile.svg);
+  --toolbarButton-download-icon: url(images/toolbarButton-download.svg);
+  --toolbarButton-zoomOut-icon: url(images/toolbarButton-zoomOut.svg);
+  --toolbarButton-zoomIn-icon: url(images/toolbarButton-zoomIn.svg);
+  --toolbarButton-pageUp-icon: url(images/toolbarButton-pageUp.svg);
+  --toolbarButton-pageDown-icon: url(images/toolbarButton-pageDown.svg);
+  --toolbarButton-presentationMode-icon: url(images/toolbarButton-presentationMode.svg);
+  --toolbarButton-print-icon: url(images/toolbarButton-print.svg);
+  --toolbarButton-toPdf-icon: url(images/toolbarButton-toPdf.svg);
+  --toolbarButton-viewThumbnail-icon: url(images/toolbarButton-viewThumbnail.svg);
+  --toolbarButton-search-icon: url(images/toolbarButton-search.svg);
+  --toolbarButton-menuArrow-icon: url(images/toolbarButton-menuArrow.svg);
+  --toolbarButton-secondaryToolbarToggle-icon: url(images/toolbarButton-secondaryToolbarToggle.svg);
+  --toolbarButton-bookmark-icon: url(images/toolbarButton-bookmark.svg);
+  --toolbarButton-currentOutlineItem-icon: url(images/toolbarButton-currentOutlineItem.svg);
+  --toolbarButton-viewOutline-icon: url(images/toolbarButton-viewOutline.svg);
+  --toolbarButton-viewAttachments-icon: url(images/toolbarButton-viewAttachments.svg);
+  --toolbarButton-viewLayers-icon: url(images/toolbarButton-viewLayers.svg);
+  --treeitem-collapsed-icon: url(images/treeitem-collapsed.svg);
+  --treeitem-expanded-icon: url(images/treeitem-expanded.svg);
+  --secondaryToolbarButton-documentProperties-icon: url(images/secondaryToolbarButton-documentProperties.svg);
+  --secondaryToolbarButton-firstPage-icon: url(images/secondaryToolbarButton-firstPage.svg);
+  --secondaryToolbarButton-lastPage-icon: url(images/secondaryToolbarButton-lastPage.svg);
+  --secondaryToolbarButton-rotateCcw-icon: url(images/secondaryToolbarButton-rotateCcw.svg);
+  --secondaryToolbarButton-rotateCw-icon: url(images/secondaryToolbarButton-rotateCw.svg);
+  --secondaryToolbarButton-handTool-icon: url(images/secondaryToolbarButton-handTool.svg);
+  --secondaryToolbarButton-selectTool-icon: url(images/secondaryToolbarButton-selectTool.svg);
+  --secondaryToolbarButton-scrollPage-icon: url(images/secondaryToolbarButton-scrollPage.svg);
+  --secondaryToolbarButton-scrollVertical-icon: url(images/secondaryToolbarButton-scrollVertical.svg);
+  --secondaryToolbarButton-scrollHorizontal-icon: url(images/secondaryToolbarButton-scrollHorizontal.svg);
+  --secondaryToolbarButton-scrollWrapped-icon: url(images/secondaryToolbarButton-scrollWrapped.svg);
+  --secondaryToolbarButton-spreadNone-icon: url(images/secondaryToolbarButton-spreadNone.svg);
+  --secondaryToolbarButton-spreadOdd-icon: url(images/secondaryToolbarButton-spreadOdd.svg);
+  --secondaryToolbarButton-spreadEven-icon: url(images/secondaryToolbarButton-spreadEven.svg);
+  --treeitem-expanded-icon: url(images/treeitem-expanded.svg);
+  --treeitem-collapsed-icon: url(images/treeitem-collapsed.svg);
+  --loading-icon: url(images/loading.svg);
+  --findbarButton-previous-icon: url(images/findbarButton-previous.svg);
+  --findbarButton-next-icon: url(images/findbarButton-next.svg);
+  --findbarButton-close-icon: url(images/messageBar_closingButton.svg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --body-bg-color: #1a1a1a;
+    --page-bg: #2a2a2a;
+    --toolbar-bg: #2a2a2a;
+    --toolbar-border: #3a3a3a;
+    --toolbar-fg: #f0f0f0;
+    --toolbar-muted: #c0c0c0;
+    --toolbar-icon-bg-color: #f0f0f0;
+    --toolbar-icon-hover-bg-color: #f0f0f0;
+    --button-bg-hover: rgba(255, 255, 255, 0.1);
+    --button-bg-active: rgba(255, 255, 255, 0.2);
+    --button-toggled-bg: rgba(255, 255, 255, 0.25);
+    --button-toggled-fg: #f0f0f0;
+    --doorhanger-bg: #2a2a2a;
+    --doorhanger-bg-alpha: rgba(42, 42, 42, 0.8);
+    --doorhanger-border: rgba(255, 255, 255, 0.2);
+    --field-color: #f0f0f0;
+    --field-bg: #1a1a1a;
+    --field-border: #555;
+    --separator-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--body-bg-color);
+  color: var(--toolbar-fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+/* UI 区域禁止选择，页面内容允许选中复制 */
+.toolbar, #sidebarContainer, .file-selector, #statusBar,
+#errorWrapper, #documentInfoDialog, #findbar {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ofd-page {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.ofd-page ::selection {
+  background: rgba(0, 100, 200, 0.25);
+}
+
+#outerContainer {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* ----------------------------- 侧边栏 ----------------------------- */
+#sidebarContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 260px;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--toolbar-border);
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+#outerContainer.sidebarOpen #sidebarContainer {
+  transform: translateX(0);
+}
+
+#toolbarSidebar {
+  background-color: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+}
+
+#sidebarCloseButton {
+  background-color: var(--button-bg);
+  border: none;
+  color: var(--toolbar-fg);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#sidebarCloseButton::before {
+  content: "✕";
+  font-size: 14px;
+}
+
+#sidebarCloseButton:hover {
+  background-color: var(--button-bg-hover);
+}
+
+#sidebarContent {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#thumbnailView {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.thumbnail {
+  background: var(--page-bg);
+  border: 1px solid var(--toolbar-border);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.15s;
+  width: 100%;
+  max-width: 200px;
+}
+
+.thumbnail:hover {
+  border-color: var(--accent);
+}
+
+.thumbnail.selected {
+  border-color: var(--accent);
+}
+
+.thumbnail svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--page-bg);
+  pointer-events: none;
+}
+
+.thumbnail .thumb-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--toolbar-muted);
+}
+
+/* 侧边栏视图切换标签 */
+.sidebarTab {
+  flex: 1;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--toolbar-muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  transition: background-color 0.15s;
+}
+.sidebarTab:hover {
+  background: var(--button-bg-hover);
+}
+.sidebarTab.active {
+  color: var(--toolbar-fg);
+  background: var(--button-toggled-bg);
+  font-weight: 600;
+}
+/* 隐藏文字（保留无障碍） */
+.sidebarTab > span {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+/* 侧边栏 Tab 图标机制：与 toolbarButton::before 一致 */
+.sidebarTab::before {
+  opacity: 0.9;
+  display: inline-block;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  content: "";
+  background-color: var(--toolbar-muted);
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.sidebarTab:hover::before {
+  background-color: var(--toolbar-fg);
+}
+.sidebarTab.active::before {
+  background-color: var(--toolbar-fg);
+}
+#viewThumbnail::before {
+  -webkit-mask-image: var(--toolbarButton-viewThumbnail-icon);
+  mask-image: var(--toolbarButton-viewThumbnail-icon);
+}
+#viewOutline::before {
+  -webkit-mask-image: var(--toolbarButton-viewOutline-icon);
+  mask-image: var(--toolbarButton-viewOutline-icon);
+}
+#viewSignatures::before {
+  -webkit-mask-image: var(--toolbarButton-editorSignature-icon);
+  mask-image: var(--toolbarButton-editorSignature-icon);
+}
+
+/* 目录列表 */
+#outlineView {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+#signatureView.hidden,
+#thumbnailView.hidden,
+#outlineView.hidden {
+  display: none;
+}
+
+.toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.toc-list.collapsed {
+  display: none;
+}
+.toc-item {
+  margin: 0;
+  padding: 0;
+}
+.toc-row {
+  display: flex;
+  align-items: center;
+}
+/* 展开/折叠按钮：有 children 时显示 */
+.toc-toggle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-left: 4px;
+  margin-right: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  opacity: 0.75;
+  transition: background-color 0.12s, opacity 0.12s;
+}
+.toc-toggle:hover {
+  background: var(--button-bg-hover);
+  opacity: 1;
+}
+.toc-toggle::before {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  content: "";
+  background-color: var(--toolbar-muted);
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--treeitem-expanded-icon);
+  mask-image: var(--treeitem-expanded-icon);
+}
+.toc-toggle.collapsed::before {
+  -webkit-mask-image: var(--treeitem-collapsed-icon);
+  mask-image: var(--treeitem-collapsed-icon);
+}
+.toc-toggle:disabled,
+.toc-toggle.leaf {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+.toc-link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin: 1px 4px 1px 0;
+  color: var(--toolbar-fg);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.4;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.12s;
+  word-break: break-all;
+  min-width: 0;
+}
+.toc-link:hover {
+  background: var(--button-bg-hover);
+}
+.toc-link.active {
+  background: var(--button-toggled-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+.toc-link.no-page {
+  cursor: default;
+  color: var(--toolbar-muted);
+}
+.toc-link.no-page:hover {
+  background: transparent;
+}
+.toc-link .toc-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toc-link .toc-page {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--toolbar-muted);
+}
+.toc-empty {
+  padding: 20px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--toolbar-muted);
+}
+
+/* 签名列表 */
+#signatureView {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+/* 页面上签名定位的虚线框：点击签名链接/滑过印章时显示，两者样式一致 */
+.ofd-signature-box,
+.ofd-sig-hover {
+  fill: rgba(255, 193, 7, 0.1);
+  stroke: #ffc107;
+  stroke-width: 0.4;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+/* 签名位置的可点击区域（透明，拦截鼠标事件） */
+.ofd-sig-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.sig-empty {
+  color: var(--toolbar-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px 0;
+}
+.sig-card {
+  background: var(--page-bg);
+  border-radius: 4px;
+  padding: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.sig-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sig-seal {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px dashed var(--toolbar-border);
+  border-radius: 4px;
+  background: #ffffff;
+}
+.sig-seal img,
+.sig-seal svg {
+  width: 100%;
+  height: 100%;
+}
+.sig-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.sig-status {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: var(--toolbar-border);
+  color: var(--toolbar-fg);
+  white-space: nowrap;
+}
+.sig-status.ok {
+  background: rgba(40, 167, 69, 0.18);
+  color: #1a7f37;
+}
+.sig-status.bad {
+  background: rgba(220, 53, 69, 0.18);
+  color: #c0392b;
+}
+.sig-status.unknown {
+  background: rgba(153, 153, 153, 0.18);
+  color: #6c757d;
+}
+.sig-verify {
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sig-verify:hover {
+  background-color: var(--accent-hover, #0250bb);
+}
+.sig-verify:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sig-info {
+  font-size: 12px;
+  color: var(--toolbar-fg);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  word-break: break-all;
+}
+.sig-label {
+  color: var(--toolbar-muted);
+}
+.sig-page {
+  color: var(--accent);
+  text-decoration: none;
+}
+.sig-page:hover {
+  text-decoration: underline;
+}
+.sig-msg {
+  font-size: 12px;
+  margin-top: 8px;
+  color: var(--toolbar-fg);
+}
+.sig-msg.ok {
+  color: #1a7f37;
+}
+.sig-msg.bad {
+  color: #c0392b;
+}
+.sig-msg.unknown {
+  color: #6c757d;
+}
+
+/* ----------------------------- 主容器 ----------------------------- */
+#mainContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* ----------------------------- 工具栏 ----------------------------- */
+.toolbar {
+  background-color: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  position: relative;
+  z-index: 1000;
+}
+
+#toolbarViewer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  /* 不能用 overflow-x:auto —— CSS 规范会把另一轴的 visible 计算为 auto，导致次级菜单被裁剪 */
+  overflow: visible;
+  min-height: 36px;
+}
+
+.toolbarHorizontalGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ----------------------------- 搜索栏 (findbar) ----------------------------- */
+/* 弹出框样式 — 与 #secondaryToolbar 一致（doorHanger） */
+#findbar {
+  position: fixed;
+  background-color: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  z-index: 1000000;
+  padding: 6px;
+  box-sizing: border-box;
+}
+#findbar.hidden {
+  display: none;
+}
+/* 三角箭头（指向搜索按钮，靠左对齐） */
+#findbar::before,
+#findbar::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 8px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--doorhanger-border);
+}
+#findbar::after {
+  top: -6px;
+  border-bottom-color: var(--doorhanger-bg);
+}
+#findbarContainer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  width: 100%;
+}
+#findInput {
+  flex: 1;
+  min-width: 140px;
+  padding: 2px 6px;
+  border: 1px solid var(--field-border);
+  border-radius: 2px;
+  background: var(--field-bg);
+  color: var(--field-color);
+  font-size: 12px;
+  outline: none;
+}
+#findInput:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 1px var(--focus-outline);
+}
+#findPrevious::before {
+  -webkit-mask-image: var(--findbarButton-previous-icon);
+  mask-image: var(--findbarButton-previous-icon);
+}
+#findNext::before {
+  -webkit-mask-image: var(--findbarButton-next-icon);
+  mask-image: var(--findbarButton-next-icon);
+}
+#findClose::before {
+  -webkit-mask-image: var(--findbarButton-close-icon);
+  mask-image: var(--findbarButton-close-icon);
+}
+#findResultsCount {
+  color: var(--toolbar-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 72px;
+  text-align: center;
+}
+#findResultsCount.hidden {
+  visibility: hidden;
+}
+
+/* 搜索高亮（SVG rect 背景层） */
+.ofd-page-svg .search-highlight {
+  fill: rgba(180, 0, 170, 0.25);
+}
+.ofd-page-svg .search-highlight.active {
+  fill: rgba(0, 100, 0, 0.25);
+}
+
+#toolbarViewerLeft {
+  justify-content: flex-start;
+}
+
+#toolbarViewerMiddle {
+  justify-content: center;
+}
+
+#toolbarViewerRight {
+  justify-content: flex-end;
+}
+
+/* 工具栏按钮 — 参考 PDF.js 的 .toolbarButton 样式 */
+.toolbarButton {
+  background-color: var(--button-bg);
+  border: none;
+  color: var(--toolbar-fg);
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  transition: background-color 0.15s;
+  flex: none;
+}
+
+.toolbarButton:hover {
+  background-color: var(--button-bg-hover);
+}
+
+.toolbarButton:active {
+  background-color: var(--button-bg-active);
+}
+
+.toolbarButton.toggled {
+  background-color: var(--button-toggled-bg);
+  color: var(--button-toggled-fg);
+}
+
+.toolbarButton.toggled::before {
+  background-color: var(--button-toggled-fg);
+}
+
+.toolbarButton:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 按钮 > span 隐藏（无障碍标签） */
+.toolbarButton > span {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* 图标通过 mask-image 显示 — 参考 PDF.js 方式 */
+.toolbarButton::before {
+  opacity: 0.9;
+  display: inline-block;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  content: "";
+  background-color: var(--toolbar-icon-bg-color);
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.toolbarButton:hover::before {
+  background-color: var(--toolbar-icon-hover-bg-color);
+}
+
+/* 各按钮的图标映射 */
+#sidebarToggle::before {
+  -webkit-mask-image: var(--toolbarButton-sidebarToggle-icon);
+  mask-image: var(--toolbarButton-sidebarToggle-icon);
+}
+
+#outlineToggle::before {
+  -webkit-mask-image: var(--toolbarButton-viewOutline-icon);
+  mask-image: var(--toolbarButton-viewOutline-icon);
+}
+
+#signatureToggle::before {
+  -webkit-mask-image: var(--toolbarButton-editorSignature-icon);
+  mask-image: var(--toolbarButton-editorSignature-icon);
+}
+
+#stampButton::before {
+  -webkit-mask-image: var(--toolbarButton-editorStamp-icon);
+  mask-image: var(--toolbarButton-editorStamp-icon);
+}
+
+#openFileButton::before {
+  -webkit-mask-image: var(--toolbarButton-openFile-icon);
+  mask-image: var(--toolbarButton-openFile-icon);
+}
+
+#downloadButton::before {
+  -webkit-mask-image: var(--toolbarButton-download-icon);
+  mask-image: var(--toolbarButton-download-icon);
+}
+
+#zoomOutButton::before {
+  -webkit-mask-image: var(--toolbarButton-zoomOut-icon);
+  mask-image: var(--toolbarButton-zoomOut-icon);
+}
+
+#zoomInButton::before {
+  -webkit-mask-image: var(--toolbarButton-zoomIn-icon);
+  mask-image: var(--toolbarButton-zoomIn-icon);
+}
+
+#previousButton::before {
+  -webkit-mask-image: var(--toolbarButton-pageUp-icon);
+  mask-image: var(--toolbarButton-pageUp-icon);
+}
+
+#nextButton::before {
+  -webkit-mask-image: var(--toolbarButton-pageDown-icon);
+  mask-image: var(--toolbarButton-pageDown-icon);
+}
+
+#printButton::before {
+  -webkit-mask-image: var(--toolbarButton-print-icon);
+  mask-image: var(--toolbarButton-print-icon);
+}
+
+#pdfButton::before {
+  -webkit-mask-image: var(--toolbarButton-toPdf-icon);
+  mask-image: var(--toolbarButton-toPdf-icon);
+}
+
+#infoButton::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-documentProperties-icon);
+  mask-image: var(--secondaryToolbarButton-documentProperties-icon);
+}
+
+#findButton::before {
+  -webkit-mask-image: var(--toolbarButton-search-icon);
+  mask-image: var(--toolbarButton-search-icon);
+}
+
+#secondaryToolbarToggleButton::before {
+  -webkit-mask-image: var(--toolbarButton-secondaryToolbarToggle-icon);
+  mask-image: var(--toolbarButton-secondaryToolbarToggle-icon);
+}
+
+/* 分隔符 */
+.toolbarButtonSpacer {
+  display: inline-block;
+  width: 4px;
+}
+
+.splitToolbarButtonSeparator {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background-color: var(--separator-color);
+  margin: 0 2px;
+}
+
+.verticalToolbarSeparator {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background-color: var(--separator-color);
+  margin: 0 4px;
+}
+
+.horizontalToolbarSeparator {
+  width: 100%;
+  height: 1px;
+  background-color: var(--separator-color);
+  margin: 6px 0;
+}
+
+/* 次级工具栏容器（按钮 + 下拉菜单） */
+.toolbarButtonWithContainer {
+  position: relative;
+  display: inline-block;
+}
+
+/* 次级工具栏下拉菜单 — 参考 PDF.js doorHangerRight
+   用 position:fixed + JS 定位，避免任何父级 overflow 裁剪 */
+#secondaryToolbar {
+  position: fixed;
+  background-color: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  z-index: 1000000;
+  min-width: 200px;
+  padding: 4px;
+}
+
+#secondaryToolbar.hidden {
+  display: none;
+}
+
+/* 三角箭头（指向按钮，靠右对齐到 secondaryToolbarToggleButton） */
+#secondaryToolbar::before,
+#secondaryToolbar::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--doorhanger-border);
+}
+
+#secondaryToolbar::after {
+  top: -6px;
+  border-bottom-color: var(--doorhanger-bg);
+}
+
+/* 三角箭头（指向按钮） */
+.doorHangerRight::before,
+.doorHangerRight::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--doorhanger-border);
+}
+
+.doorHangerRight::after {
+  top: -6px;
+  border-bottom-color: var(--doorhanger-bg);
+}
+
+.menuContainer {
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* 带文字标签的菜单按钮 */
+.toolbarButton.labeled {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--toolbar-fg);
+  font-size: 12px;
+  text-align: left;
+  width: 100%;
+  border-radius: 2px;
+  cursor: default;
+}
+
+.toolbarButton.labeled:hover {
+  background-color: var(--button-bg-hover);
+}
+
+.toolbarButton.labeled::before {
+  flex: 0 0 var(--icon-size);
+}
+
+.toolbarButton.labeled.toggled {
+  background-color: var(--button-toggled-bg);
+  color: var(--button-toggled-fg);
+}
+
+.toolbarButton.labeled.toggled::before {
+  background-color: var(--button-toggled-fg);
+}
+
+/* 各次级按钮的图标映射 */
+#secondaryOpenFile::before {
+  -webkit-mask-image: var(--toolbarButton-openFile-icon);
+  mask-image: var(--toolbarButton-openFile-icon);
+}
+
+#secondaryDownload::before {
+  -webkit-mask-image: var(--toolbarButton-download-icon);
+  mask-image: var(--toolbarButton-download-icon);
+}
+
+#secondaryPrint::before {
+  -webkit-mask-image: var(--toolbarButton-print-icon);
+  mask-image: var(--toolbarButton-print-icon);
+}
+
+#firstPage::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-firstPage-icon);
+  mask-image: var(--secondaryToolbarButton-firstPage-icon);
+}
+
+#lastPage::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-lastPage-icon);
+  mask-image: var(--secondaryToolbarButton-lastPage-icon);
+}
+
+#pageRotateCw::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-rotateCw-icon);
+  mask-image: var(--secondaryToolbarButton-rotateCw-icon);
+}
+
+#pageRotateCcw::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-rotateCcw-icon);
+  mask-image: var(--secondaryToolbarButton-rotateCcw-icon);
+}
+
+#cursorSelectTool::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-selectTool-icon);
+  mask-image: var(--secondaryToolbarButton-selectTool-icon);
+}
+
+#cursorHandTool::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-handTool-icon);
+  mask-image: var(--secondaryToolbarButton-handTool-icon);
+}
+
+#scrollPage::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-scrollPage-icon);
+  mask-image: var(--secondaryToolbarButton-scrollPage-icon);
+}
+
+#scrollVertical::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
+  mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
+}
+
+#scrollHorizontal::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-scrollHorizontal-icon);
+  mask-image: var(--secondaryToolbarButton-scrollHorizontal-icon);
+}
+
+#scrollWrapped::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-scrollWrapped-icon);
+  mask-image: var(--secondaryToolbarButton-scrollWrapped-icon);
+}
+
+#spreadNone::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-spreadNone-icon);
+  mask-image: var(--secondaryToolbarButton-spreadNone-icon);
+}
+
+#spreadOdd::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-spreadOdd-icon);
+  mask-image: var(--secondaryToolbarButton-spreadOdd-icon);
+}
+
+#spreadEven::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-spreadEven-icon);
+  mask-image: var(--secondaryToolbarButton-spreadEven-icon);
+}
+
+#documentProperties::before {
+  -webkit-mask-image: var(--secondaryToolbarButton-documentProperties-icon);
+  mask-image: var(--secondaryToolbarButton-documentProperties-icon);
+}
+
+/* 页面旋转容器：用于将 .ofd-page 整体旋转 */
+.ofd-page.rotated-90 > svg,
+.ofd-page.rotated-270 > svg {
+  /* 旋转后宽高互换，由 JS 设置 width/height */
+}
+
+/* 手形工具激活时的光标 */
+#viewerContainer.cursorHand {
+  cursor: grab;
+}
+
+#viewerContainer.cursorHand:active {
+  cursor: grabbing;
+}
+
+/* 水平/平铺滚动模式 */
+#viewer.scrollHorizontal {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: flex-start;
+}
+
+#viewer.scrollWrapped {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 单页滚动模式：一次只显示一页 */
+#viewer.scrollPage .ofd-page {
+  margin: 0 auto;
+}
+
+/* 输入框 */
+.toolbarField {
+  background-color: var(--field-bg);
+  color: var(--field-color);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  height: 26px;
+  min-width: 50px;
+  text-align: center;
+}
+
+.toolbarField:focus {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -1px;
+}
+
+#pageNumber {
+  width: 48px;
+  text-align: center;
+}
+
+#numPages {
+  color: var(--toolbar-muted);
+  font-size: 12px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.toolbarLabel {
+  color: var(--toolbar-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 下拉选择 */
+.dropdownToolbarButton {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdownToolbarButton select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--field-bg);
+  color: var(--field-color);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  padding: 3px 24px 3px 8px;
+  font-size: 12px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.dropdownToolbarButton::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--toolbar-fg);
+  pointer-events: none;
+}
+
+/* ----------------------------- 加载进度条 ----------------------------- */
+#loadingBar {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: transparent;
+  pointer-events: none;
+  z-index: 11;
+}
+
+#loadingBar .progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0;
+  background-color: var(--loading-bar-color);
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+#loadingBar .progress.complete {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.3s ease, opacity 1s ease 0.3s;
+}
+
+#loadingBar .progress.error {
+  background-color: #d93025;
+  width: 100%;
+  opacity: 1;
+  transition: width 0.3s ease;
+}
+
+#loadingBar .glimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: loading-shimmer 1.4s infinite linear;
+}
+
+@keyframes loading-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ----------------------------- 查看器主区域 ----------------------------- */
+#viewerContainer {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background-color: var(--body-bg-color);
+  outline: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.ofd-page {
+  background-color: var(--page-bg);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  transform-origin: top center;
+  /* 懒渲染：页面内部布局/样式变化不扩散到外部，滚动时减少重排/重绘范围 */
+  contain: layout style;
+}
+
+/* 旋转 90/270 时 SVG bounding box 会超出容器，需允许溢出避免内容被裁 */
+.ofd-page.rotated-90,
+.ofd-page.rotated-270 {
+  overflow: visible;
+}
+
+.ofd-page-svg {
+  display: block;
+  /* 尺寸由 JS 内联设置（applyPageStyle），不能用 width:100%，否则旋转时会覆盖 SVG 宽高导致变形 */
+}
+
+.ofd-page.hidden {
+  display: none;
+}
+
+/* 加载与错误占位 */
+.ofd-page-placeholder {
+  background: var(--page-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--toolbar-muted);
+  font-size: 14px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+  padding: 40px;
+}
+
+#errorWrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 480px;
+  padding: 24px;
+  background: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  box-shadow: var(--doorhanger-shadow);
+  border-radius: 6px;
+  text-align: center;
+  display: none;
+  z-index: 30;
+}
+
+#errorWrapper.visible {
+  display: block;
+}
+
+#errorWrapper h3 {
+  margin: 0 0 8px;
+  color: #d93025;
+  font-size: 16px;
+}
+
+#errorWrapper p {
+  margin: 0 0 12px;
+  color: var(--toolbar-muted);
+  word-break: break-word;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+#errorWrapper button {
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ----------------------------- 状态提示 ----------------------------- */
+#statusBar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background-color: var(--doorhanger-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--toolbar-muted);
+  box-shadow: var(--doorhanger-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 15;
+}
+
+#statusBar.visible {
+  opacity: 1;
+}
+
+/* ----------------------------- 文件输入隐藏 ----------------------------- */
+#fileInput {
+  display: none;
+}
+
+/* ----------------------------- 滚动条 ----------------------------- */
+#viewerContainer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#viewerContainer::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+}
+
+#viewerContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 侧栏面板：目录/签名与缩略图一致的滚动条样式 */
+#thumbnailView::-webkit-scrollbar,
+#outlineView::-webkit-scrollbar,
+#signatureView::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#thumbnailView::-webkit-scrollbar-thumb,
+#outlineView::-webkit-scrollbar-thumb,
+#signatureView::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+}
+
+#thumbnailView::-webkit-scrollbar-track,
+#outlineView::-webkit-scrollbar-track,
+#signatureView::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  #viewerContainer::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* ----------------------------- 拖放高亮 ----------------------------- */
+#mainContainer.dragover::after {
+  content: "拖放 OFD 文件以打开";
+  position: absolute;
+  inset: 36px 0 0 0;
+  background-color: rgba(0, 96, 223, 0.1);
+  border: 3px dashed var(--accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ----------------------------- 文档信息对话框 ----------------------------- */
+#documentInfoDialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  box-shadow: var(--doorhanger-shadow);
+  border-radius: 6px;
+  padding: 16px 20px;
+  min-width: 320px;
+  z-index: 30;
+  display: none;
+}
+
+#documentInfoDialog.visible {
+  display: block;
+}
+
+#documentInfoDialog h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#documentInfoDialog .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  gap: 16px;
+}
+
+#documentInfoDialog .row .label {
+  color: var(--toolbar-muted);
+  flex-shrink: 0;
+}
+
+#documentInfoDialog .row .value {
+  text-align: right;
+  word-break: break-all;
+}
+
+#documentInfoDialog .close-btn {
+  margin-top: 12px;
+  width: 100%;
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ----------------------------- 签名信息模态框 ----------------------------- */
+#sigModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#sigModalOverlay.hidden {
+  display: none;
+}
+#sigModal {
+  background: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  border-radius: 8px;
+  box-shadow: var(--doorhanger-shadow);
+  padding: 16px 20px;
+  width: 440px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+.sig-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sig-group-title {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--toolbar-muted);
+}
+.sig-group-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0 2px;
+}
+.sig-group-toggle:hover {
+  text-decoration: underline;
+}
+.sig-group-body.collapsed .sig-extra {
+  display: none;
+}
+.sig-section:first-of-type {
+  margin-top: 0;
+}
+#sigModalSignInfo {
+  margin-top: 16px;
+}
+#sigModalSealInfo {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+.sig-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+#sigModal .sig-label {
+  flex: 0 0 6em;
+  color: var(--toolbar-muted);
+}
+.sig-value {
+  flex: 1 1 auto;
+  word-break: break-all;
+  color: var(--toolbar-fg);
+}
+.sig-value code {
+  font-family: Consolas, Menlo, monospace;
+  font-size: 12px;
+  color: var(--toolbar-fg);
+  word-break: break-all;
+}
+/* 模态框头部：印章图 + 信息列 + 关闭按钮 */
+.sig-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sig-modal-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--toolbar-muted);
+  padding: 2px 6px;
+}
+.sig-modal-close:hover {
+  color: var(--toolbar-fg);
+}
+/* 头部信息列（标题 + 状态徽章）左对齐 */
+.sig-modal-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.sig-modal-actions {
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ----------------------------- PDF 转换模态框 ----------------------------- */
+#pdfModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#pdfModalOverlay.hidden {
+  display: none;
+}
+#pdfModal {
+  background: var(--doorhanger-bg);
+  border: 1px solid var(--doorhanger-border);
+  border-radius: 8px;
+  box-shadow: var(--doorhanger-shadow);
+  padding: 16px 20px;
+  width: 360px;
+  max-width: 90vw;
+}
+.pdf-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.pdf-modal-msg {
+  font-size: 12px;
+  color: var(--toolbar-muted);
+  margin-bottom: 10px;
+  min-height: 16px;
+}
+.pdf-modal-msg.error {
+  color: #d93025;
+}
+.pdf-progress-bar {
+  height: 6px;
+  background: var(--separator-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#pdfProgressInner {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.15s;
+}
+.pdf-progress-text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--toolbar-muted);
+  text-align: right;
+}
+
+/* ----------------------------- 盖章功能 ----------------------------- */
+/* 选位模式：页面十字光标 */
+#viewerContainer.stamp-mode .ofd-page {
+  cursor: crosshair;
+}
+#viewerContainer.stamp-mode .ofd-page-svg {
+  pointer-events: none; /* 页面内容不拦截点击，点击落到容器层 */
+}
+/* 选位时临时预览（SVG image 半透明跟随鼠标） */
+.stamp-place-preview {
+  opacity: 0.8;
+  pointer-events: none;
+}
+/* 已放置的印章（实际落章视觉，与文档内印章保持一致的透明度） */
+.seal-placed {
+  opacity: 0.8;
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* 印章右键菜单 */
+#sealMenu {
+  position: fixed;
+  z-index: 1000000;
+  background: var(--doorhanger-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 6px;
+  box-shadow: var(--doorhanger-shadow);
+  padding: 4px;
+  min-width: 110px;
+}
+#sealMenu.hidden {
+  display: none;
+}
+#sealMenuDelete {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #d32f2f;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#sealMenuDelete:hover {
+  background: rgba(211, 47, 47, 0.12);
+}
+
+/* ----------------------------- 文件选择器 ----------------------------- */
+.file-selector {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background-color: var(--doorhanger-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  box-shadow: var(--doorhanger-shadow);
+  z-index: 15;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.file-selector .label {
+  color: var(--toolbar-muted);
+  margin-right: 4px;
+}
+
+.file-selector select {
+  background-color: var(--button-bg);
+  border: 1px solid var(--field-border);
+  color: var(--toolbar-fg);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 12px;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+/* ----------------------------- 窄屏响应式 ----------------------------- */
+/* 打开文件/下载收进工具菜单 */
+#secondaryOpenFile,
+#secondaryDownload,
+#secondaryPrint {
+  display: none;
+}
+/* 打开/下载不在工具栏时，菜单里对应的分隔线也不显示 */
+#secondaryOpenDownloadSeparator {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  #openFileButton,
+  #downloadButton {
+    display: none;
+  }
+  #secondaryOpenFile,
+  #secondaryDownload {
+    display: flex;
+  }
+  #secondaryOpenDownloadSeparator {
+    display: block;
+  }
+}
+
+@media (max-width: 500px) {
+  #scaleSelectContainer,
+  #previousButton,
+  #nextButton,
+  #printButton {
+    display: none;
+  }
+  #secondaryPrint {
+    display: flex;
+  }
+  /* 上一页/下一页组内的分隔符一并隐藏（不影响缩放按钮组内的分隔符） */
+  .toolbarHorizontalGroup:has(#previousButton) .splitToolbarButtonSeparator {
+    display: none;
+  }
+}
