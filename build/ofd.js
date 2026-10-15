@@ -1,10 +1,12 @@
 /*!
- * ofd.js — OFD（GB/T 33190）纯前端解析与 SVG 渲染引擎
+ * ofd.js v1.0.0 — OFD 纯前端解析与 SVG 渲染引擎
  * 零依赖，ZIP 解压使用浏览器原生 DecompressionStream
  */
 (function (global) {
   "use strict";
 
+/*! sm-crypto v0.5.7 | MIT License | https://github.com/JuneAndGreen/sm-crypto（esbuild 打包，含 jsbn v1.1.0） */
+var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n),n.exports}catch(o){throw n=0,o}};var at=_((bt,Wt)=>{(function(){var s,n=0xdeadbeefcafe,o=(n&16777215)==15715070;function r(t,e,i){t!=null&&(typeof t=="number"?this.fromNumber(t,e,i):e==null&&typeof t!="string"?this.fromString(t,256):this.fromString(t,e))}function h(){return new r(null)}function l(t,e,i,f,u,c){for(;--c>=0;){var a=e*this[t++]+i[f]+u;u=Math.floor(a/67108864),i[f++]=a&67108863}return u}function d(t,e,i,f,u,c){for(var a=e&32767,x=e>>15;--c>=0;){var E=this[t]&32767,I=this[t++]>>15,N=x*E+I*a;E=a*E+((N&32767)<<15)+i[f]+(u&1073741823),u=(E>>>30)+(N>>>15)+x*I+(u>>>30),i[f++]=E&1073741823}return u}function b(t,e,i,f,u,c){for(var a=e&16383,x=e>>14;--c>=0;){var E=this[t]&16383,I=this[t++]>>14,N=x*E+I*a;E=a*E+((N&16383)<<14)+i[f]+u,u=(E>>28)+(N>>14)+x*I,i[f++]=E&268435455}return u}var p=typeof navigator!="undefined";p&&o&&navigator.appName=="Microsoft Internet Explorer"?(r.prototype.am=d,s=30):p&&o&&navigator.appName!="Netscape"?(r.prototype.am=l,s=26):(r.prototype.am=b,s=28),r.prototype.DB=s,r.prototype.DM=(1<<s)-1,r.prototype.DV=1<<s;var F=52;r.prototype.FV=Math.pow(2,F),r.prototype.F1=F-s,r.prototype.F2=2*s-F;var g="0123456789abcdefghijklmnopqrstuvwxyz",m=new Array,y,w;for(y=48,w=0;w<=9;++w)m[y++]=w;for(y=97,w=10;w<36;++w)m[y++]=w;for(y=65,w=10;w<36;++w)m[y++]=w;function T(t){return g.charAt(t)}function S(t,e){var i=m[t.charCodeAt(e)];return i==null?-1:i}function q(t){for(var e=this.t-1;e>=0;--e)t[e]=this[e];t.t=this.t,t.s=this.s}function A(t){this.t=1,this.s=t<0?-1:0,t>0?this[0]=t:t<-1?this[0]=t+this.DV:this.t=0}function D(t){var e=h();return e.fromInt(t),e}function G(t,e){var i;if(e==16)i=4;else if(e==8)i=3;else if(e==256)i=8;else if(e==2)i=1;else if(e==32)i=5;else if(e==4)i=2;else{this.fromRadix(t,e);return}this.t=0,this.s=0;for(var f=t.length,u=!1,c=0;--f>=0;){var a=i==8?t[f]&255:S(t,f);if(a<0){t.charAt(f)=="-"&&(u=!0);continue}u=!1,c==0?this[this.t++]=a:c+i>this.DB?(this[this.t-1]|=(a&(1<<this.DB-c)-1)<<c,this[this.t++]=a>>this.DB-c):this[this.t-1]|=a<<c,c+=i,c>=this.DB&&(c-=this.DB)}i==8&&(t[0]&128)!=0&&(this.s=-1,c>0&&(this[this.t-1]|=(1<<this.DB-c)-1<<c)),this.clamp(),u&&r.ZERO.subTo(this,this)}function K(){for(var t=this.s&this.DM;this.t>0&&this[this.t-1]==t;)--this.t}function J(t){if(this.s<0)return"-"+this.negate().toString(t);var e;if(t==16)e=4;else if(t==8)e=3;else if(t==2)e=1;else if(t==32)e=5;else if(t==4)e=2;else return this.toRadix(t);var i=(1<<e)-1,f,u=!1,c="",a=this.t,x=this.DB-a*this.DB%e;if(a-- >0)for(x<this.DB&&(f=this[a]>>x)>0&&(u=!0,c=T(f));a>=0;)x<e?(f=(this[a]&(1<<x)-1)<<e-x,f|=this[--a]>>(x+=this.DB-e)):(f=this[a]>>(x-=e)&i,x<=0&&(x+=this.DB,--a)),f>0&&(u=!0),u&&(c+=T(f));return u?c:"0"}function $(){var t=h();return r.ZERO.subTo(this,t),t}function dt(){return this.s<0?this.negate():this}function gt(t){var e=this.s-t.s;if(e!=0)return e;var i=this.t;if(e=i-t.t,e!=0)return this.s<0?-e:e;for(;--i>=0;)if((e=this[i]-t[i])!=0)return e;return 0}function tt(t){var e=1,i;return(i=t>>>16)!=0&&(t=i,e+=16),(i=t>>8)!=0&&(t=i,e+=8),(i=t>>4)!=0&&(t=i,e+=4),(i=t>>2)!=0&&(t=i,e+=2),(i=t>>1)!=0&&(t=i,e+=1),e}function mt(){return this.t<=0?0:this.DB*(this.t-1)+tt(this[this.t-1]^this.s&this.DM)}function B(t,e){var i;for(i=this.t-1;i>=0;--i)e[i+t]=this[i];for(i=t-1;i>=0;--i)e[i]=0;e.t=this.t+t,e.s=this.s}function Pe(t,e){for(var i=t;i<this.t;++i)e[i-t]=this[i];e.t=Math.max(this.t-t,0),e.s=this.s}function Ae(t,e){var i=t%this.DB,f=this.DB-i,u=(1<<f)-1,c=Math.floor(t/this.DB),a=this.s<<i&this.DM,x;for(x=this.t-1;x>=0;--x)e[x+c+1]=this[x]>>f|a,a=(this[x]&u)<<i;for(x=c-1;x>=0;--x)e[x]=0;e[c]=a,e.t=this.t+c+1,e.s=this.s,e.clamp()}function Ce(t,e){e.s=this.s;var i=Math.floor(t/this.DB);if(i>=this.t){e.t=0;return}var f=t%this.DB,u=this.DB-f,c=(1<<f)-1;e[0]=this[i]>>f;for(var a=i+1;a<this.t;++a)e[a-i-1]|=(this[a]&c)<<u,e[a-i]=this[a]>>f;f>0&&(e[this.t-i-1]|=(this.s&c)<<u),e.t=this.t-i,e.clamp()}function Me(t,e){for(var i=0,f=0,u=Math.min(t.t,this.t);i<u;)f+=this[i]-t[i],e[i++]=f&this.DM,f>>=this.DB;if(t.t<this.t){for(f-=t.s;i<this.t;)f+=this[i],e[i++]=f&this.DM,f>>=this.DB;f+=this.s}else{for(f+=this.s;i<t.t;)f-=t[i],e[i++]=f&this.DM,f>>=this.DB;f-=t.s}e.s=f<0?-1:0,f<-1?e[i++]=this.DV+f:f>0&&(e[i++]=f),e.t=i,e.clamp()}function Oe(t,e){var i=this.abs(),f=t.abs(),u=i.t;for(e.t=u+f.t;--u>=0;)e[u]=0;for(u=0;u<f.t;++u)e[u+i.t]=i.am(0,f[u],e,u,0,i.t);e.s=0,e.clamp(),this.s!=t.s&&r.ZERO.subTo(e,e)}function He(t){for(var e=this.abs(),i=t.t=2*e.t;--i>=0;)t[i]=0;for(i=0;i<e.t-1;++i){var f=e.am(i,e[i],t,2*i,0,1);(t[i+e.t]+=e.am(i+1,2*e[i],t,2*i+1,f,e.t-i-1))>=e.DV&&(t[i+e.t]-=e.DV,t[i+e.t+1]=1)}t.t>0&&(t[t.t-1]+=e.am(i,e[i],t,2*i,0,1)),t.s=0,t.clamp()}function Le(t,e,i){var f=t.abs();if(!(f.t<=0)){var u=this.abs();if(u.t<f.t){e!=null&&e.fromInt(0),i!=null&&this.copyTo(i);return}i==null&&(i=h());var c=h(),a=this.s,x=t.s,E=this.DB-tt(f[f.t-1]);E>0?(f.lShiftTo(E,c),u.lShiftTo(E,i)):(f.copyTo(c),u.copyTo(i));var I=c.t,N=c[I-1];if(N!=0){var L=N*(1<<this.F1)+(I>1?c[I-2]>>this.F2:0),X=this.FV/L,vt=(1<<this.F1)/L,j=1<<this.F2,U=i.t,wt=U-I,Q=e==null?h():e;for(c.dlShiftTo(wt,Q),i.compareTo(Q)>=0&&(i[i.t++]=1,i.subTo(Q,i)),r.ONE.dlShiftTo(I,Q),Q.subTo(c,c);c.t<I;)c[c.t++]=0;for(;--wt>=0;){var Ot=i[--U]==N?this.DM:Math.floor(i[U]*X+(i[U-1]+j)*vt);if((i[U]+=c.am(0,Ot,i,wt,0,I))<Ot)for(c.dlShiftTo(wt,Q),i.subTo(Q,i);i[U]<--Ot;)i.subTo(Q,i)}e!=null&&(i.drShiftTo(I,e),a!=x&&r.ZERO.subTo(e,e)),i.t=I,i.clamp(),E>0&&i.rShiftTo(E,i),a<0&&r.ZERO.subTo(i,i)}}}function Ne(t){var e=h();return this.abs().divRemTo(t,null,e),this.s<0&&e.compareTo(r.ZERO)>0&&t.subTo(e,e),e}function et(t){this.m=t}function Ve(t){return t.s<0||t.compareTo(this.m)>=0?t.mod(this.m):t}function ze(t){return t}function je(t){t.divRemTo(this.m,null,t)}function Ue(t,e,i){t.multiplyTo(e,i),this.reduce(i)}function ke(t,e){t.squareTo(e),this.reduce(e)}et.prototype.convert=Ve,et.prototype.revert=ze,et.prototype.reduce=je,et.prototype.mulTo=Ue,et.prototype.sqrTo=ke;function Ze(){if(this.t<1)return 0;var t=this[0];if((t&1)==0)return 0;var e=t&3;return e=e*(2-(t&15)*e)&15,e=e*(2-(t&255)*e)&255,e=e*(2-((t&65535)*e&65535))&65535,e=e*(2-t*e%this.DV)%this.DV,e>0?this.DV-e:-e}function it(t){this.m=t,this.mp=t.invDigit(),this.mpl=this.mp&32767,this.mph=this.mp>>15,this.um=(1<<t.DB-15)-1,this.mt2=2*t.t}function Ye(t){var e=h();return t.abs().dlShiftTo(this.m.t,e),e.divRemTo(this.m,null,e),t.s<0&&e.compareTo(r.ZERO)>0&&this.m.subTo(e,e),e}function Ge(t){var e=h();return t.copyTo(e),this.reduce(e),e}function _e(t){for(;t.t<=this.mt2;)t[t.t++]=0;for(var e=0;e<this.m.t;++e){var i=t[e]&32767,f=i*this.mpl+((i*this.mph+(t[e]>>15)*this.mpl&this.um)<<15)&t.DM;for(i=e+this.m.t,t[i]+=this.m.am(0,f,t,e,0,this.m.t);t[i]>=t.DV;)t[i]-=t.DV,t[++i]++}t.clamp(),t.drShiftTo(this.m.t,t),t.compareTo(this.m)>=0&&t.subTo(this.m,t)}function Ke(t,e){t.squareTo(e),this.reduce(e)}function Xe(t,e,i){t.multiplyTo(e,i),this.reduce(i)}it.prototype.convert=Ye,it.prototype.revert=Ge,it.prototype.reduce=_e,it.prototype.mulTo=Xe,it.prototype.sqrTo=Ke;function Qe(){return(this.t>0?this[0]&1:this.s)==0}function We(t,e){if(t>4294967295||t<1)return r.ONE;var i=h(),f=h(),u=e.convert(this),c=tt(t)-1;for(u.copyTo(i);--c>=0;)if(e.sqrTo(i,f),(t&1<<c)>0)e.mulTo(f,u,i);else{var a=i;i=f,f=a}return e.revert(i)}function Je(t,e){var i;return t<256||e.isEven()?i=new et(e):i=new it(e),this.exp(t,i)}r.prototype.copyTo=q,r.prototype.fromInt=A,r.prototype.fromString=G,r.prototype.clamp=K,r.prototype.dlShiftTo=B,r.prototype.drShiftTo=Pe,r.prototype.lShiftTo=Ae,r.prototype.rShiftTo=Ce,r.prototype.subTo=Me,r.prototype.multiplyTo=Oe,r.prototype.squareTo=He,r.prototype.divRemTo=Le,r.prototype.invDigit=Ze,r.prototype.isEven=Qe,r.prototype.exp=We,r.prototype.toString=J,r.prototype.negate=$,r.prototype.abs=dt,r.prototype.compareTo=gt,r.prototype.bitLength=mt,r.prototype.mod=Ne,r.prototype.modPowInt=Je,r.ZERO=D(0),r.ONE=D(1);function $e(){var t=h();return this.copyTo(t),t}function ti(){if(this.s<0){if(this.t==1)return this[0]-this.DV;if(this.t==0)return-1}else{if(this.t==1)return this[0];if(this.t==0)return 0}return(this[1]&(1<<32-this.DB)-1)<<this.DB|this[0]}function ei(){return this.t==0?this.s:this[0]<<24>>24}function ii(){return this.t==0?this.s:this[0]<<16>>16}function ni(t){return Math.floor(Math.LN2*this.DB/Math.log(t))}function ri(){return this.s<0?-1:this.t<=0||this.t==1&&this[0]<=0?0:1}function si(t){if(t==null&&(t=10),this.signum()==0||t<2||t>36)return"0";var e=this.chunkSize(t),i=Math.pow(t,e),f=D(i),u=h(),c=h(),a="";for(this.divRemTo(f,u,c);u.signum()>0;)a=(i+c.intValue()).toString(t).substr(1)+a,u.divRemTo(f,u,c);return c.intValue().toString(t)+a}function oi(t,e){this.fromInt(0),e==null&&(e=10);for(var i=this.chunkSize(e),f=Math.pow(e,i),u=!1,c=0,a=0,x=0;x<t.length;++x){var E=S(t,x);if(E<0){t.charAt(x)=="-"&&this.signum()==0&&(u=!0);continue}a=e*a+E,++c>=i&&(this.dMultiply(f),this.dAddOffset(a,0),c=0,a=0)}c>0&&(this.dMultiply(Math.pow(e,c)),this.dAddOffset(a,0)),u&&r.ZERO.subTo(this,this)}function fi(t,e,i){if(typeof e=="number")if(t<2)this.fromInt(1);else for(this.fromNumber(t,i),this.testBit(t-1)||this.bitwiseTo(r.ONE.shiftLeft(t-1),Pt,this),this.isEven()&&this.dAddOffset(1,0);!this.isProbablePrime(e);)this.dAddOffset(2,0),this.bitLength()>t&&this.subTo(r.ONE.shiftLeft(t-1),this);else{var f=new Array,u=t&7;f.length=(t>>3)+1,e.nextBytes(f),u>0?f[0]&=(1<<u)-1:f[0]=0,this.fromString(f,256)}}function hi(){var t=this.t,e=new Array;e[0]=this.s;var i=this.DB-t*this.DB%8,f,u=0;if(t-- >0)for(i<this.DB&&(f=this[t]>>i)!=(this.s&this.DM)>>i&&(e[u++]=f|this.s<<this.DB-i);t>=0;)i<8?(f=(this[t]&(1<<i)-1)<<8-i,f|=this[--t]>>(i+=this.DB-8)):(f=this[t]>>(i-=8)&255,i<=0&&(i+=this.DB,--t)),(f&128)!=0&&(f|=-256),u==0&&(this.s&128)!=(f&128)&&++u,(u>0||f!=this.s)&&(e[u++]=f);return e}function ui(t){return this.compareTo(t)==0}function li(t){return this.compareTo(t)<0?this:t}function ci(t){return this.compareTo(t)>0?this:t}function ai(t,e,i){var f,u,c=Math.min(t.t,this.t);for(f=0;f<c;++f)i[f]=e(this[f],t[f]);if(t.t<this.t){for(u=t.s&this.DM,f=c;f<this.t;++f)i[f]=e(this[f],u);i.t=this.t}else{for(u=this.s&this.DM,f=c;f<t.t;++f)i[f]=e(u,t[f]);i.t=t.t}i.s=e(this.s,t.s),i.clamp()}function xi(t,e){return t&e}function pi(t){var e=h();return this.bitwiseTo(t,xi,e),e}function Pt(t,e){return t|e}function di(t){var e=h();return this.bitwiseTo(t,Pt,e),e}function Yt(t,e){return t^e}function gi(t){var e=h();return this.bitwiseTo(t,Yt,e),e}function Gt(t,e){return t&~e}function mi(t){var e=h();return this.bitwiseTo(t,Gt,e),e}function yi(){for(var t=h(),e=0;e<this.t;++e)t[e]=this.DM&~this[e];return t.t=this.t,t.s=~this.s,t}function vi(t){var e=h();return t<0?this.rShiftTo(-t,e):this.lShiftTo(t,e),e}function wi(t){var e=h();return t<0?this.lShiftTo(-t,e):this.rShiftTo(t,e),e}function bi(t){if(t==0)return-1;var e=0;return(t&65535)==0&&(t>>=16,e+=16),(t&255)==0&&(t>>=8,e+=8),(t&15)==0&&(t>>=4,e+=4),(t&3)==0&&(t>>=2,e+=2),(t&1)==0&&++e,e}function Ti(){for(var t=0;t<this.t;++t)if(this[t]!=0)return t*this.DB+bi(this[t]);return this.s<0?this.t*this.DB:-1}function Fi(t){for(var e=0;t!=0;)t&=t-1,++e;return e}function Bi(){for(var t=0,e=this.s&this.DM,i=0;i<this.t;++i)t+=Fi(this[i]^e);return t}function Ei(t){var e=Math.floor(t/this.DB);return e>=this.t?this.s!=0:(this[e]&1<<t%this.DB)!=0}function Si(t,e){var i=r.ONE.shiftLeft(t);return this.bitwiseTo(i,e,i),i}function Di(t){return this.changeBit(t,Pt)}function Ri(t){return this.changeBit(t,Gt)}function Ii(t){return this.changeBit(t,Yt)}function qi(t,e){for(var i=0,f=0,u=Math.min(t.t,this.t);i<u;)f+=this[i]+t[i],e[i++]=f&this.DM,f>>=this.DB;if(t.t<this.t){for(f+=t.s;i<this.t;)f+=this[i],e[i++]=f&this.DM,f>>=this.DB;f+=this.s}else{for(f+=this.s;i<t.t;)f+=t[i],e[i++]=f&this.DM,f>>=this.DB;f+=t.s}e.s=f<0?-1:0,f>0?e[i++]=f:f<-1&&(e[i++]=this.DV+f),e.t=i,e.clamp()}function Pi(t){var e=h();return this.addTo(t,e),e}function Ai(t){var e=h();return this.subTo(t,e),e}function Ci(t){var e=h();return this.multiplyTo(t,e),e}function Mi(){var t=h();return this.squareTo(t),t}function Oi(t){var e=h();return this.divRemTo(t,e,null),e}function Hi(t){var e=h();return this.divRemTo(t,null,e),e}function Li(t){var e=h(),i=h();return this.divRemTo(t,e,i),new Array(e,i)}function Ni(t){this[this.t]=this.am(0,t-1,this,0,0,this.t),++this.t,this.clamp()}function Vi(t,e){if(t!=0){for(;this.t<=e;)this[this.t++]=0;for(this[e]+=t;this[e]>=this.DV;)this[e]-=this.DV,++e>=this.t&&(this[this.t++]=0),++this[e]}}function ct(){}function _t(t){return t}function zi(t,e,i){t.multiplyTo(e,i)}function ji(t,e){t.squareTo(e)}ct.prototype.convert=_t,ct.prototype.revert=_t,ct.prototype.mulTo=zi,ct.prototype.sqrTo=ji;function Ui(t){return this.exp(t,new ct)}function ki(t,e,i){var f=Math.min(this.t+t.t,e);for(i.s=0,i.t=f;f>0;)i[--f]=0;var u;for(u=i.t-this.t;f<u;++f)i[f+this.t]=this.am(0,t[f],i,f,0,this.t);for(u=Math.min(t.t,e);f<u;++f)this.am(0,t[f],i,f,0,e-f);i.clamp()}function Zi(t,e,i){--e;var f=i.t=this.t+t.t-e;for(i.s=0;--f>=0;)i[f]=0;for(f=Math.max(e-this.t,0);f<t.t;++f)i[this.t+f-e]=this.am(e-f,t[f],i,0,0,this.t+f-e);i.clamp(),i.drShiftTo(1,i)}function nt(t){this.r2=h(),this.q3=h(),r.ONE.dlShiftTo(2*t.t,this.r2),this.mu=this.r2.divide(t),this.m=t}function Yi(t){if(t.s<0||t.t>2*this.m.t)return t.mod(this.m);if(t.compareTo(this.m)<0)return t;var e=h();return t.copyTo(e),this.reduce(e),e}function Gi(t){return t}function _i(t){for(t.drShiftTo(this.m.t-1,this.r2),t.t>this.m.t+1&&(t.t=this.m.t+1,t.clamp()),this.mu.multiplyUpperTo(this.r2,this.m.t+1,this.q3),this.m.multiplyLowerTo(this.q3,this.m.t+1,this.r2);t.compareTo(this.r2)<0;)t.dAddOffset(1,this.m.t+1);for(t.subTo(this.r2,t);t.compareTo(this.m)>=0;)t.subTo(this.m,t)}function Ki(t,e){t.squareTo(e),this.reduce(e)}function Xi(t,e,i){t.multiplyTo(e,i),this.reduce(i)}nt.prototype.convert=Yi,nt.prototype.revert=Gi,nt.prototype.reduce=_i,nt.prototype.mulTo=Xi,nt.prototype.sqrTo=Ki;function Qi(t,e){var i=t.bitLength(),f,u=D(1),c;if(i<=0)return u;i<18?f=1:i<48?f=3:i<144?f=4:i<768?f=5:f=6,i<8?c=new et(e):e.isEven()?c=new nt(e):c=new it(e);var a=new Array,x=3,E=f-1,I=(1<<f)-1;if(a[1]=c.convert(this),f>1){var N=h();for(c.sqrTo(a[1],N);x<=I;)a[x]=h(),c.mulTo(N,a[x-2],a[x]),x+=2}var L=t.t-1,X,vt=!0,j=h(),U;for(i=tt(t[L])-1;L>=0;){for(i>=E?X=t[L]>>i-E&I:(X=(t[L]&(1<<i+1)-1)<<E-i,L>0&&(X|=t[L-1]>>this.DB+i-E)),x=f;(X&1)==0;)X>>=1,--x;if((i-=x)<0&&(i+=this.DB,--L),vt)a[X].copyTo(u),vt=!1;else{for(;x>1;)c.sqrTo(u,j),c.sqrTo(j,u),x-=2;x>0?c.sqrTo(u,j):(U=u,u=j,j=U),c.mulTo(j,a[X],u)}for(;L>=0&&(t[L]&1<<i)==0;)c.sqrTo(u,j),U=u,u=j,j=U,--i<0&&(i=this.DB-1,--L)}return c.revert(u)}function Wi(t){var e=this.s<0?this.negate():this.clone(),i=t.s<0?t.negate():t.clone();if(e.compareTo(i)<0){var f=e;e=i,i=f}var u=e.getLowestSetBit(),c=i.getLowestSetBit();if(c<0)return e;for(u<c&&(c=u),c>0&&(e.rShiftTo(c,e),i.rShiftTo(c,i));e.signum()>0;)(u=e.getLowestSetBit())>0&&e.rShiftTo(u,e),(u=i.getLowestSetBit())>0&&i.rShiftTo(u,i),e.compareTo(i)>=0?(e.subTo(i,e),e.rShiftTo(1,e)):(i.subTo(e,i),i.rShiftTo(1,i));return c>0&&i.lShiftTo(c,i),i}function Ji(t){if(t<=0)return 0;var e=this.DV%t,i=this.s<0?t-1:0;if(this.t>0)if(e==0)i=this[0]%t;else for(var f=this.t-1;f>=0;--f)i=(e*i+this[f])%t;return i}function $i(t){var e=t.isEven();if(this.isEven()&&e||t.signum()==0)return r.ZERO;for(var i=t.clone(),f=this.clone(),u=D(1),c=D(0),a=D(0),x=D(1);i.signum()!=0;){for(;i.isEven();)i.rShiftTo(1,i),e?((!u.isEven()||!c.isEven())&&(u.addTo(this,u),c.subTo(t,c)),u.rShiftTo(1,u)):c.isEven()||c.subTo(t,c),c.rShiftTo(1,c);for(;f.isEven();)f.rShiftTo(1,f),e?((!a.isEven()||!x.isEven())&&(a.addTo(this,a),x.subTo(t,x)),a.rShiftTo(1,a)):x.isEven()||x.subTo(t,x),x.rShiftTo(1,x);i.compareTo(f)>=0?(i.subTo(f,i),e&&u.subTo(a,u),c.subTo(x,c)):(f.subTo(i,f),e&&a.subTo(u,a),x.subTo(c,x))}if(f.compareTo(r.ONE)!=0)return r.ZERO;if(x.compareTo(t)>=0)return x.subtract(t);if(x.signum()<0)x.addTo(t,x);else return x;return x.signum()<0?x.add(t):x}var C=[2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283,293,307,311,313,317,331,337,347,349,353,359,367,373,379,383,389,397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607,613,617,619,631,641,643,647,653,659,661,673,677,683,691,701,709,719,727,733,739,743,751,757,761,769,773,787,797,809,811,821,823,827,829,839,853,857,859,863,877,881,883,887,907,911,919,929,937,941,947,953,967,971,977,983,991,997],tn=(1<<26)/C[C.length-1];function en(t){var e,i=this.abs();if(i.t==1&&i[0]<=C[C.length-1]){for(e=0;e<C.length;++e)if(i[0]==C[e])return!0;return!1}if(i.isEven())return!1;for(e=1;e<C.length;){for(var f=C[e],u=e+1;u<C.length&&f<tn;)f*=C[u++];for(f=i.modInt(f);e<u;)if(f%C[e++]==0)return!1}return i.millerRabin(t)}function nn(t){var e=this.subtract(r.ONE),i=e.getLowestSetBit();if(i<=0)return!1;var f=e.shiftRight(i);t=t+1>>1,t>C.length&&(t=C.length);for(var u=h(),c=0;c<t;++c){u.fromInt(C[Math.floor(Math.random()*C.length)]);var a=u.modPow(f,this);if(a.compareTo(r.ONE)!=0&&a.compareTo(e)!=0){for(var x=1;x++<i&&a.compareTo(e)!=0;)if(a=a.modPowInt(2,this),a.compareTo(r.ONE)==0)return!1;if(a.compareTo(e)!=0)return!1}}return!0}r.prototype.chunkSize=ni,r.prototype.toRadix=si,r.prototype.fromRadix=oi,r.prototype.fromNumber=fi,r.prototype.bitwiseTo=ai,r.prototype.changeBit=Si,r.prototype.addTo=qi,r.prototype.dMultiply=Ni,r.prototype.dAddOffset=Vi,r.prototype.multiplyLowerTo=ki,r.prototype.multiplyUpperTo=Zi,r.prototype.modInt=Ji,r.prototype.millerRabin=nn,r.prototype.clone=$e,r.prototype.intValue=ti,r.prototype.byteValue=ei,r.prototype.shortValue=ii,r.prototype.signum=ri,r.prototype.toByteArray=hi,r.prototype.equals=ui,r.prototype.min=li,r.prototype.max=ci,r.prototype.and=pi,r.prototype.or=di,r.prototype.xor=gi,r.prototype.andNot=mi,r.prototype.not=yi,r.prototype.shiftLeft=vi,r.prototype.shiftRight=wi,r.prototype.getLowestSetBit=Ti,r.prototype.bitCount=Bi,r.prototype.testBit=Ei,r.prototype.setBit=Di,r.prototype.clearBit=Ri,r.prototype.flipBit=Ii,r.prototype.add=Pi,r.prototype.subtract=Ai,r.prototype.multiply=Ci,r.prototype.divide=Oi,r.prototype.remainder=Hi,r.prototype.divideAndRemainder=Li,r.prototype.modPow=Qi,r.prototype.modInverse=$i,r.prototype.pow=Ui,r.prototype.gcd=Wi,r.prototype.isProbablePrime=en,r.prototype.square=Mi,r.prototype.Barrett=nt;var yt,H,R;function rn(t){H[R++]^=t&255,H[R++]^=t>>8&255,H[R++]^=t>>16&255,H[R++]^=t>>24&255,R>=Mt&&(R-=Mt)}function Kt(){rn(new Date().getTime())}if(H==null){H=new Array,R=0;var z;if(typeof window!="undefined"&&window.crypto){if(window.crypto.getRandomValues){var Xt=new Uint8Array(32);for(window.crypto.getRandomValues(Xt),z=0;z<32;++z)H[R++]=Xt[z]}else if(navigator.appName=="Netscape"&&navigator.appVersion<"5"){var Qt=window.crypto.random(32);for(z=0;z<Qt.length;++z)H[R++]=Qt.charCodeAt(z)&255}}for(;R<Mt;)z=Math.floor(65536*Math.random()),H[R++]=z>>>8,H[R++]=z&255;R=0,Kt()}function sn(){if(yt==null){for(Kt(),yt=un(),yt.init(H),R=0;R<H.length;++R)H[R]=0;R=0}return yt.next()}function on(t){var e;for(e=0;e<t.length;++e)t[e]=sn()}function At(){}At.prototype.nextBytes=on;function Ct(){this.i=0,this.j=0,this.S=new Array}function fn(t){var e,i,f;for(e=0;e<256;++e)this.S[e]=e;for(i=0,e=0;e<256;++e)i=i+this.S[e]+t[e%t.length]&255,f=this.S[e],this.S[e]=this.S[i],this.S[i]=f;this.i=0,this.j=0}function hn(){var t;return this.i=this.i+1&255,this.j=this.j+this.S[this.i]&255,t=this.S[this.i],this.S[this.i]=this.S[this.j],this.S[this.j]=t,this.S[t+this.S[this.i]&255]}Ct.prototype.init=fn,Ct.prototype.next=hn;function un(){return new Ct}var Mt=256;typeof bt!="undefined"?bt=Wt.exports={default:r,BigInteger:r,SecureRandom:At}:this.jsbn={BigInteger:r,SecureRandom:At}}).call(bt)});var ie=_((Gn,ee)=>{var{BigInteger:Tt}=at();function ln(s){let n=s.toString(16);if(n[0]!=="-")n.length%2===1?n="0"+n:n.match(/^[0-7]/)||(n="00"+n);else{n=n.substr(1);let o=n.length;o%2===1?o+=1:n.match(/^[0-7]/)||(o+=2);let r="";for(let h=0;h<o;h++)r+="f";r=new Tt(r,16),n=r.xor(s).add(Tt.ONE),n=n.toString(16).replace(/^-/,"")}return n}var Ft=class{constructor(){this.tlv=null,this.t="00",this.l="00",this.v=""}getEncodedHex(){return this.tlv||(this.v=this.getValue(),this.l=this.getLength(),this.tlv=this.t+this.l+this.v),this.tlv}getLength(){let n=this.v.length/2,o=n.toString(16);return o.length%2===1&&(o="0"+o),n<128?o:(128+o.length/2).toString(16)+o}getValue(){return""}},Bt=class extends Ft{constructor(n){super(),this.t="02",n&&(this.v=ln(n))}getValue(){return this.v}},Ht=class extends Ft{constructor(n){super(),this.t="30",this.asn1Array=n}getValue(){return this.v=this.asn1Array.map(n=>n.getEncodedHex()).join(""),this.v}};function te(s,n){if(n+2>s.length)throw new Error("invalid DER: length field truncated");let o=parseInt(s.substring(n,n+2),16);if(o<128)return{len:o,lenOfL:1};let r=o&127;if(r===0)throw new Error("invalid DER: indefinite length not allowed");if(r>4)throw new Error("invalid DER: length too large");if(n+2+r*2>s.length)throw new Error("invalid DER: length field truncated");let h=s.substring(n+2,n+2+r*2),l=parseInt(h,16);if(l<128)throw new Error("invalid DER: length not minimally encoded (should use short form)");if(h.substring(0,2)==="00")throw new Error("invalid DER: length has leading zero byte");return{len:l,lenOfL:1+r}}function Jt(s,n){if(n+2>s.length)throw new Error("invalid DER: tag field truncated");let o=s.substring(n,n+2),{len:r,lenOfL:h}=te(s,n+2),l=n+2+h*2,d=l+r*2;if(d>s.length)throw new Error("invalid DER: value truncated");return{tag:o,valueHex:s.substring(l,d),nextStart:d}}function $t(s){if(s.length===0)throw new Error("invalid DER: INTEGER is empty");let n=parseInt(s.substring(0,2),16);if(n&128)throw new Error("invalid DER: INTEGER is negative");if(n===0){if(s.length===2)return;if(!(parseInt(s.substring(2,4),16)&128))throw new Error("invalid DER: INTEGER has non-minimal leading zero")}}ee.exports={encodeDer(s,n){let o=new Bt(s),r=new Bt(n);return new Ht([o,r]).getEncodedHex()},decodeDer(s){if(typeof s!="string"||s.length%2!==0)throw new Error("invalid DER: input must be a hex string of even length");if(s.substring(0,2)!=="30")throw new Error("invalid DER: expected SEQUENCE (0x30)");let n=te(s,2),o=2+n.lenOfL*2;if(o+n.len*2!==s.length)throw new Error("invalid DER: SEQUENCE length does not match input length");let r=Jt(s,o);if(r.tag!=="02")throw new Error("invalid DER: expected INTEGER (0x02) for R");$t(r.valueHex);let h=Jt(s,r.nextStart);if(h.tag!=="02")throw new Error("invalid DER: expected INTEGER (0x02) for S");if($t(h.valueHex),h.nextStart!==s.length)throw new Error("invalid DER: trailing bytes inside SEQUENCE");let l=new Tt(r.valueHex,16),d=new Tt(h.valueHex,16);return{r:l,s:d}}}});var oe=_((_n,se)=>{var{BigInteger:M}=at(),ne=new M("2"),re=new M("3"),Lt=class s{constructor(n,o){this.x=o,this.q=n}equals(n){return n===this?!0:this.q.equals(n.q)&&this.x.equals(n.x)}toBigInteger(){return this.x}negate(){return new s(this.q,this.x.negate().mod(this.q))}add(n){return new s(this.q,this.x.add(n.toBigInteger()).mod(this.q))}subtract(n){return new s(this.q,this.x.subtract(n.toBigInteger()).mod(this.q))}multiply(n){return new s(this.q,this.x.multiply(n.toBigInteger()).mod(this.q))}divide(n){return new s(this.q,this.x.multiply(n.toBigInteger().modInverse(this.q)).mod(this.q))}square(){return new s(this.q,this.x.square().mod(this.q))}},ot=class s{constructor(n,o,r,h){this.curve=n,this.x=o,this.y=r,this.z=h==null?M.ONE:h,this.zinv=null}getX(){return this.zinv===null&&(this.zinv=this.z.modInverse(this.curve.q)),this.curve.fromBigInteger(this.x.toBigInteger().multiply(this.zinv).mod(this.curve.q))}getY(){return this.zinv===null&&(this.zinv=this.z.modInverse(this.curve.q)),this.curve.fromBigInteger(this.y.toBigInteger().multiply(this.zinv).mod(this.curve.q))}equals(n){return n===this?!0:this.isInfinity()?n.isInfinity():n.isInfinity()?this.isInfinity():n.y.toBigInteger().multiply(this.z).subtract(this.y.toBigInteger().multiply(n.z)).mod(this.curve.q).equals(M.ZERO)?n.x.toBigInteger().multiply(this.z).subtract(this.x.toBigInteger().multiply(n.z)).mod(this.curve.q).equals(M.ZERO):!1}isInfinity(){return this.x===null&&this.y===null?!0:this.z.equals(M.ZERO)&&!this.y.toBigInteger().equals(M.ZERO)}negate(){return new s(this.curve,this.x,this.y.negate(),this.z)}add(n){if(this.isInfinity())return n;if(n.isInfinity())return this;let o=this.x.toBigInteger(),r=this.y.toBigInteger(),h=this.z,l=n.x.toBigInteger(),d=n.y.toBigInteger(),b=n.z,p=this.curve.q,F=o.multiply(b).mod(p),g=l.multiply(h).mod(p),m=F.subtract(g),y=r.multiply(b).mod(p),w=d.multiply(h).mod(p),T=y.subtract(w);if(M.ZERO.equals(m))return M.ZERO.equals(T)?this.twice():this.curve.infinity;let S=F.add(g),q=h.multiply(b).mod(p),A=m.square().mod(p),D=m.multiply(A).mod(p),G=q.multiply(T.square()).subtract(S.multiply(A)).mod(p),K=m.multiply(G).mod(p),J=T.multiply(A.multiply(F).subtract(G)).subtract(y.multiply(D)).mod(p),$=D.multiply(q).mod(p);return new s(this.curve,this.curve.fromBigInteger(K),this.curve.fromBigInteger(J),$)}twice(){if(this.isInfinity())return this;if(!this.y.toBigInteger().signum())return this.curve.infinity;let n=this.x.toBigInteger(),o=this.y.toBigInteger(),r=this.z,h=this.curve.q,l=this.curve.a.toBigInteger(),d=n.square().multiply(re).add(l.multiply(r.square())).mod(h),b=o.shiftLeft(1).multiply(r).mod(h),p=o.square().mod(h),F=p.multiply(n).multiply(r).mod(h),g=b.square().mod(h),m=d.square().subtract(F.shiftLeft(3)).mod(h),y=b.multiply(m).mod(h),w=d.multiply(F.shiftLeft(2).subtract(m)).subtract(g.shiftLeft(1).multiply(p)).mod(h),T=b.multiply(g).mod(h);return new s(this.curve,this.curve.fromBigInteger(y),this.curve.fromBigInteger(w),T)}multiply(n){if(this.isInfinity())return this;if(!n.signum())return this.curve.infinity;let o=n.multiply(re),r=this.negate(),h=this;for(let l=o.bitLength()-2;l>0;l--){h=h.twice();let d=o.testBit(l),b=n.testBit(l);d!==b&&(h=h.add(d?this:r))}return h}},Nt=class{constructor(n,o,r){this.q=n,this.a=this.fromBigInteger(o),this.b=this.fromBigInteger(r),this.infinity=new ot(this,null,null)}equals(n){return n===this?!0:this.q.equals(n.q)&&this.a.equals(n.a)&&this.b.equals(n.b)}fromBigInteger(n){return new Lt(this.q,n)}decodePointHex(n){if(typeof n!="string"||n.length<2||n.length%2!==0)return null;switch(parseInt(n.substr(0,2),16)){case 0:return n.length!==2?null:this.infinity;case 2:case 3:if(n.length!==66)return null;let o=this.fromBigInteger(new M(n.substr(2),16)),r=this.fromBigInteger(o.multiply(o.square()).add(o.multiply(this.a)).add(this.b).toBigInteger().modPow(this.q.divide(new M("4")).add(M.ONE),this.q));return r.toBigInteger().mod(ne).equals(new M(n.substr(0,2),16).subtract(ne))||(r=r.negate()),new ot(this,o,r);case 4:case 6:case 7:if(n.length!==130)return null;let h=(n.length-2)/2,l=n.substr(2,h),d=n.substr(h+2,h);return new ot(this,this.fromBigInteger(new M(l,16)),this.fromBigInteger(new M(d,16)));default:return null}}};se.exports={ECPointFp:ot,ECCurveFp:Nt}});var he=_((Kn,ft)=>{var Et,k,O,Vt=class{constructor(){this.i=0,this.j=0,this.S=[]}init(n){let o,r,h;for(o=0;o<256;++o)this.S[o]=o;for(r=0,o=0;o<256;++o)r=r+this.S[o]+n[o%n.length]&255,h=this.S[o],this.S[o]=this.S[r],this.S[r]=h;this.i=0,this.j=0}next(){this.i=this.i+1&255,this.j=this.j+this.S[this.i]&255;let n=this.S[this.i];return this.S[this.i]=this.S[this.j],this.S[this.j]=n,this.S[n+this.S[this.i]&255]}};function cn(s){k[O++]^=s&255,k[O++]^=s>>8&255,k[O++]^=s>>16&255,k[O++]^=s>>24&255,O>=256&&(O-=256)}function fe(){cn(new Date().getTime())}if(k==null){k=[],O=0;let s,n=new Uint8Array(32);if(typeof window!="undefined"&&window.crypto&&window.crypto.getRandomValues)for(window.crypto.getRandomValues(n),s=0;s<32;++s)k[O++]=n[s];else{let o=typeof ft!="undefined"&&typeof ft.require=="function"?ft.require.bind(ft):null,r=o?o("crypto"):null;if(r)r.getRandomValues(n);else if(globalThis.crypto)globalThis.crypto.getRandomValues(n);else throw new Error("\u5F53\u524D\u73AF\u5883\u4E0D\u652F\u6301 crypto.getRandomValues\uFF01");for(s=0;s<32;++s)k[O++]=n[s]}O=0,fe()}function an(){if(Et==null){for(fe(),Et=new Vt,Et.init(k),O=0;O<k.length;++O)k[O]=0;O=0}return Et.next()}var zt=class{nextBytes(n){for(let o=0;o<n.length;++o)n[o]=an()}};ft.exports={SecureRandom:zt}});var ae=_((Xn,ce)=>{var{BigInteger:Z}=at(),{ECCurveFp:xn}=oe(),{SecureRandom:pn}=he(),dn=new pn,{curve:ht,G:gn,n:ue}=le();function mn(){return ht}function le(){let s=new Z("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF",16),n=new Z("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC",16),o=new Z("28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93",16),r=new xn(s,n,o),d=r.decodePointHex("04"+"32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7"+"BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0"),b=new Z("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123",16);return{curve:r,G:d,n:b}}function yn(s,n,o){let h=(s?new Z(s,n,o):new Z(ue.bitLength(),dn)).mod(ue.subtract(Z.ONE)).add(Z.ONE),l=xt(h.toString(16),64),d=gn.multiply(h),b=xt(d.getX().toBigInteger().toString(16),64),p=xt(d.getY().toBigInteger().toString(16),64),F="04"+b+p;return{privateKey:l,publicKey:F}}function vn(s){if(s.length!==130)throw new Error("Invalid public key to compress");let n=(s.length-2)/2,o=s.substr(2,n),r=new Z(s.substr(n+2,n),16),h="03";return r.mod(new Z("2")).equals(Z.ZERO)&&(h="02"),h+o}function wn(s){s=unescape(encodeURIComponent(s));let n=s.length,o=[];for(let h=0;h<n;h++)o[h>>>2]|=(s.charCodeAt(h)&255)<<24-h%4*8;let r=[];for(let h=0;h<n;h++){let l=o[h>>>2]>>>24-h%4*8&255;r.push((l>>>4).toString(16)),r.push((l&15).toString(16))}return r.join("")}function xt(s,n){return s.length>=n?s:new Array(n-s.length+1).join("0")+s}function bn(s){let n=[];for(let o=0;o<s.length;o++){let r=s[o]&255;n.push((r>>>4).toString(16)),n.push((r&15).toString(16))}return n.join("")}function Tn(s){let n=[],o=0;for(let r=0;r<s.length*2;r+=2)n[r>>>3]|=parseInt(s[o],10)<<24-r%8*4,o++;try{let r=[];for(let h=0;h<s.length;h++){let l=n[h>>>2]>>>24-h%4*8&255;r.push(String.fromCharCode(l))}return decodeURIComponent(escape(r.join("")))}catch(r){throw new Error("Malformed UTF-8 data")}}function Fn(s){let n=[],o=s.length;o%2!==0&&(s=xt(s,o+1)),o=s.length;for(let r=0;r<o;r+=2)n.push(parseInt(s.substr(r,2),16));return n}function jt(s){if(typeof s!="string"||!s)return!1;let n;try{n=ht.decodePointHex(s)}catch(h){return!1}if(!n||n.isInfinity())return!1;let o=n.getX();return n.getY().square().equals(o.multiply(o.square()).add(o.multiply(ht.a)).add(ht.b))}function Bn(s,n){if(!jt(s)||!jt(n))return!1;let o=ht.decodePointHex(s),r=ht.decodePointHex(n);return o.equals(r)}ce.exports={getGlobalCurve:mn,generateEcparam:le,generateKeyPairHex:yn,compressPublicKeyHex:vn,utf8ToHex:wn,leftPad:xt,arrayToHex:bn,arrayToUtf8:Tn,hexToArray:Fn,verifyPublicKey:jt,comparePublicKeyHex:Bn}});var kt=_((Qn,ge)=>{var Y=new Uint32Array(68),Ut=new Uint32Array(64);function V(s,n){let o=n&31;return s<<o|s>>>32-o}function xe(s,n){let o=[];for(let r=s.length-1;r>=0;r--)o[r]=(s[r]^n[r])&255;return o}function En(s){return s^V(s,9)^V(s,17)}function Sn(s){return s^V(s,15)^V(s,23)}function St(s){let n=s.length*8,o=n%512;o=o>=448?512-o%448-1:448-o-1;let r=new Array((o-7)/8),h=new Array(8);for(let g=0,m=r.length;g<m;g++)r[g]=0;for(let g=0,m=h.length;g<m;g++)h[g]=0;n=n.toString(2);for(let g=7;g>=0;g--)if(n.length>8){let m=n.length-8;h[g]=parseInt(n.substr(m),2),n=n.substr(0,m)}else n.length>0&&(h[g]=parseInt(n,2),n="");let l=new Uint8Array([...s,128,...r,...h]),d=new DataView(l.buffer,0),b=l.length/64,p=new Uint32Array([1937774191,1226093241,388252375,3666478592,2842636476,372324522,3817729613,2969243214]);for(let g=0;g<b;g++){Y.fill(0),Ut.fill(0);let m=16*g;for(let B=0;B<16;B++)Y[B]=d.getUint32((m+B)*4,!1);for(let B=16;B<68;B++)Y[B]=Sn(Y[B-16]^Y[B-9]^V(Y[B-3],15))^V(Y[B-13],7)^Y[B-6];for(let B=0;B<64;B++)Ut[B]=Y[B]^Y[B+4];let y=2043430169,w=2055708042,T=p[0],S=p[1],q=p[2],A=p[3],D=p[4],G=p[5],K=p[6],J=p[7],$,dt,gt,tt,mt;for(let B=0;B<64;B++)mt=B>=0&&B<=15?y:w,$=V(V(T,12)+D+V(mt,B),7),dt=$^V(T,12),gt=(B>=0&&B<=15?T^S^q:T&S|T&q|S&q)+A+dt+Ut[B],tt=(B>=0&&B<=15?D^G^K:D&G|~D&K)+J+$+Y[B],A=q,q=V(S,9),S=T,T=gt,J=K,K=V(G,19),G=D,D=En(tt);p[0]^=T,p[1]^=S,p[2]^=q,p[3]^=A,p[4]^=D,p[5]^=G,p[6]^=K,p[7]^=J}let F=[];for(let g=0,m=p.length;g<m;g++){let y=p[g];F.push((y&4278190080)>>>24,(y&16711680)>>>16,(y&65280)>>>8,y&255)}return F}var pt=64,pe=new Uint8Array(pt),de=new Uint8Array(pt);for(let s=0;s<pt;s++)pe[s]=54,de[s]=92;function Dn(s,n){for(n.length>pt&&(n=St(n));n.length<pt;)n.push(0);let o=xe(n,pe),r=xe(n,de),h=St([...o,...s]);return St([...r,...h])}ge.exports={sm3:St,hmac:Dn}});var Fe=_((Wn,Te)=>{var{BigInteger:P}=at(),{encodeDer:Rn,decodeDer:In}=ie(),v=ae(),ut=kt().sm3,{G:rt,curve:me,n:st}=v.generateEcparam(),ye=0;function qn(s,n,o=1){if(!v.verifyPublicKey(n))throw new Error("Invalid public key");s=typeof s=="string"?v.hexToArray(v.utf8ToHex(s)):Array.prototype.slice.call(s),n=v.getGlobalCurve().decodePointHex(n);let r=v.generateKeyPairHex(),h=new P(r.privateKey,16),l=r.publicKey;l.length>128&&(l=l.substr(l.length-128));let d=n.multiply(h),b=v.hexToArray(v.leftPad(d.getX().toBigInteger().toRadix(16),64)),p=v.hexToArray(v.leftPad(d.getY().toBigInteger().toRadix(16),64)),F=v.arrayToHex(ut([].concat(b,s,p))),g=1,m=0,y=[],w=[].concat(b,p),T=()=>{y=ut([...w,g>>24&255,g>>16&255,g>>8&255,g&255]),g++,m=0};T();for(let q=0,A=s.length;q<A;q++)m===y.length&&T(),s[q]^=y[m++]&255;let S=v.arrayToHex(s);return o===ye?l+S+F:l+F+S}function Pn(s,n,o=1,{output:r="string"}={}){n=new P(n,16);let h=s.substr(128,64),l=s.substr(192);o===ye&&(h=s.substr(s.length-64),l=s.substr(128,s.length-128-64));let d=v.hexToArray(l),b=v.getGlobalCurve().decodePointHex("04"+s.substr(0,128));if(!b||!v.verifyPublicKey("04"+s.substr(0,128)))return r==="array"?[]:"";let p=b.multiply(n),F=v.hexToArray(v.leftPad(p.getX().toBigInteger().toRadix(16),64)),g=v.hexToArray(v.leftPad(p.getY().toBigInteger().toRadix(16),64)),m=1,y=0,w=[],T=[].concat(F,g),S=()=>{w=ut([...T,m>>24&255,m>>16&255,m>>8&255,m&255]),m++,y=0};S();for(let A=0,D=d.length;A<D;A++)y===w.length&&S(),d[A]^=w[y++]&255;return v.arrayToHex(ut([].concat(F,d,g)))===h.toLowerCase()?r==="array"?d:v.arrayToUtf8(d):r==="array"?[]:""}function An(s,n,{pointPool:o,der:r,hash:h=!0,publicKey:l,userId:d}={}){let b=typeof s=="string"?v.utf8ToHex(s):v.arrayToHex(Array.prototype.slice.call(s));h&&(l=l||we(n),b=ve(b,l,d));let p=new P(n,16),F=new P(b,16),g=null,m=null,y=null;do{do{let w;o&&o.length?w=o.pop():w=be(),g=w.k,m=F.add(w.x1).mod(st)}while(m.equals(P.ZERO)||m.add(g).equals(st));y=p.add(P.ONE).modInverse(st).multiply(g.subtract(m.multiply(p))).mod(st)}while(y.equals(P.ZERO));return r?Rn(m,y):v.leftPad(m.toString(16),64)+v.leftPad(y.toString(16),64)}function Cn(s,n,o,{der:r,hash:h=!0,userId:l}={}){if(!v.verifyPublicKey(o))return!1;let d=typeof s=="string"?v.utf8ToHex(s):v.arrayToHex(Array.prototype.slice.call(s));h&&(d=ve(d,o,l));let b,p;if(r)try{let S=In(n);b=S.r,p=S.s}catch(S){return!1}else b=new P(n.substring(0,64),16),p=new P(n.substring(64),16);let F=st.subtract(P.ONE);if(b.compareTo(P.ONE)<0||b.compareTo(F)>0||p.compareTo(P.ONE)<0||p.compareTo(F)>0)return!1;let g=me.decodePointHex(o);if(!g)return!1;let m=new P(d,16),y=b.add(p).mod(st);if(y.equals(P.ZERO))return!1;let w=rt.multiply(p).add(g.multiply(y)),T=m.add(w.getX().toBigInteger()).mod(st);return b.equals(T)}function ve(s,n,o="1234567812345678"){o=v.utf8ToHex(o);let r=v.leftPad(rt.curve.a.toBigInteger().toRadix(16),64),h=v.leftPad(rt.curve.b.toBigInteger().toRadix(16),64),l=v.leftPad(rt.getX().toBigInteger().toRadix(16),64),d=v.leftPad(rt.getY().toBigInteger().toRadix(16),64),b,p;if(n.length===128)b=n.substr(0,64),p=n.substr(64,64);else{let y=rt.curve.decodePointHex(n);b=v.leftPad(y.getX().toBigInteger().toRadix(16),64),p=v.leftPad(y.getY().toBigInteger().toRadix(16),64)}let F=v.hexToArray(o+r+h+l+d+b+p),g=o.length*4;F.unshift(g&255),F.unshift(g>>8&255);let m=ut(F);return v.arrayToHex(ut(m.concat(v.hexToArray(s))))}function we(s){let n=rt.multiply(new P(s,16)),o=v.leftPad(n.getX().toBigInteger().toString(16),64),r=v.leftPad(n.getY().toBigInteger().toString(16),64);return"04"+o+r}function be(){let s=v.generateKeyPairHex(),n=me.decodePointHex(s.publicKey);return s.k=new P(s.privateKey,16),s.x1=n.getX().toBigInteger(),s}Te.exports={generateKeyPairHex:v.generateKeyPairHex,compressPublicKeyHex:v.compressPublicKeyHex,comparePublicKeyHex:v.comparePublicKeyHex,doEncrypt:qn,doDecrypt:Pn,doSignature:An,doVerifySignature:Cn,getPublicKeyFromPrivateKey:we,getPoint:be,verifyPublicKey:v.verifyPublicKey}});var Se=_((Jn,Ee)=>{var{sm3:Mn,hmac:On}=kt();function Hn(s,n){return s.length>=n?s:new Array(n-s.length+1).join("0")+s}function Be(s){return s.map(n=>(n=n.toString(16),n.length===1?"0"+n:n)).join("")}function Ln(s){let n=[],o=s.length;o%2!==0&&(s=Hn(s,o+1)),o=s.length;for(let r=0;r<o;r+=2)n.push(parseInt(s.substr(r,2),16));return n}function Nn(s){let n=[];for(let o=0,r=s.length;o<r;o++){let h=s.codePointAt(o);if(h<=127)n.push(h);else if(h<=2047)n.push(192|h>>>6),n.push(128|h&63);else if(h<=55295||h>=57344&&h<=65535)n.push(224|h>>>12),n.push(128|h>>>6&63),n.push(128|h&63);else if(h>=65536&&h<=1114111)o++,n.push(240|h>>>18&28),n.push(128|h>>>12&63),n.push(128|h>>>6&63),n.push(128|h&63);else throw n.push(h),new Error("input is not supported")}return n}Ee.exports=function(s,n){if(s=typeof s=="string"?Nn(s):Array.prototype.slice.call(s),n){if((n.mode||"hmac")!=="hmac")throw new Error("invalid mode");let r=n.key;if(!r)throw new Error("invalid key");return r=typeof r=="string"?Ln(r):Array.prototype.slice.call(r),Be(On(s,r))}return Be(Mn(s))}});var Ie=_(($n,Re)=>{var Dt=[214,144,233,254,204,225,61,183,22,182,20,194,40,251,44,5,43,103,154,118,42,190,4,195,170,68,19,38,73,134,6,153,156,66,80,244,145,239,152,122,51,84,11,67,237,207,172,98,228,179,28,169,201,8,232,149,128,223,148,250,117,143,63,166,71,7,167,252,243,115,23,186,131,89,60,25,230,133,79,168,104,107,129,178,113,100,218,139,248,235,15,75,112,86,157,53,30,36,14,94,99,88,209,162,37,34,124,59,1,33,120,135,212,0,70,87,159,211,39,82,76,54,2,231,160,196,200,158,234,191,138,210,64,199,56,181,163,247,242,206,249,97,21,161,224,174,93,164,155,52,26,85,173,147,50,48,245,140,177,227,29,246,226,46,130,102,202,96,192,41,35,171,13,83,78,111,213,219,55,69,222,253,142,47,3,255,106,114,109,108,91,81,141,27,175,146,187,221,188,127,17,217,92,65,31,16,90,216,10,193,49,136,165,205,123,189,45,116,208,18,184,229,180,176,137,105,151,74,12,150,119,126,101,185,241,9,197,110,198,132,24,240,125,236,58,220,77,32,121,238,95,62,215,203,57,72],Rt=[462357,472066609,943670861,1415275113,1886879365,2358483617,2830087869,3301692121,3773296373,4228057617,404694573,876298825,1347903077,1819507329,2291111581,2762715833,3234320085,3705924337,4177462797,337322537,808926789,1280531041,1752135293,2223739545,2695343797,3166948049,3638552301,4110090761,269950501,741554753,1213159005,1684763257];function Zt(s){let n=[];for(let o=0,r=s.length;o<r;o+=2)n.push(parseInt(s.substr(o,2),16));return n}function Vn(s){return s.map(n=>(n=n.toString(16),n.length===1?"0"+n:n)).join("")}function zn(s){let n=[];for(let o=0,r=s.length;o<r;o++){let h=s.codePointAt(o);if(h<=127)n.push(h);else if(h<=2047)n.push(192|h>>>6),n.push(128|h&63);else if(h<=55295||h>=57344&&h<=65535)n.push(224|h>>>12),n.push(128|h>>>6&63),n.push(128|h&63);else if(h>=65536&&h<=1114111)o++,n.push(240|h>>>18&28),n.push(128|h>>>12&63),n.push(128|h>>>6&63),n.push(128|h&63);else throw n.push(h),new Error("input is not supported")}return n}function jn(s){let n=[];for(let o=0,r=s.length;o<r;o++)s[o]>=240&&s[o]<=247?(n.push(String.fromCodePoint(((s[o]&7)<<18)+((s[o+1]&63)<<12)+((s[o+2]&63)<<6)+(s[o+3]&63))),o+=3):s[o]>=224&&s[o]<=239?(n.push(String.fromCodePoint(((s[o]&15)<<12)+((s[o+1]&63)<<6)+(s[o+2]&63))),o+=2):s[o]>=192&&s[o]<=223?(n.push(String.fromCodePoint(((s[o]&31)<<6)+(s[o+1]&63))),o++):n.push(String.fromCodePoint(s[o]));return n.join("")}function lt(s,n){let o=n&31;return s<<o|s>>>32-o}function W(s){return(Dt[s>>>24&255]&255)<<24|(Dt[s>>>16&255]&255)<<16|(Dt[s>>>8&255]&255)<<8|Dt[s&255]&255}function It(s){return s^lt(s,2)^lt(s,10)^lt(s,18)^lt(s,24)}function qt(s){return s^lt(s,13)^lt(s,23)}function Un(s,n,o){let r=new Array(4),h=new Array(4);for(let l=0;l<4;l++)h[0]=s[4*l]&255,h[1]=s[4*l+1]&255,h[2]=s[4*l+2]&255,h[3]=s[4*l+3]&255,r[l]=h[0]<<24|h[1]<<16|h[2]<<8|h[3];for(let l=0,d;l<32;l+=4)d=r[1]^r[2]^r[3]^o[l+0],r[0]^=It(W(d)),d=r[2]^r[3]^r[0]^o[l+1],r[1]^=It(W(d)),d=r[3]^r[0]^r[1]^o[l+2],r[2]^=It(W(d)),d=r[0]^r[1]^r[2]^o[l+3],r[3]^=It(W(d));for(let l=0;l<16;l+=4)n[l]=r[3-l/4]>>>24&255,n[l+1]=r[3-l/4]>>>16&255,n[l+2]=r[3-l/4]>>>8&255,n[l+3]=r[3-l/4]&255}function kn(s,n,o){let r=new Array(4),h=new Array(4);for(let l=0;l<4;l++)h[0]=s[0+4*l]&255,h[1]=s[1+4*l]&255,h[2]=s[2+4*l]&255,h[3]=s[3+4*l]&255,r[l]=h[0]<<24|h[1]<<16|h[2]<<8|h[3];r[0]^=2746333894,r[1]^=1453994832,r[2]^=1736282519,r[3]^=2993693404;for(let l=0,d;l<32;l+=4)d=r[1]^r[2]^r[3]^Rt[l+0],n[l+0]=r[0]^=qt(W(d)),d=r[2]^r[3]^r[0]^Rt[l+1],n[l+1]=r[1]^=qt(W(d)),d=r[3]^r[0]^r[1]^Rt[l+2],n[l+2]=r[2]^=qt(W(d)),d=r[0]^r[1]^r[2]^Rt[l+3],n[l+3]=r[3]^=qt(W(d));if(o===0)for(let l=0,d;l<16;l++)d=n[l],n[l]=n[31-l],n[31-l]=d}function De(s,n,o,{padding:r="pkcs#7",mode:h,iv:l=[],output:d="string"}={}){if(h==="cbc"&&(typeof l=="string"&&(l=Zt(l)),l.length!==128/8))throw new Error("iv is invalid");if(typeof n=="string"&&(n=Zt(n)),n.length!==128/8)throw new Error("key is invalid");if(typeof s=="string"?o!==0?s=zn(s):s=Zt(s):s=[...s],(r==="pkcs#5"||r==="pkcs#7")&&o!==0){let y=16-s.length%16;for(let w=0;w<y;w++)s.push(y)}let b=new Array(32);kn(n,b,o);let p=[],F=l,g=s.length,m=0;for(;g>=16;){let y=s.slice(m,m+16),w=new Array(16);if(h==="cbc")for(let T=0;T<16;T++)o!==0&&(y[T]^=F[T]);Un(y,w,b);for(let T=0;T<16;T++)h==="cbc"&&o===0&&(w[T]^=F[T]),p[m+T]=w[T];h==="cbc"&&(o!==0?F=w:F=y),g-=16,m+=16}if((r==="pkcs#5"||r==="pkcs#7")&&o===0){let y=p.length,w=p[y-1];for(let T=1;T<=w;T++)if(p[y-T]!==w)throw new Error("padding is invalid");p.splice(y-w,w)}return d!=="array"?o!==0?Vn(p):jn(p):p}Re.exports={encrypt(s,n,o){return De(s,n,1,o)},decrypt(s,n,o){return De(s,n,0,o)}}});var Zn=_((tr,qe)=>{qe.exports={sm2:Fe(),sm3:Se(),sm4:Ie()}});return Zn();})();
   // ==================== 性能打点 ====================
   let _profiling = false;
   let _marks = [];
@@ -1040,11 +1042,20 @@
     }
     function readNode() {
       if (pos >= data.length) return null;
+      const nodeOff = pos;
       const tag = data[pos++];
       const len = readLen();
       const start = pos;
       const content = data.subarray(start, start + len);
-      const node = { tag, len, content, children: [], parent: null };
+      const node = {
+        tag,
+        len,
+        content,
+        children: [],
+        parent: null,
+        off: nodeOff,
+        derLen: start - nodeOff + len,
+      };
       const isContainer = tag === 0x30 || tag === 0x31 || (tag & 0xe0) === 0xa0;
       if (isContainer) {
         pos = start;
@@ -1062,6 +1073,87 @@
       return node;
     }
     return readNode();
+  }
+
+  // X.509 证书有效期：TBSCertificate 里唯一「恰好两个时间子节点」的 SEQUENCE
+  function extractCertValidity(derBytes) {
+    let found = null;
+    (function walk(node) {
+      if (!node || found) return;
+      if (
+        node.tag === 0x30 &&
+        node.children.length === 2 &&
+        node.children.every((c) => c.tag === 0x17 || c.tag === 0x18)
+      ) {
+        found = node.children.map(decodeAscii);
+        return;
+      }
+      for (const c of node.children) walk(c);
+    })(parseTlvTree(derBytes));
+    return found ? { notBefore: found[0], notAfter: found[1] } : null;
+  }
+
+  // ASN.1 时间 / OFD 签章时间 → Unix 毫秒（UTC）
+  // 兼容 UTCTime(YYMMDDHHMMSSZ)、GeneralizedTime(YYYYMMDDHHMMSSZ) 与 "2020-08-17T11:13:29"
+  // GB/T 38540 SES 签名块：父 SEQUENCE 的子节点形如
+  //   [待签数据 SEQUENCE, 证书 OCTET STRING, 算法 OID, 签名值 BIT STRING]
+  // 返回的节点仍指向原字节（tbs.off / derLen 用于切出原始 DER，签名不可重新编码）
+  function parseSesSignBlocks(data) {
+    const out = [];
+    (function walk(node) {
+      if (!node) return;
+      const ch = node.children;
+      for (let k = 2; k < ch.length - 1; k++) {
+        if (
+          ch[k].tag === 0x06 &&
+          ch[k + 1].tag === 0x03 &&
+          ch[k - 1].tag === 0x04 &&
+          (ch[k - 2].tag === 0x30 || ch[k - 2].tag === 0x31)
+        ) {
+          out.push({ tbs: ch[k - 2], cert: ch[k - 1], alg: ch[k], sig: ch[k + 1] });
+        }
+      }
+      for (const c of ch) walk(c);
+    })(parseTlvTree(data));
+    return out;
+  }
+
+  // 证书 SubjectPublicKeyInfo → SM2 未压缩公钥点（130 位 hex，含 04 前缀）
+  function extractCertPublicKey(derBytes) {
+    const root = parseTlvTree(derBytes);
+    const tbs = root && root.children[0];
+    if (!tbs) return "";
+    for (const c of tbs.children) {
+      if (c.tag !== 0x30 || c.children.length < 2) continue;
+      const algId = c.children[0];
+      const bits = c.children[1];
+      if (algId.tag !== 0x30 || bits.tag !== 0x03) continue;
+      if (bits.len !== 66 && bits.len !== 65) continue;
+      const skip = bits.len === 66 ? 1 : 0; // 66 = 1 字节 unusedBits + 65 字节点
+      const pt = bits.content.subarray(skip, skip + 65);
+      if (pt.length === 65 && pt[0] === 0x04) {
+        let hex = "";
+        for (let i = 0; i < pt.length; i++) hex += ("0" + pt[i].toString(16)).slice(-2);
+        return hex;
+      }
+    }
+    return "";
+  }
+
+  function asn1TimeToMs(str) {
+    const d = String(str || "").replace(/[^0-9]/g, "");
+    if (d.length < 10) return NaN;
+    const short = d.length <= 12; // UTCTime 的两位年
+    const yy = Number(d.slice(0, short ? 2 : 4));
+    const year = short ? (yy < 50 ? 2000 + yy : 1900 + yy) : yy;
+    const off = short ? 2 : 4;
+    const month = Number(d.slice(off, off + 2)) - 1;
+    const day = Number(d.slice(off + 2, off + 4));
+    const hour = Number(d.slice(off + 4, off + 6));
+    const min = Number(d.slice(off + 6, off + 8));
+    const sec = Number(d.slice(off + 8, off + 10)) || 0;
+    if ([month, day, hour, min].some((v) => !isFinite(v))) return NaN;
+    return Date.UTC(year, month, day, hour, min, sec);
   }
 
   function asn1IntToStr(content) {
@@ -1231,12 +1323,84 @@
     return map[oid] || oid;
   }
 
-  // ==================== 签名验证（仅文件摘要比对） ====================
-  // 当前仅实现「文件摘要比对」：用签名中登记的 References[].CheckValue 与重新计算
-  // 的摘要逐字节比对，用于检测文件内容是否被改动、受保护文件是否缺失。
-  // 签名值验证、证书链验证、时间戳验证暂不实现（相关逻辑已移除，需要时再补）。
-  // 注意：CheckValue 存放于 OFD 文件内部，改内容后可被同步重算，因此「摘要一致」
-  // 只能说明文件自洽，不等同于签名真实有效。
+  // ==================== 签名验证（签名值 + 摘要 + 有效期） ====================
+  // 已实现：① 签名值验证——GB/T 38540 SES 的 toSign 原始 DER，用签章人证书 SM2 公钥验签；
+  //         ② 文件摘要比对（References[].CheckValue 与重算摘要逐字节比对）；
+  //         ③ 印章有效期与证书有效期是否覆盖签名时间。
+  // 未实现：证书链与信任根、吊销状态（CRL/OCSP）、时间戳验证、印章自身签名验证。
+  // 注意：CheckValue 存放于 OFD 文件内部，改内容后可被同步重算，单靠「摘要一致」
+  // 只说明文件自洽；签名值验证才是身份与完整性的依据。
+  // 有效期校验：以签名时间（SignatureDateTime）为基准
+  //   sealPeriod：印章属性 notBefore/notAfter 是否覆盖签名时间
+  //   certPeriod：签名数据内所有证书的 Validity 是否都覆盖签名时间
+  // 注意：这是「签名时刻」判定，不用当前时间——证书现在过期不代表签错。
+  function checkPeriods(sig) {
+    const out = { sealPeriod: "unknown", certPeriod: "unknown" };
+    const t = asn1TimeToMs(sig.signTime);
+    if (!isFinite(t)) return out;
+
+    const a = sig.sealAttrs;
+    if (a && (a.notBefore || a.notAfter)) {
+      const nb = a.notBefore ? asn1TimeToMs(a.notBefore) : -Infinity;
+      const na = a.notAfter ? asn1TimeToMs(a.notAfter) : Infinity;
+      out.sealPeriod = t >= nb && t <= na ? "pass" : "fail";
+    }
+
+    const certs = sig.certValidity || [];
+    if (certs.length) {
+      const covered = certs.every((c) => {
+        const nb = c.notBefore ? asn1TimeToMs(c.notBefore) : -Infinity;
+        const na = c.notAfter ? asn1TimeToMs(c.notAfter) : Infinity;
+        return t >= nb && t <= na;
+      });
+      out.certPeriod = covered ? "pass" : "fail";
+    }
+    return out;
+  }
+
+  // ② 签名值验证：用签章人证书公钥对 toSign 的原始 DER 做 SM2 验签（GB/T 38540）
+  // 待签数据必须切原始字节，重新编码会导致摘要不同。
+  async function verifySigValue(ofd, sig) {
+    if (typeof SM_CRYPTO === "undefined" || !SM_CRYPTO || !SM_CRYPTO.sm2)
+      return { state: "unknown", message: "未内置 SM2 库，签名值未验证" };
+    if (!sig.signedValuePath)
+      return { state: "unknown", message: "缺少签名值路径" };
+    const raw = await readEntry(ofd.zip, sig.signedValuePath.replace(/^\//, ""));
+    if (!raw) return { state: "unknown", message: "签名值文件缺失" };
+    const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    const blocks = parseSesSignBlocks(bytes);
+    if (!blocks.length)
+      return { state: "unknown", message: "未找到 SES 签名块（非 GB/T 38540 结构）" };
+
+    let tried = 0;
+    for (const b of blocks) {
+      const algOid = oidDotStr(b.alg.content);
+      if (algOid !== "1.2.156.10197.1.501")
+        return { state: "unknown", message: "签名算法暂不支持：" + algOid };
+      const pub = extractCertPublicKey(b.cert.content);
+      if (!pub) continue;
+      const sigBytes = b.sig.content.subarray(1); // 去掉 BIT STRING 的 unusedBits 字节
+      let hex = "";
+      for (let i = 0; i < sigBytes.length; i++)
+        hex += ("0" + sigBytes[i].toString(16)).slice(-2);
+      const tbs = bytes.subarray(b.tbs.off, b.tbs.off + b.tbs.derLen);
+      tried++;
+      try {
+        if (
+          SM_CRYPTO.sm2.doVerifySignature(tbs, hex, pub, {
+            der: true,
+            input: "array",
+          })
+        )
+          return { state: "pass", message: "签名值验证通过" };
+      } catch (e) {
+        return { state: "unknown", message: "SM2 验签异常：" + e.message };
+      }
+    }
+    if (!tried) return { state: "unknown", message: "签名数据中未取得可用公钥" };
+    return { state: "fail", message: "签名值验证失败（签章数据可能被篡改）" };
+  }
+
   async function verifySignature(ofd, index) {
     const doc = ofd.document;
     const sig = doc.signatures && doc.signatures[index];
@@ -1276,6 +1440,21 @@
       else failed.push(ref.fileRef + "（摘要不一致）");
     }
 
+    const sv = await verifySigValue(ofd, sig);
+    const periods = checkPeriods(sig);
+    const checks = {
+      digest: failed.length ? "fail" : checked.length ? "pass" : "unknown",
+      sigValue: sv.state,
+      sealPeriod: periods.sealPeriod,
+      certPeriod: periods.certPeriod,
+    };
+    const rejected = [];
+    if (sv.state === "fail") rejected.push(sv.message);
+    if (periods.sealPeriod === "fail")
+      rejected.push("印章有效期不覆盖签名时间");
+    if (periods.certPeriod === "fail")
+      rejected.push("证书有效期不覆盖签名时间");
+
     if (failed.length) {
       return {
         valid: false,
@@ -1284,6 +1463,7 @@
         digestValid: false,
         checked: checked,
         failed: failed,
+        checks: checks,
       };
     }
     if (!checked.length) {
@@ -1294,15 +1474,39 @@
         digestValid: false,
         checked: checked,
         failed: failed,
+        checks: checks,
       };
     }
+    if (rejected.length) {
+      return {
+        valid: false,
+        status: "invalid",
+        message:
+          "摘要一致，但" +
+          rejected.join("、") +
+          "（" + checked.length + " 个文件摘要校验一致）",
+        digestValid: true,
+        checked: checked,
+        failed: failed,
+        checks: checks,
+      };
+    }
+    const skipped = [];
+    if (sv.state === "unknown") skipped.push(sv.message);
+    if (periods.sealPeriod === "unknown") skipped.push("印章有效期");
+    if (periods.certPeriod === "unknown") skipped.push("证书有效期");
     return {
       valid: true,
       status: "valid",
-      message: "验证通过：" + checked.length + " 个文件摘要校验一致",
+      message:
+        "验证通过：" +
+        checked.length +
+        " 个文件摘要校验一致" +
+        (skipped.length ? "；" + skipped.join("、") + "无数据，未校验" : ""),
       digestValid: true,
       checked: checked,
       failed: failed,
+      checks: checks,
     };
   }
 
@@ -1312,10 +1516,17 @@
     Object.assign(target.colorSpaces, src.colorSpaces);
     Object.assign(target.multiMedias, src.multiMedias);
     Object.assign(target.drawParams, src.drawParams);
+    Object.assign(target.compositeUnits, src.compositeUnits);
   }
 
   async function parseRes(resPath, zip) {
-    const res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+    const res = {
+      fonts: {},
+      colorSpaces: {},
+      multiMedias: {},
+      drawParams: {},
+      compositeUnits: {},
+    };
     const xmlText = await readEntryText(zip, resPath);
     if (!xmlText) return res;
     const root = parseXml(xmlText).documentElement;
@@ -1594,8 +1805,39 @@
       else if (name === "TextObject")
         objects.push(parseTextObject(c, drawParam));
       else if (name === "ImageObject") objects.push(parseImageObject(c));
+      else if (name === "CompositeObject")
+        // 复合图元：只记引用，真正的图元在 DocumentRes 的 CompositeGraphicUnit 里。
+        // 渲染时由 renderObject 展开（见 display/svg.js）。
+        objects.push({
+          type: "composite",
+          resourceId: attr(c, "ResourceID"),
+          ctm: parseMatrix(attr(c, "CTM")),
+          boundary: parseBox(attr(c, "Boundary")),
+          drawParam: attr(c, "DrawParam") || layerDp,
+        });
     }
     return { drawParam, objects };
+  }
+
+  // 解析 DocumentRes 里的 <ofd:CompositeGraphicUnit>，供 CompositeObject 引用展开。
+  // 数科等第三方产物把 Form XObject 的内容放在这里（实测 tracemonkey 那份 226 个 Unit，
+  // 内含 226 处 Clips），引擎此前完全忽略，导致页面里 731 个图元渲染不出来。
+  async function parseCompositeUnits(resPath, zip) {
+    const units = {};
+    const xmlText = await readEntryText(zip, resPath);
+    if (!xmlText) return units;
+    const root = parseXml(xmlText).documentElement;
+    const list = child(root, "CompositeGraphicUnits");
+    if (!list) return units;
+    for (const u of children(list, "CompositeGraphicUnit")) {
+      const content = child(u, "Content");
+      const layers = content ? children(content, "Layer").map((l) => parseLayer(l)) : [];
+      units[attr(u, "ID")] = {
+        boundary: parseBox(attr(u, "Boundary")),
+        layers,
+      };
+    }
+    return units;
   }
 
   function parsePathObject(el, layerDp) {
@@ -1617,6 +1859,31 @@
     };
   }
 
+  // 解析 <ofd:CGTransform>/<ofd:Glyphs>：字符码位 -> 字形索引的显式映射。
+  //
+  // 为什么必须解析：TextCode 的文本只是「可搜索副本」，真实字形由 Glyphs 指定。
+  // 子集字体里相当多的码位没有 cmap 映射（例如 tracemonkey 第 10 页刻度标签
+  // 里的 `#`），浏览器按 Unicode 交给 @font-face 时查不到轮廓，
+  // 会按字体回退链显示成另一个符号 —— 表现就是「图表标签多出 # 等杂符号」。
+  // 拿到 Glyphs 后，引擎可以逐字定位，让缺字形的字符只影响自己。
+  function parseGlyphs(el) {
+    const cg = child(el, "CGTransform");
+    if (!cg) return null;
+    const g = child(cg, "Glyphs");
+    if (!g) return null;
+    const raw = (g.text || "").trim();
+    if (!raw) return null;
+    const gids = raw.split(/\s+/).map(Number);
+    if (!gids.length || gids.some((n) => !Number.isFinite(n))) return null;
+    const cp = +attr(cg, "CodePosition");
+    const cc = +attr(cg, "CodeCount");
+    return {
+      glyphs: gids,
+      codePosition: Number.isFinite(cp) ? cp : 0,
+      codeCount: Number.isFinite(cc) ? cc : gids.length,
+    };
+  }
+
   function parseTextObject(el, layerDp) {
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
@@ -1627,8 +1894,9 @@
       deltaY: attr(tc, "DeltaY"),
       // 仅剥离 XML 缩进产生的换行空白；保留行内首尾空格字形（它们按 DeltaX 占位，
       // 若误删会导致后续字符合并到窄间距重叠，见 1287页.ofd 段首缩进）
-      text: (tc.text || "").replace(/^\s*\n[\s\u00A0]*/, "").replace(/[\s\u00A0]*\n\s*$/, ""),
+      text: (tc.text || "").replace(/^\s*\n[\s ]*/, "").replace(/[\s ]*\n\s*$/, ""),
     }));
+    const glyphInfo = parseGlyphs(el);
     return {
       type: "text",
       boundary: parseBox(attr(el, "Boundary")),
@@ -1645,6 +1913,10 @@
       fillColor: fillEl ? parseColor(fillEl) : { r: 0, g: 0, b: 0, a: 1 },
       strokeColor: strokeEl ? parseColor(strokeEl) : null,
       textCodes,
+      // 逐字字形索引；为 null 表示该 TextObject 未提供 Glyphs
+      glyphs: glyphInfo ? glyphInfo.glyphs : null,
+      codePosition: glyphInfo ? glyphInfo.codePosition : 0,
+      codeCount: glyphInfo ? glyphInfo.codeCount : 0,
       drawParam: attr(el, "DrawParam") || layerDp,
     };
   }
@@ -1919,6 +2191,11 @@
       }
 
       const sealAttrs = svBytes ? extractSealAttrs(svBytes) : null;
+      const certValidity = svBytes
+        ? collectCerts(svBytes)
+            .map(extractCertValidity)
+            .filter(Boolean)
+        : [];
 
       signatures.push({
         id: attr(sig, "ID") || "",
@@ -1939,6 +2216,7 @@
         signatureDigest,
         signatureValueHex,
         sealAttrs,
+        certValidity,
         hasSignedValue: !!(svBytes && svBytes.length),
       });
     }
@@ -2155,16 +2433,24 @@
     }));
     const templateById = new Map(templates.map((t) => [t.id, t]));
 
-    const res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+    const res = {
+      fonts: {},
+      colorSpaces: {},
+      multiMedias: {},
+      drawParams: {},
+      compositeUnits: {},
+    };
     const publicRes = child(common, "PublicRes");
     const documentRes = child(common, "DocumentRes");
     if (publicRes)
       mergeRes(res, await parseRes(resolvePath(docPath, text(publicRes)), zip));
-    if (documentRes)
-      mergeRes(
-        res,
-        await parseRes(resolvePath(docPath, text(documentRes)), zip),
-      );
+    if (documentRes) {
+      const docResPath = resolvePath(docPath, text(documentRes));
+      mergeRes(res, await parseRes(docResPath, zip));
+      // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
+      // 故单独解析后挂到 res 上，供渲染 CompositeObject 时展开。
+      res.compositeUnits = await parseCompositeUnits(docResPath, zip);
+    }
     embeddedFontMap.clear();
     fontLoadCache.clear();
     fontIndexCache = null;
@@ -2354,18 +2640,63 @@
     return ok;
   }
 
-  function mapFontFamily(fontName) {
+  // 判断某个字体是否有内嵌字体文件可用（有则必须优先用内嵌的）
+  //
+  // fontId 传入时走精确匹配：同名不同 ID 的字体文件不同（实测 5 个 Calibri），
+  // 只按名字匹配会张冠李戴。查不到再退回按名字匹配，保持对旧产物的兼容。
+  //
+  // 注意变体后缀：res.fonts[id].fontName 可能是 "DengXian-Regular"，
+  // 而 mapFontFamily 里的 base 是 "DengXian"。registerEmbeddedFonts 两个 key 都登记，
+  // 这里也两种形态都试，否则带后缀的字体会被误判为「无内嵌」而走系统字体栈。
+  function hasEmbeddedFont(fontName, fontId) {
+    if (!fontName || !embeddedFontMap.size) return false;
+    const base = splitFontVariant(fontName).base || fontName;
+    if (fontId) {
+      if (embeddedFontMap.has("ofdf_" + fontId + "_" + base)) return true;
+      if (embeddedFontMap.has("ofdf_" + fontId + "_" + fontName)) return true;
+    }
+    if (embeddedFontMap.has(base)) return true;
+    if (embeddedFontMap.has(fontName)) return true;
+    const lower = base.toLowerCase();
+    for (const k of embeddedFontMap.keys()) {
+      const kl = k.toLowerCase();
+      if (kl === lower || kl.startsWith(lower + "-") || lower.startsWith(kl + "-")) return true;
+    }
+    return false;
+  }
+
+  // 字体 family 的选择顺序：
+  //   1) **内嵌字体**（OFD 包里带FontFile 的那个）—— 与 WPS/数科 一致，必须优先
+  //   2) 系统字体栈（builtinFontStack）—— 仅在无内嵌字体时兜底
+  //   3) 本地同名字体 → 4) 按字体名直接引用
+  //
+  // 旧顺序是「系统字体优先」，导致 Helvetica 被映射到系统 Arial、
+  // Calibri 被映射到系统 Calibri，内嵌字体永远加载不上 ——
+  // 表现就是自家 viewer 的字形与 PDF 原稿、和 WPS 都不一致。
+  // 修复前实测：数科那份 24 个字体里 Helvetica/Calibri 系列全部走系统字体。
+  //
+  // fontId 用于生成**唯一** family 名（见 uniqueFamily 注释）：
+  // 同名不同 ID 的多个内嵌字体必须各自注册，否则只有第一个生效。
+  function mapFontFamily(fontName, fontId) {
     const v = splitFontVariant(fontName);
     const base = v.base || fontName;
+    const familyName = uniqueFamily(fontId, base);
+    if (
+      (hasEmbeddedFont(fontName, fontId) || hasEmbeddedFont(base, fontId)) &&
+      embeddedLoaded.has(familyName)
+    ) {
+      // 内嵌字体确实已加载（@font-face 注册成功）：用唯一 family 名
+      return { family: '"' + cssFontName(familyName) + '",sans-serif', weight: v.weight, style: v.style, embedded: true, key: familyName };
+    }
+    // 声明了内嵌但字节缺失 / 加载失败：不锁定内嵌名，继续往下走系统栈兜底
     let family = builtinFontStack(base) || builtinFontStack(fontName);
     if (!family && localFontAvailable(base))
       family = '"' + cssFontName(base) + '",sans-serif';
     if (!family) {
-      ensureFontLoaded(base);
-      if (base !== fontName) ensureFontLoaded(fontName);
-      family = '"' + cssFontName(base) + '",sans-serif';
+      ensureFontLoaded(familyName, fontId);
+      family = '"' + cssFontName(familyName) + '",sans-serif';
     }
-    return { family, weight: v.weight, style: v.style };
+    return { family, weight: v.weight, style: v.style, embedded: false, key: familyName };
   }
 
   // ==================== 字体加载 ====================
@@ -2373,6 +2704,25 @@
   const FONT_EXTS = ["ttf", "otf", "woff2"];
   const fontLoadCache = new Map();
   const embeddedFontMap = new Map();
+  // 真正加载成功的内嵌 family 名集合（loadFontFace 从包里读到字节并注册 @font-face 后加入）。
+  // mapFontFamily 仅在此命中时才锁定内嵌唯一名；声明了内嵌但文件缺失/读取失败时，
+  // 继续走系统字体栈 / 本机同名字体 / 外部目录兜底，避免文字落在一个不存在的字体名上。
+  const embeddedLoaded = new Set();
+  // Font ID -> 唯一的 @font-face family 名
+  //
+  // 为什么必须按 ID 区分：OFD 允许同一个 FontName 声明多次（不同 ID 指向不同字体文件）。
+  // 实测 tracemonkey 产物里5 个不同 ID（121~125）都叫 Calibri，
+  // 各自的 cmap / 字形集完全不同（Font 122 有 `#` 的真实轮廓 gid 17，
+  // Font 123 则完全没有）。
+  // 若只用 fontName 做 key，ensureFontLoaded('Calibri') 只会加载**第一个**，
+  // 其余 4 个的 @font-face 从未注册 —— 浏览器静默回退到系统字体，
+  // 字形与度量全乱（第 13 页整页乱码的真凶）。
+  //
+  // 解决：family 名用 `<FontID>_<FontName>` 保证唯一，
+  // 同时把 cmap 也按这个唯一名缓存，hasGlyphFor 才能判准。
+  function uniqueFamily(fontId, fontName) {
+    return fontId ? "ofdf_" + fontId + "_" + (fontName || "unknown") : fontName;
+  }
 
   function resolveFontBase() {
     if (fontBase) return fontBase;
@@ -2380,7 +2730,7 @@
     const scripts = document.getElementsByTagName("script");
     for (let i = 0; i < scripts.length; i++) {
       const src = scripts[i].src || "";
-      if (/\/ofd\.js(\?|#|$)/.test(src)) {
+      if (/\/ofd(\.min)?\.js(\?|#|$)/.test(src)) {
         const dir = src.slice(0, src.lastIndexOf("/") + 1);
         fontBase = dir.replace(/[^/]*\/$/, "") + "font/";
         return fontBase;
@@ -2389,18 +2739,134 @@
     return "font/";
   }
 
-  function ensureFontLoaded(fontName) {
-    if (!fontName) return Promise.resolve(false);
-    if (fontLoadCache.has(fontName)) return fontLoadCache.get(fontName);
-    const p = loadFontFace(fontName).then(
-      (ok) => ok,
+  // familyName：唯一 family 名（uniqueFamily 产物）
+  // fontId：Font ID，用于在 embeddedFontMap 里精确定位字体文件（同名多 ID 时必需）
+  function ensureFontLoaded(familyName, fontId) {
+    if (!familyName) return Promise.resolve(false);
+    if (fontLoadCache.has(familyName)) return fontLoadCache.get(familyName);
+    const p = loadFontFace(familyName, fontId).then(
+      (ok) => {
+        if (ok) embeddedLoaded.add(familyName);
+        return ok;
+      },
       () => false,
     );
-    fontLoadCache.set(fontName, p);
+    fontLoadCache.set(familyName, p);
     return p;
   }
 
-  async function loadFontFace(fontName) {
+  // 码位 -> 字形索引 的反向能力（判断某字符在**内嵌字体**里是否真有轮廓）。
+  //
+  // 为什么需要：TextObject 的 Glyphs 里，查不到字形的码位会被转换器写成 gid 1，
+  // 但「gid 1」在不同子集字体里指向的东西完全不同（实测 Calibri 子集里
+  // gid 1 无人引用、gid 17 其实是 `>`），单看 Glyphs 无法判断某字符该不该画。
+  // 而浏览器拿不到轮廓时会走字体回退链，把整串文字的字形与度量全部打乱，
+  // 表现为「乱码」。
+  //
+  // 正确做法：解析内嵌字体自己的 cmap，直接回答「这个码位有没有轮廓」。
+  const fontCmapCache = new Map();
+
+  function parseSfntCmap(buf) {
+    const map = new Map();
+    try {
+      const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      if (dv.byteLength < 12) return map;
+      const numTables = dv.getUint16(4);
+      let cmapOff = -1,
+        cmapLen = 0;
+      for (let i = 0; i < numTables; i++) {
+        const o = 12 + i * 16;
+        const tag = String.fromCharCode(
+          dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3),
+        );
+        if (tag === "cmap") {
+          cmapOff = dv.getUint32(o + 8);
+          cmapLen = dv.getUint32(o + 12);
+          break;
+        }
+      }
+      if (cmapOff < 0 || cmapLen < 4) return map;
+      const n = dv.getUint16(cmapOff + 2);
+      // 优先 3,10(Unicode BMP) > 3,1(Windows BMP) > 0,x > 3,0(symbol)
+      let best = -1,
+        bestScore = -1;
+      for (let i = 0; i < n; i++) {
+        const r = cmapOff + 4 + i * 8;
+        const pid = dv.getUint16(r),
+          eid = dv.getUint16(r + 2);
+        const off = dv.getUint32(r + 4);
+        let score = 0;
+        if (pid === 3 && eid === 10) score = 5;
+        else if (pid === 3 && eid === 1) score = 4;
+        else if (pid === 0) score = 3;
+        else if (pid === 3 && eid === 0) score = 1;
+        if (score > bestScore) {
+          bestScore = score;
+          best = cmapOff + off;
+        }
+      }
+      if (best < 0) return map;
+      const fmt = dv.getUint16(best);
+      if (fmt === 4) {
+        const segX2 = dv.getUint16(best + 6),
+          seg = segX2 >> 1;
+        const endO = best + 14,
+          startO = endO + segX2 + 2;
+        const deltaO = startO + segX2,
+          rangeO = deltaO + segX2;
+        for (let s = 0; s < seg; s++) {
+          const end = dv.getUint16(endO + s * 2);
+          const start = dv.getUint16(startO + s * 2);
+          const delta = dv.getInt16(deltaO + s * 2);
+          const ro = dv.getUint16(rangeO + s * 2);
+          if (start === 0xffff) continue;
+          for (let c = start; c <= end && c !== 0x10000; c++) {
+            let g;
+            if (ro === 0) g = (c + delta) & 0xffff;
+            else {
+              const gi = rangeO + s * 2 + ro + (c - start) * 2;
+              if (gi + 1 >= dv.byteLength) continue;
+              g = dv.getUint16(gi);
+              if (g !== 0) g = (g + delta) & 0xffff;
+            }
+            if (g) map.set(c, g);
+          }
+        }
+      } else if (fmt === 12) {
+        const nGroups = dv.getUint32(best + 12);
+        for (let i = 0; i < nGroups; i++) {
+          const o = best + 16 + i * 12;
+          const sc = dv.getUint32(o),
+            ec = dv.getUint32(o + 4),
+            sg = dv.getUint32(o + 8);
+          for (let c = sc; c <= ec; c++) map.set(c, sg + (c - sc));
+        }
+      }
+    } catch (e) {
+      /* 解析失败按「无信息」处理 */
+    }
+    return map;
+  }
+
+  // 登记内嵌字体的 cmap（loadFontFace 拿到字节后调用）
+  function cacheFontCmap(fontName, bytes) {
+    if (!fontName || !bytes || fontCmapCache.has(fontName)) return;
+    try {
+      fontCmapCache.set(fontName, parseSfntCmap(bytes));
+    } catch (e) {
+      fontCmapCache.set(fontName, new Map());
+    }
+  }
+
+  // 该码位在指定内嵌字体里是否真有轮廓
+  function hasGlyphFor(fontName, codePoint) {
+    const cm = fontCmapCache.get(fontName);
+    if (!cm) return true; // 无信息 -> 不干预，保持原有行为
+    if (!cm.size) return true;
+    return cm.has(codePoint);
+  }
+
+  async function loadFontFace(familyName, fontId) {
     if (
       typeof FontFace === "undefined" ||
       typeof document === "undefined" ||
@@ -2408,18 +2874,38 @@
     )
       return false;
 
-    let emb = embeddedFontMap.get(fontName);
-    if (!emb) {
-      const lower = fontName.toLowerCase();
-      for (const [k, v] of embeddedFontMap) {
-        const kl = k.toLowerCase();
-        if (
-          kl === lower ||
-          kl.startsWith(lower + "-") ||
-          lower.startsWith(kl + "-")
-        ) {
-          emb = v;
-          break;
+    // 按 Font ID 精确取。key 形态由 registerEmbeddedFonts 决定：
+    //   uniqueFamily(fontId, base) 与 uniqueFamily(fontId, rawName) 两个都会登记，
+    //   这里逐个试；都 miss 再退回按 family 名/字体名匹配。
+    let emb = null;
+    if (fontId && familyName) {
+      const m = /^ofdf_[^_]+_(.+)$/.exec(familyName);
+      const rawName = m ? m[1] : familyName;
+      emb =
+        embeddedFontMap.get(familyName) ||
+        embeddedFontMap.get(rawName) ||
+        null;
+    }
+    if (!emb && familyName) {
+      // familyName 形如 ofdf_<id>_<name>，取尾部原名做匹配
+      const m = /^ofdf_[^_]+_(.+)$/.exec(familyName);
+      const rawName = m ? m[1] : familyName;
+      emb =
+        embeddedFontMap.get(familyName) ||
+        embeddedFontMap.get(rawName) ||
+        null;
+      if (!emb) {
+        const lower = rawName.toLowerCase();
+        for (const [k, v] of embeddedFontMap) {
+          const kl = k.toLowerCase();
+          if (
+            kl === lower ||
+            kl.startsWith(lower + "-") ||
+            lower.startsWith(kl + "-")
+          ) {
+            emb = v;
+            break;
+          }
         }
       }
     }
@@ -2428,30 +2914,38 @@
         const fontPath = resolvePath(emb.baseDir + "/_.x", emb.fontFile);
         const bytes = await readEntry(emb._zip, fontPath);
         if (bytes) {
-          const face = new FontFace(fontName, bytes.buffer);
+          const face = new FontFace(familyName, bytes.buffer);
           await face.load();
           document.fonts.add(face);
+          // 同步解析 cmap：供 hasGlyphFor 判断某码位在本格栅字体里是否真有轮廓
+          // 按唯一 family 名缓存 —— 同名不同 ID 的字体 cmap 完全不同
+          cacheFontCmap(familyName, bytes);
           return true;
         }
       } catch (e) {
-        console.warn("[OFD] 加载内嵌字体失败：" + fontName, e);
+        console.warn("[OFD] 加载内嵌字体失败：" + familyName, e);
       }
     }
 
     const index = await fetchFontIndex();
     let loaded = false;
     if (index) {
+      // 外部字体目录按**原始字体名**索引，不带 ID 前缀
+      const rawName = /^ofdf_[^_]+_(.+)$/.exec(familyName);
+      const lookupName = rawName ? rawName[1] : familyName;
       for (const ext of FONT_EXTS) {
-        const file = fontName + "." + ext;
+        const file = lookupName + "." + ext;
         if (index.indexOf(file) === -1) continue;
         const url =
-          resolveFontBase() + encodeURIComponent(fontName) + "." + ext;
+          resolveFontBase() + encodeURIComponent(lookupName) + "." + ext;
         try {
           const res = await fetch(url);
           if (!res.ok) continue;
-          const face = new FontFace(fontName, await res.arrayBuffer());
+          const ab = await res.arrayBuffer();
+          const face = new FontFace(familyName, ab);
           await face.load();
           document.fonts.add(face);
+          cacheFontCmap(familyName, new Uint8Array(ab));
           loaded = true;
           break;
         } catch (e) {
@@ -2460,7 +2954,12 @@
       }
     }
     if (!loaded) {
-      console.warn('[OFD] 未找到映射字体 "' + fontName + '"，已回退默认字体');
+      // 有内置映射或本机同名字体可兜底时，mapFontFamily 会用系统字体渲染（非默认字体），不再告警
+      const m = /^ofdf_[^_]+_(.+)$/.exec(familyName);
+      const base = m ? m[1] : familyName;
+      if (!(builtinFontStack(base) || builtinFontStack(familyName) || localFontAvailable(base))) {
+        console.warn('[OFD] 未找到字体 "' + familyName + '"，且无系统映射，回退 sans-serif');
+      }
     }
     return loaded;
   }
@@ -2486,8 +2985,58 @@
     return fontIndexCache;
   }
 
+  // ==================== 内嵌字体登记 ====================
+  // 把 OFD 资源里声明了 <ofd:FontFile> 的字体登记进 embeddedFontMap。
+  //
+  // 为什么必须有这一步：embeddedFontMap 原本只读不写，导致：
+  //   1) hasEmbeddedFont() 恒返回 false  -> mapFontFamily 永远走 builtinFontStack
+  //   2) loadFontFace() 找不到 emb       -> 只能退回 font/ 目录
+  // 而 font/ 目录不存在，于是全部字体落sans-serif（Windows 上解析为黑体）——
+  // 这就是「所有字体都显示为黑体」的直接原因。
+  //
+  // 参照 ensureImageDataUrl(mm) 的做法：res.fonts[id] 本身就带
+  // fontFile / fontBaseDir / _zip，直接登记即可，无需额外 I/O。
+  //
+  // **登记的 key 必须与 mapFontFamily 生成的 family 名严格一致**，否则
+  // loadFontFace 按familyName 反查会miss。这里有两条命名路径：
+  //   mapFontFamily → uniqueFamily(fontId, v.base || fontName)
+  //   v.base 是 splitFontVariant 剥掉 -Regular/-Bold 等后缀后的**基名**
+  // 所以必须用同一个 base 拼 key。实测踩过的坑：
+  //   res.fonts[1289].fontName = "DengXian-Regular"
+  //   若按原名登记 → key "ofdf_1289_DengXian-Regular"
+  //   但 mapFontFamily 产出的是 "ofdf_1289_DengXian"（base）
+  //   查找 miss → 退回 font/ 目录 → 加载失败 → sans-serif → 黑体
+  function registerEmbeddedFonts(fonts) {
+    if (!fonts) return;
+    for (const key in fonts) {
+      const f = fonts[key];
+      if (!f || !f.fontFile || !f._zip) continue;
+      const name = f.fontName || f.familyName;
+      if (!name) continue;
+      const entry = {
+        fontFile: f.fontFile,
+        baseDir: f.fontBaseDir || "",
+        _zip: f._zip,
+      };
+      // 基名（与 mapFontFamily 的 uniqueFamily 参数一致）—— 主路径，必须命中
+      const base = splitFontVariant(name).base || name;
+      const uniqBase = uniqueFamily(key, base);
+      if (!embeddedFontMap.has(uniqBase)) embeddedFontMap.set(uniqBase, entry);
+      // 原名（含变体后缀）—— mapFontFamily 未剥后缀时用得到
+      const uniqRaw = uniqueFamily(key, name);
+      if (!embeddedFontMap.has(uniqRaw)) embeddedFontMap.set(uniqRaw, entry);
+      // 裸名条目，兼容按字体名查找的旧路径
+      if (!embeddedFontMap.has(base)) embeddedFontMap.set(base, entry);
+      if (!embeddedFontMap.has(name)) embeddedFontMap.set(name, entry);
+    }
+  }
+
   function setFontBase(base) {
     fontBase = base || "";
+  }
+
+  function getEmbeddedFontNames() {
+    return Array.from(embeddedFontMap.keys());
   }
 
   // ==================== SVG 元素渲染 ====================
@@ -2561,7 +3110,7 @@
 
   function renderTextObject(obj, res) {
     const font = res.fonts[obj.fontId] || {};
-    const fv = mapFontFamily(font.fontName);
+    const fv = mapFontFamily(font.fontName, obj.fontId);
     const hScale = obj.hScale != null ? obj.hScale : 1;
     const ctm = obj.ctm;
     const bx = obj.boundary.x,
@@ -2570,15 +3119,48 @@
     const weight = fv.weight || (obj.weight >= 700 ? "bold" : "normal");
     const fontStyle = fv.style || (obj.italic ? "italic" : "normal");
 
-    // 生成单个 TextCode 的 tspan 片段：
-    // - 可合并（无需逐字符 rotate）：输出一个 tspan，x/y 用值列表保留每字符绝对坐标，
-    //   文本为整段内容，textContent 与逐字符 tspan 完全一致（渲染/搜索/选中不受影响）。
-    // - readDirection=90/270 需逐字符 rotate：保持逐字符 tspan + rotate。
-    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection) {
+    // 渲染单个 TextCode 的 tspan 片段。
+    //
+    // 「无轮廓字符」的判定：**cmap 与 Glyphs 双重确认**，缺一不可。
+    //
+    // 为什么不能只看 cmap：子集字体里大量字符用**私有区假码**（U+E000–U+E0FF）。
+    // 实测 Calibri-Bold 子集：n/k/h/c/o/A 这些正文常用字母的 cmap 里全都没有，
+    // 只有等量的私有区条目。只看 cmap 会把第 6 页的 Anchor / Branch / AnchorTable
+    // 整片误杀（实测 117 处）。
+    //
+    // 为什么不能只看 Glyphs：转换器对查不到字形的码位写 gid 1，
+    // 但 gid 1 在不同子集字体里指向的东西完全不同（实测 Calibri 子集
+    // gid 1 无人引用、gid 17 其实是 `>`），
+    // 「gid===1 就跳过」会漏判 —— 第 11 页的 `#` 拿到 gid 17 就被画了出来。
+    //
+    // 正确判据（两者都指向「无轮廓」才跳过）：
+    //   1. cmap 里查不到该码位（hasGlyphFor 为false），**且**
+    //   2. Glyphs 对应位置是占位 gid（gid === 1），或没有 Glyphs 信息
+    // 这样：私有区假码的正文靠 Glyphs 的非占位 gid 保留；
+    //真正无轮廓的 `#` 因 cmap 查不到且 gid 为占位而被剔除。
+    //
+    // 跳过后**保留 DeltaX 占位**，后续字符绝对坐标不受影响，
+    // 与 WPS/Acrobat 打开原 PDF 的表现一致（原 PDF 那格也是空白）。
+    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection, fontName, glyphs) {
       const txt = tc.text;
       if (!txt) return "";
       const dxArr = expandDelta(tc.deltaX);
       const dyArr = expandDelta(tc.deltaY);
+      // 预先算出每个字符是否可绘制
+      const draw = [];
+      let anySkip = false;
+      for (let i = 0; i < txt.length; i++) {
+        const cp = txt.codePointAt(i);
+        let ok = true;
+        if (!hasGlyphFor(fontName, cp)) {
+          // cmap 无此码位 —— 再看 Glyphs 是否为占位
+          const gid = glyphs ? glyphs[i] : undefined;
+          const isPlaceholder = gid === undefined || gid === 1;
+          ok = !isPlaceholder; // 有真字形（私有区假码）-> 仍要画
+        }
+        draw.push(ok);
+        if (!ok) anySkip = true;
+      }
       let ox = ox0,
         oy = oy0;
       if (readDirection === 90 || readDirection === 270) {
@@ -2586,22 +3168,38 @@
         let s = "";
         for (let i = 0; i < txt.length; i++) {
           const adjX = hScale !== 1 ? ox / hScale : ox;
-          s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
+          if (draw[i])
+            s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
           ox += i < dxArr.length ? dxArr[i] : 0;
           oy += i < dyArr.length ? dyArr[i] : 0;
         }
         return s;
       }
-      let xs = "",
-        ys = "";
+      // 常规方向：可合并为一个 tspan；但若需要跳过部分字符，则逐字符输出，
+      // 跳过字符用空 tspan 占位（保留坐标推进，不绘制任何东西）。
+      if (!anySkip) {
+        let xs = "",
+          ys = "";
+        for (let i = 0; i < txt.length; i++) {
+          const adjX = hScale !== 1 ? ox / hScale : ox;
+          xs += (i ? " " : "") + adjX.toFixed(4);
+          ys += (i ? " " : "") + oy.toFixed(4);
+          ox += i < dxArr.length ? dxArr[i] : 0;
+          oy += i < dyArr.length ? dyArr[i] : 0;
+        }
+        return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
+      }
+
+      let s = "";
       for (let i = 0; i < txt.length; i++) {
         const adjX = hScale !== 1 ? ox / hScale : ox;
-        xs += (i ? " " : "") + adjX.toFixed(4);
-        ys += (i ? " " : "") + oy.toFixed(4);
+        // 无轮廓字符 -> 输出空 tspan 只推进坐标，不绘制
+        const body = draw[i] ? escapeXml(txt[i]) : "";
+        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}">${body}</tspan>`;
         ox += i < dxArr.length ? dxArr[i] : 0;
         oy += i < dyArr.length ? dyArr[i] : 0;
       }
-      return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
+      return s;
     }
 
     // CTM 分支：使用 SVG matrix 变换（含旋转），文字坐标为局部坐标
@@ -2611,7 +3209,7 @@
       const fontSize = obj.size != null ? obj.size : 3;
       const parts = [];
       for (const tc of obj.textCodes) {
-        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0));
+        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0, fv.key || font.fontName, obj.glyphs));
       }
       const transform = `translate(${bx} ${by}) matrix(${ctm[0]} ${ctm[1]} ${ctm[2]} ${ctm[3]} ${ctm[4]} ${ctm[5]})`;
       return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}" transform="${transform}" xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
@@ -2622,7 +3220,7 @@
     const parts = [];
     for (const tc of obj.textCodes) {
       parts.push(
-        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection),
+        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection, fv.key || font.fontName, obj.glyphs),
       );
     }
     let transform = "";
@@ -2661,8 +3259,33 @@
         return renderTextObject(obj, res);
       case "image":
         return await renderImageObject(obj, res);
+      case "composite":
+        return renderCompositeObject(obj, res);
     }
     return "";
+  }
+
+  // 展开 <ofd:CompositeObject>：把 DocumentRes 里对应 CompositeGraphicUnit 的
+  // 内部图元套上「Unit 边界 → 页面 CTM/Boundary」的组合变换后渲染。
+  //
+  // OFD 渲染语义与 PathObject 一致：图元实际位置 = Boundary原点 + CTM·(内部路径点)，
+  // Unit 内部的图元用 Unit 自己的 Boundary 作为局部原点，因此合成矩阵为
+  //   页面变换 = translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
+  function renderCompositeObject(obj, res) {
+    const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
+    if (!unit || !unit.layers) return "";
+    const b = obj.boundary;
+    const ub = unit.boundary;
+    const m = obj.ctm;
+    // 组装：先移到页面 Boundary，再按 CTM 变换，最后抵消 Unit 的局部原点
+    let tf = `translate(${b.x} ${b.y})`;
+    if (m) tf += ` matrix(${m.join(" ")})`;
+    if (ub && (ub.x !== 0 || ub.y !== 0)) tf += ` translate(${-ub.x} ${-ub.y})`;
+    const inner = unit.layers
+      .map((layer) => (layer.objects || []).map((o) => renderObject(o, res)).join(""))
+      .join("");
+    if (!inner) return "";
+    return `<g transform="${tf}">${inner}</g>`;
   }
 
   async function getTemplateLayers(tpl, ofd) {
@@ -2846,15 +3469,19 @@
     if (_profiling)
       mark("页面 " + (pageIndex + 1) + "：加载模板/图层", pgTag);
 
+    // 必须**先**登记内嵌字体，再收集字体名 ——
+    // hasEmbeddedFont() 依赖 embeddedFontMap，顺序颠倒会导致全部字体被判为「无内嵌」
+    // 而退回系统字体栈（build/font/ 是空目录），字形与 PDF 原稿、WPS 都不一致。
+    registerEmbeddedFonts(doc.res.fonts);
+
     const imgIds = new Set();
-    const fontNames = new Set();
+    // 收集 **Font ID**（而不是字体名）：同名不同 ID 的内嵌字体必须各自预取，
+    // 否则只有第一个注册成功，其余静默回退系统字体（第 13 页整页乱码的真凶）。
+    const fontIds = new Set();
     for (const layer of layers) {
       for (const obj of layer.objects) {
         if (obj.type === "image") imgIds.add(obj.resourceId);
-        if (obj.type === "text") {
-          const f = doc.res.fonts[obj.fontId];
-          if (f && f.fontName) fontNames.add(f.fontName);
-        }
+        if (obj.type === "text" && obj.fontId != null) fontIds.add(obj.fontId);
       }
     }
 
@@ -2863,17 +3490,28 @@
       const mm = doc.res.multiMedias[id];
       if (mm && !mm.dataUrl) prefetchTasks.push(ensureImageDataUrl(mm));
     }
+    // 字体预取：与 mapFontFamily 的优先级保持一致 ——
+    // **只要有内嵌字体就必须加载**（内嵌优先于系统字体栈），
+    // 否则 Helvetica/Calibri 这类命中 builtinFontStack 的名字会被跳过预取，
+    // SVG 用系统字体渲染，字形与 PDF 原稿、WPS 都不一致。
     let needFontIndex = false;
-    for (const name of fontNames) {
+    for (const fid of fontIds) {
+      const f = doc.res.fonts[fid];
+      const name = f && f.fontName;
+      if (!name) continue;
       const v = splitFontVariant(name);
+      const family = uniqueFamily(fid, v.base || name);
+      if (hasEmbeddedFont(name, fid) || hasEmbeddedFont(v.base, fid)) {
+        prefetchTasks.push(ensureFontLoaded(family, fid));
+        continue;
+      }
       if (
         !builtinFontStack(v.base) &&
         !builtinFontStack(name) &&
         !localFontAvailable(v.base)
       ) {
         needFontIndex = true;
-        prefetchTasks.push(ensureFontLoaded(v.base));
-        if (v.base !== name) prefetchTasks.push(ensureFontLoaded(name));
+        prefetchTasks.push(ensureFontLoaded(family, fid));
       }
     }
     if (needFontIndex) prefetchTasks.push(fetchFontIndex());
@@ -2982,6 +3620,18 @@
     return s;
   }
 
+  // ASN.1 时间（UTCTime 12 位 / GeneralizedTime 14 位）→ "YYYY-MM-DD HH:MM:SS"（UTC）
+  function formatAsn1Time(s) {
+    const ms = asn1TimeToMs(s);
+    if (!isFinite(ms)) return s || "";
+    const d = new Date(ms);
+    const p = (v) => (v < 10 ? "0" + v : "" + v);
+    return (
+      d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) +
+      " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds())
+    );
+  }
+
   async function getSignatures(ofd) {
     const doc = ofd.document;
     const sigs = doc.signatures || [];
@@ -3043,6 +3693,10 @@
           signatureDigest: s.signatureDigest || "",
           signatureValueHex: s.signatureValueHex || "",
           sealAttrs,
+          certValidity: (s.certValidity || []).map((c) => ({
+            notBefore: formatAsn1Time(c.notBefore),
+            notAfter: formatAsn1Time(c.notAfter),
+          })),
           pages: pageNums,
           positions,
           sealImage,
@@ -3089,6 +3743,7 @@
     },
   };
 
+  OFD.version = "1.0.0";
   global.OFD = OFD;
   if (typeof module !== "undefined" && module.exports) module.exports = OFD;
 })(typeof window !== "undefined" ? window : this);

@@ -1,267 +1,347 @@
-# OFD Viewer
+# OFD Viewer & Rendering Engine
 
-A browser-based OFD (GB/T 33190) document viewer rendered with pure SVG. Zero dependencies, no build step.
+A browser-based OFD (GB/T 33190, electronic document storage and exchange — layout documents) viewer rendered with **pure SVG vectors, zero runtime dependencies, no build step**.
+
+English | [简体中文](README.zh-cn.md)
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## Features
+## What this is
 
-- **SVG vector rendering**: pages scale without loss of quality; text is selectable and searchable
+OFD is the Chinese national standard format for electronic official documents (similar to PDF, but tailored to Chinese typography and electronic seals). This project provides:
 
-- **Digital signatures**: seal parsing, file-digest comparison (SM3/SHA), certificate info display. **Verification boundary: file-digest comparison only** — no signature-value (RSA/SM2), certificate-chain, or timestamp verification (see [docs/ofd.md](docs/ofd.md))
+| Capability | Notes |
+| --- | --- |
+| **OFD preview** | Pure front-end parsing and rendering; vectors scale losslessly, text stays selectable and searchable |
+| **Digital signatures** | Signature parsing, SM2 signature-value verification, file digest comparison (SM3/SHA), certificate and seal validity checks |
+| **Electronic seals** | Third-party seal-provider callback, custom seal placement and removal |
+| **Full-text search** | Cross-page search with precise per-character highlighting |
+| **OFD → PDF** | Pure front-end conversion, zero dependencies (`build/toPdf.js`) |
+| **PDF → OFD** | Node CLI script / npm package (`build/pdf2ofd.js`, beta) |
 
-- **Seal stamping**: third-party seal retrieval, custom seal placement and removal
+## Quick start
 
-- **Search**: full-text search across pages with per-character highlight
+### Option 1: just run it (no build)
 
-- **View controls**: zoom (auto / page width / actual size / custom), rotation (90° steps), thumbnail sidebar
-
-- **File loading**: URL, local file, and drag-and-drop
-
-- **Print & download**: print in a new window, download the current document
-
-- **PDF conversion**: pure front-end OFD → PDF conversion with a live progress modal and automatic download (powered by toPdf.js)
-
-- **Cross-platform**: works in modern browsers (Chrome 80+, Firefox 78+, Safari 14+, Edge 80+) and Node.js
-
-- **Lightweight**: zero dependencies, no build step required, just serve static files
-
-## Directory Structure
-
-```
-ofd-viewer/
-├── build/
-│   ├── ofd.js      # Core engine: OFD parsing, SVG rendering, file-digest comparison (SM3, IIFE, exposes global OFD)
-│   ├── ofd.min.js  # Minified core engine (generated from ofd.js via terser)
-│   └── toPdf.js         # OFD → PDF conversion (pure front-end, see docs/toPdf.md)
-├── font/                # Supplemental fonts (auto-loaded for unmapped OFD font names)
-├── web/
-│   ├── viewer.html      # Viewer page
-│   ├── viewer.css       # PDF.js-style styling
-│   ├── viewer.js        # Application logic (vanilla JS, no framework)
-│   └── images/          # SVG icons
-├── docs/
-│   ├── ofd.md           # Core engine docs (API, design philosophy, call flows)
-│   ├── viewer.md        # Viewer docs (API, integration examples, call flows)
-│   ├── toPdf.md         # OFD → PDF conversion docs (API, examples, limitations)
-│   ├── ofd.zh-cn.md     # 核心引擎文档（中文）
-│   ├── viewer.zh-cn.md   # 预览器文档（中文）
-│   └── toPdf.zh-cn.md    # OFD → PDF 转换文档（中文）
-└── test/
-    ├── example-basic.html           # Core engine open-API demo (load / renderPage / getSignatures / verifySignature ...)
-    ├── example-intro.html           # Core engine walkthrough (embedded docs + live demos)
-    ├── benchmark.html               # Performance profiling (per-phase timing: load / template / page / signature / render)
-    ├── example-topdf.html           # OFD → PDF conversion demo
-    ├── example-seal.html            # Seal placement (third-party integration demo)
-    └── ofdFile/                     # Sample OFD files (incl. GB/T 33190 conformance samples 6.1.x / 6.2.x, 999.ofd invoice)
-```
-
-## Browser Compatibility
-
-| Browser | Minimum Version |
-| ------- | --------------- |
-| Chrome  | 80+             |
-| Firefox | 78+             |
-| Safari  | 14+             |
-| Edge    | 80+             |
-
-> **Note**: PDF conversion requires `CompressionStream` API (Chrome 80+, Firefox 113+, Safari 16.4+).
-
-## Usage Notes
-
-Before integrating the OFD viewer into your application, consider trimming the following to keep your bundle small:
-
-- **`test/`** **folder**: test pages and sample OFD files, for demo purposes only
-
-- **`docs/`** **folder**: project documentation, not required at runtime
-
-After trimming, the viewer runs with just `build/ofd.js`, `build/toPdf.js`, `web/` and `font/`.
-
-## File Size Reference
-
-| File                | Description              | Size (approx.) |
-| ------------------- | ------------------------ | -------------- |
-| `build/ofd.js`      | Core engine (unminified) | \~113 KB       |
-| `build/ofd.min.js`  | Core engine (minified)   | \~54 KB        |
-| `build/toPdf.js`    | PDF conversion module    | \~60 KB        |
-| `web/viewer.js`     | Viewer application logic | \~82 KB        |
-| `web/viewer.css`    | Viewer styles            | \~42 KB        |
-
-## Quick Start
-
-No build required. Serve with any HTTP server (browsers cannot load OFD files via `file://`):
+Clone and serve over any HTTP server:
 
 ```bash
-cd ofd-viewer
+git clone https://gitee.com/LaoJia803/ofd-core.git
+cd ofd-core
 python -m http.server 8090
 ```
 
-Open:
+Then open:
 
 ```
 http://127.0.0.1:8090/web/viewer.html
 ```
 
-### Alternative HTTP Servers
-
-**Node.js (http-server):**
+Equivalent commands:
 
 ```bash
-npx http-server -p 8090
+npx http-server -p 8090# Node
+npx serve -p 8090           # Node
+php -S 127.0.0.1:8090      # PHP
+ruby -run -e httpd . -p 8090  # Ruby
 ```
 
-**Node.js (serve):**
+> **Why HTTP is required rather than `file://`**: the viewer loads OFD files by URL via `fetch`, which browsers block under `file://`.
+> Opening `web/viewer.html` directly still shows the UI, but you must pick a file with the "Open OFD file" toolbar button.
+
+### Option 2: embed in your own app
+
+Include the engine and render in two lines:
+
+```html
+<script src="build/ofd.min.js"></script>
+<script>
+  const ofd = await OFD.load('document.ofd');
+  const svg = await OFD.renderPage(ofd, 0, { width: 800 });
+  document.body.appendChild(svg);
+</script>
+```
+
+Full API reference: [core engine docs](docs/ofd.md).
+
+### Option 3: PDF → OFD from the command line
 
 ```bash
-npx serve -p 8090
+npm install
+node build/pdf2ofd.js input.pdf output.ofd
 ```
 
-**PHP:**
+Or as an npm package:
 
 ```bash
-php -S 127.0.0.1:8090
+npm install pdf2ofd pdfjs-dist
+pdf2ofd input.pdf output.ofd
 ```
 
-**Ruby:**
+See the [PDF → OFD docs](docs/pdf2ofd.md).
+
+## Building
+
+Sources live in `src/` (runs in both browser and Node), assembled with esbuild and minified with terser:
 
 ```bash
-ruby -run -e httpd . -p 8090
+npm install# esbuild / terser / pdfjs-dist
+npm run build                # → build/ofd.js, build/ofd.min.js, dist/ofdjs-<version>-dist.zip
+npm run build:pdf2ofd        # → dist/pdf2ofd/ (publishable npm package)
 ```
+
+`build.js` reads `version` from `package.json` and writes it into the engine banner, `OFD.version`, and the dist zip name, so the three always stay in sync.
+
+## Layout
+
+```
+ofd-core/
+├── build/                    # build outputs + build scripts
+│   ├── ofd.js                # core engine, unminified (~177 KB)
+│   ├── ofd.min.js                # core engine, minified (~97 KB) — this is what you load
+│   ├── toPdf.js              # OFD → PDF module (~61 KB)
+│   ├── pdf2ofd.js            # PDF → OFD script (Node, beta, ~75 KB)
+│   ├── build.js              # engine build + distribution zip
+│   └── build-pdf2ofd.js      # assembles pdf2ofd.js into an npm package
+├── src/                      # engine sources (22 files)
+│   ├── index.js              # public API surface
+│   ├── core/                 # parsing: zip / parser / page / res / signature / verify / seal / asn1 / md / image
+│   ├── display/              # rendering: api / svg / font
+│   └── shared/               # utils: util / xml / color / path / lru
+├── web/                      # viewer (viewer.html / css / js, ~175 KB)
+├── font/                     # external font drop-in (created by `npm run build`; needs a directory listing to serve)
+├── external/                 # third-party vendored code: sm-crypto.js (SM2/SM3, ~42 KB)
+├── docs/                     # detailed documentation (bilingual)
+├── dist/                     # build output (distribution zip + npm package)
+├── test/                     # demo pages and OFD samples
+├── LICENSE                   # Apache-2.0
+└── 免责声明.md# disclaimer (Chinese)
+```
+
+### Minimal deployment
+
+Trim by what you actually need:
+
+| Keep | Size | Why |
+| --- | --- | --- |
+| `build/ofd.min.js` | ~97 KB | **required**, the core engine |
+| `build/toPdf.js` | ~61 KB | only for OFD → PDF |
+| `external/sm-crypto.js` | ~42 KB | only for signature verification |
+| `web/` | ~175 KB | only for the full viewer |
+| `font/` (repo root) | created by `npm run build` | external-font drop-in for unmapped OFD font names; the served folder must expose a **directory listing** to take effect |
+
+**Safe to delete**: `src/` (sources, build-time only), `external/pdf.min.js` (unused), `docs/`, `test/`, `build/ofd.js` (unminified), `build/pdf2ofd.js` and `build/build*.js` (Node-side).
+
+The absolute minimum for rendering is just `build/ofd.min.js`. External fonts are optional: `npm run build` creates a `font/` folder at the package root, which the engine auto-detects (from the `ofd.min.js` location) as the external font directory — drop `字体原名.ttf|.otf|.woff2` there and no `OFD.setFontBase()` call is needed. That folder must be served with a **directory listing** (nginx `autoindex`, or `serve`/`http-server`), otherwise the index fetch fails and external fonts won't load; in that case rendering still falls back to OFD-embedded fonts and the built-in system-stack mapping. Call `OFD.setFontBase('your/path/')` only to point somewhere else.
+
+### File sizes
+
+| File | Description | Size |
+| --- | --- | --- |
+| `build/ofd.js` | core engine, unminified | ~177 KB |
+| `build/ofd.min.js` | core engine, minified | ~97 KB |
+| `build/toPdf.js` | OFD → PDF module | ~61 KB |
+| `build/pdf2ofd.js` | PDF → OFD script (Node, beta) | ~75 KB |
+| `external/sm-crypto.js` | Chinese national crypto library | ~42 KB |
+| `web/viewer.js` | viewer application logic | ~84 KB |
+| `web/viewer.css` | viewer styles (icons inlined as data URIs) | ~91 KB |
 
 ## Usage
 
-### URL Parameters
+### URL parameters
 
-| Parameter | Description                                          |
-| --------- | ---------------------------------------------------- |
-| `file`    | OFD file URL, defaults to `../test/ofdFile/999.ofd`  |
-| `page`    | Page to jump to after opening (1-based)              |
-| `rotate`  | Initial rotation angle (multiples of 90°, clockwise) |
-| `search`  | Open the search bar and run a search automatically   |
+| Parameter | Description |
+| --- | --- |
+| `file` | OFD file URL (if omitted, nothing loads automatically — use the toolbar button) |
+| `page` | jump to a page on open (1-based) |
+| `rotate` | initial rotation in degrees (multiples of 90, clockwise) |
+| `search` | open the search bar and run a search automatically |
 
-```text
-http://127.0.0.1:8090/web/viewer.html?file=../test/ofdFile/999.ofd&page=3&rotate=90&search=发票
+```
+http://127.0.0.1:8090/web/viewer.html?file=../test/ofdFile/999.ofd&page=3&rotate=90&search=invoice
 ```
 
-### Integrating into Third-Party Systems
-
-The viewer mounts its extension capabilities on the global `OFD` object:
+### Core engine API
 
 ```js
-// Listen to page changes
-OFD.onPageChange((page, total) => console.log(page + '/' + total));
+const ofd = await OFD.load('999.ofd');              // load and parse
+const svg = await OFD.renderPage(ofd, 0);           // render a page as an SVG element
+const sigs = await OFD.getSignatures(ofd);          // list digital signatures
+const result = await OFD.verifySignature(ofd, 0);   // SM2 verify + digest compare + validity
+OFD.setFontBase('../assets/font/');                 // override the font/ directory URL
+```
 
-// Register a seal-retrieval callback (fires when the user clicks the "Seal" button)
-OFD.onGetSeal(async () => {
+**Accepted `load` sources**:
+
+```js
+await OFD.load('https://example.com/document.ofd');  // URL (javascript:/file:/data: rejected)
+await OFD.load(fileInput.files[0]);                  // File / Blob
+await OFD.load(arrayBuffer);                         // ArrayBuffer
+await OFD.load(uint8Array);                          // Uint8Array
+```
+
+**Rendering and queries**:
+
+```js
+const svgString  = await OFD.renderPageToString(ofd, 0);  // SVG markup
+const svgElement = await OFD.renderPage(ofd, 0);           // SVG DOM element
+const pages      = await OFD.renderAll(ofd);                // all pages
+OFD.getPageCount(ofd);                                      // page count
+await OFD.getPageDimensions(ofd, 0);                        // { width, height, unit: 'mm' }
+OFD.getDocumentInfo(ofd);                                   // document metadata
+```
+
+**Profiling** (useful when diagnosing performance on large documents):
+
+```js
+OFD.setProfiling(true);
+await OFD.renderPage(ofd, 0);
+console.table(OFD.getLastProfile());  // per-stage timings
+```
+
+### Viewer extension API
+
+The viewer attaches extension hooks to the global `OFD` object (see the [viewer docs](docs/viewer.md)):
+
+```js
+OFD.onPageChange((page, total) => console.log(page + '/' + total)); // page changes
+OFD.goToPage(3);                                                     // navigate to page 3
+OFD.onGetSeal(async () => {                // seal provider callback
   OFD.setSeal({ sealImg: await fetchSeal(), width: 40, height: 40 });
 });
-
-// Listen to seal changes and submit to the backend
-OFD.onSealChange((list, action) => saveSeals(list));
+OFD.onSealChange((list, action) => saveSeals(list));                // seal placed/removed
 ```
 
-## Core Engine API
+## Signature verification boundaries
 
-```js
-const ofd = await OFD.load('999.ofd');              // Load and parse
-const svg = await OFD.renderPage(ofd, 0);           // Render a page as SVG DOM
-const sigs = await OFD.getSignatures(ofd);          // Get digital signatures
-const result = await OFD.verifySignature(ofd, 0);   // File-digest comparison (not full verification, see boundary below)
-OFD.setFontBase('../assets/font/');                 // Override font/ directory URL
-```
+Read this before relying on this project's verification results.
 
-> **Verification boundary**: `verifySignature` currently performs **file-digest comparison only** — it compares the `References[].CheckValue` registered in the signature against freshly computed digests to detect whether protected files have been modified or are missing.
-> **Not implemented**: signature-value verification (RSA / SM2 public-key verification), certificate-chain verification, timestamp (TSA) verification, and protection-scope / stowaway-file detection.
-> `CheckValue` is stored inside the OFD file itself and can be recomputed along with tampered content, so `valid: true` only means the file is self-consistent — it **does not prove the signature is authentic**; seals and signature values are parsed for display only. The full boundary is documented in [docs/ofd.md](docs/ofd.md).
+**Implemented**:
 
-### Common Operations
+- **SM2 signature-value verification** — verifies the GB/T 38540 SES `toSign` DER using the signer's certificate public key
+- **File digest comparison** — recomputes each `References[].CheckValue` with SM3 / SHA and compares, detecting modified or missing protected files
+- **Validity period checks** — whether the seal's and all embedded certificates' `notBefore`/`notAfter` cover the **signing time**
 
-**Load from different sources:**
+**Not implemented**:
 
-```js
-// From URL
-const ofd = await OFD.load('https://example.com/document.ofd');
+- Certificate chain and trust-root validation
+- Revocation status (CRL / OCSP)
+- Timestamp (TSA) verification
+- Verification of the seal's own signature
 
-// From File input
-const file = document.getElementById('fileInput').files[0];
-const ofd = await OFD.load(file);
+> `valid: true` means the signature value is self-consistent, protected files are unmodified, and the validity periods cover the signing time.
+> It does **not** mean the signer is a trusted authority. Since certificates are trusted as-is with no chain building, anyone can self-sign a certificate and pass verification.
+>
+> Also note that digests live inside the OFD file and can be recomputed after tampering, so "digest matches" only proves the file is self-consistent. Signature-value verification is the actual basis for identity and integrity.
+>
+> Legally binding electronic signatures require a compliant CA infrastructure and timestamp service, which this project does not provide.
 
-// From ArrayBuffer
-const buffer = await fetch('document.ofd').then(r => r.arrayBuffer());
-const ofd = await OFD.load(buffer);
-```
+## Browser support
 
-**Render and display:**
+| Browser | Minimum |
+| --- | --- |
+| Chrome / Edge | 80+ |
+| Firefox | 113+ |
+| Safari | 16.4+ |
 
-```js
-// Render as SVG string
-const svgString = await OFD.renderPageToString(ofd, 0);
-document.getElementById('container').innerHTML = svgString;
+ZIP decompression relies on the native `DecompressionStream` API.
+**Firefox 78–112 and Safari 14–16.3 lack it and cannot decompress OFD.**
 
-// Render as SVG DOM element
-const svgElement = await OFD.renderPage(ofd, 0);
-document.getElementById('container').appendChild(svgElement);
+`toPdf.js` prefers `CompressionStream` for PDF compression but falls back to `zlib` (Node), so it raises no additional browser requirement.
 
-// Render all pages
-const pages = await OFD.renderAll(ofd);
-pages.forEach(page => container.appendChild(page));
-```
+Node.js 18+ works for PDF → OFD conversion.
 
-**Get document information:**
+## Security
 
-```js
-const pageInfo = OFD.getPageCount(ofd);           // Total pages
-const dimensions = await OFD.getPageDimensions(ofd, 0); // { width, height, unit: 'mm' }
-const docInfo = OFD.getDocumentInfo(ofd);          // Document metadata
-```
+This project parses untrusted OFD files. The following mitigations are in place, but **the code has not undergone professional security auditing**:
+
+- ZIP decompression capped at 256 MB per entry, 64-entry cache (decompression-bomb defense)
+- Image decoding capped at 100 megapixels (`toPdf.js`)
+- `javascript:` / `file:` / `data:` URL protocols rejected
+- XML character references are range-checked; malformed ones yield U+FFFD instead of throwing
+- Signature parsing is fully wrapped in `try/catch`; one corrupt signature won't break document loading
+
+Evaluate the risk yourself before processing OFD files from untrusted sources.
 
 ## Documentation
 
 ### English
 
-- [Core engine docs](docs/ofd.md): design philosophy, public API, call flows
+| Document | Contents |
+| --- | --- |
+| [Core engine](docs/ofd.md) | Public API, parsing flow, signature verification scope and limits, profiling, implementation notes |
+| [Viewer](docs/viewer.md) | Integration examples, URL parameters, 5 extension APIs, sealing flow, internal state |
+| [OFD → PDF](docs/toPdf.md) | Conversion capabilities, font strategy, image support, known losses |
+| [PDF → OFD](docs/pdf2ofd.md) | CLI / npm package, conversion principles, alignment with reference output |
 
-- [Viewer docs](docs/viewer.md): design philosophy, extension API, full integration example
+Runnable demos live in `test/`: `example-intro.html`, `example-basic.html`, `example-seal.html`, `example-topdf.html`, `benchmark.html`.
 
-- [toPdf docs](docs/toPdf.md): API, examples, beta limitations
+### 中文
 
-### 中文文档
+[核心引擎](docs/ofd.zh-cn.md) · [预览器](docs/viewer.zh-cn.md) · [OFD → PDF](docs/toPdf.zh-cn.md) · [PDF → OFD](docs/pdf2ofd.zh-cn.md) · [中文 README](README.zh-cn.md)
 
-- [核心引擎文档](docs/ofd.zh-cn.md)：设计理念、公开 API、函数调用流程
+## FAQ
 
-- [预览器文档](docs/viewer.zh-cn.md)：设计理念、对外接口、完整集成示例
+**Q: Every font renders as SimHei / sans-serif**
 
-- [OFD → PDF 转换文档](docs/toPdf.zh-cn.md)：API、示例、beta 版本限制
+The embedded fonts aren't being matched. When the OFD's own font files
+(`res.fonts[].fontFile`) fail to register as `@font-face`, CSS falls through to the
+last family in the stack — `sans-serif` — which Windows resolves to SimHei.
+
+Diagnose first:
+
+```js
+const ofd = await OFD.load('doc.ofd');
+const fonts = ofd.document.res.fonts;
+console.log('total fonts', Object.keys(fonts).length);
+console.log('with embedded file', Object.values(fonts).filter(f => f.fontFile).length);
+```
+
+If `fontFile` is present yet everything renders as SimHei, that's a bug in this
+project — please open an issue with reproduction details. See "Troubleshooting" in
+the core engine docs.
+
+**Q: An OFD references a font name I don't have**
+
+Documents without embedded fonts rely on system fonts. Windows ships SimSun, SimHei,
+KaiTi and FangSong; macOS/Linux need manual installation or a font directory pointed
+at with `OFD.setFontBase()`.
+
+**Q: Can `verifySignature` returning `valid: true` serve as legal evidence?**
+
+No. See "Signature verification boundaries" above — certificates are trusted as-is
+with no chain building, so a self-signed certificate passes.
+
+**Q: It won't open in Firefox**
+
+ZIP decompression needs `DecompressionStream`, which requires Firefox 113+.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Issues and PRs are welcome.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Read the "Implementation notes" section of the relevant document under `docs/` before changing anything. It records several **counter-intuitive constraints**, for example:
 
-## Acknowledgments
+- `LineWidth` / `DashPattern` must **never** be pre-multiplied by the CTM (it shrinks them nearly 3×)
+- Page-level `<ofd:Clips>` must **never** be emitted (it makes WPS clip content away wholesale)
+- Embedded fonts must be keyed by Font ID, not font name alone
 
-This project draws on the following open-source projects and resources:
+Skipping these comments is an easy way to introduce regressions.
 
-- [OFD parsing flow (CSDN blog)](https://blog.csdn.net/u013823545/article/details/108151914): OFD parsing flow reference
+## Acknowledgements
 
-- [ofd.js](https://github.com/DLTech21/ofd.js): OFD parsing reference
+- [ofd.js](https://github.com/DLTech21/ofd.js) — OFD parsing approach
+- [ofdrw](https://github.com/ofdrw/ofdrw) — OFD reference code
+- [pdf.js](https://github.com/mozilla/pdf.js) — viewer UI reference
+- Qoder CN, plus the Qwen3.8-Flash and Mimo-V2.6-Flash models
 
-- [ofdrw](https://github.com/ofdrw/ofdrw): OFD code reference
+## Repositories
 
-- [pdf.js](https://github.com/mozilla/pdf.js): viewer UI reference
+- Gitee: <https://gitee.com/LaoJia803/ofd-core>
+- GitHub: <https://github.com/LaoJia803/ofd-core>
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE). See the license file for details.
+Apache-2.0 — see [LICENSE](LICENSE). A disclaimer is provided in [免责声明.md](免责声明.md).
 
-## Repository
-
-- Gitee: <https://gitee.com/LaoJia803/ofd-core>
-
-- GitHub: <https://github.com/LaoJia803/ofd-core>
-
+This project is not affiliated with any standards body, cryptography authority, or OFD software vendor. The OFD standard itself belongs to its publisher.

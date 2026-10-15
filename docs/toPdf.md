@@ -159,12 +159,34 @@ const TOPDF = require('./build/toPdf.js');
 })();
 ```
 
+## Security and resource limits
+
+`toPdf.js` processes OFD images and text, and converting large documents can consume substantial memory.
+
+### Implemented limits
+
+| Limit | Value | Location |
+| --- | --- | --- |
+| Per-image decode pixel cap | **100 megapixels** (~400 MB RGBA) | `checkImageSize()` |
+| Image dimension sanity | width and height must be > 0, otherwise skip with an error | `checkImageSize()` |
+| Decode failure isolation | a single failing image only logs `console.warn` and is skipped; the rest of the page still renders | `svgToContentStream` |
+| ZIP decompression cap | 256 MB per entry (provided by the core engine) | `ofd.js` |
+
+The pixel cap is **essential**: image headers declare their own width and height and can be forged, so without a cap a few-KB file can trigger a huge allocation and OOM the process.
+
+### Keep in mind
+
+1. **Conversion is whole-document.** `ofdToPdf` renders page by page and accumulates content streams; peak memory on large documents (hundreds of pages, many images) can reach hundreds of MB. Consider running it in a Worker or processing in batches.
+2. **Page-level clipping is not applied.** If the OFD contains oversized background blocks, the converted PDF may include regions that should have been clipped — the core engine uses a "cull but don't express" strategy (see the core engine docs).
+3. **No signature verification.** This module only converts formats; it performs no cryptographic verification. The output PDF contains **no digital signature — do not circulate it as a signed document.**
+4. **Beta / demo-grade.** It does not cover the full PDF feature set (forms, hyperlinks, encryption); evaluate compatibility before production use.
+
 ## Notes
 
 - **Load order**: `toPdf.js` must be loaded after `ofd.js`; otherwise `ofdToPdf` throws "toPdf.js 需要先加载 ofd.js"
-- **Compression**: browsers rely on `CompressionStream` (Chrome 80+); Node relies on the built-in `zlib`; deflate fails if neither is available
+- **Compression**: browsers prefer `CompressionStream`, Node uses the built-in `zlib`; deflate fails if neither is available
 - **Chinese fonts**: text uses `/STSong-Light` + `/UniGB-UCS2-H`, relying on the reader's built-in Chinese fonts; no font files are embedded. KaiTi, HeiTi, etc. will render as SongTi
 - **Image formats**: JPEG (embedded directly), PNG, BMP (1/4/8/24/32-bit, incl. RLE compression) and GIF (87a/89a, incl. transparency and interlacing) are supported; TIFF is pre-converted by `ofd.js` into a BMP data source and thereby also supported; unsupported formats or decode failures emit a `console.warn` and the image is skipped (the rest of the page is unaffected)
 - **Transparency**: PNG/BMP/GIF are decoded to RGBA — via `canvas` in browsers, via pure JS in Node — preserving alpha through an `SMask`; interlaced PNG is not supported on the Node path, and only the first frame of an animated GIF is taken
-- **Beta / demo-grade limitation**: this module is in beta (its source header describes it as "demo-grade") and does not cover the full PDF feature set (forms, hyperlinks, encryption, etc.); evaluate compatibility before use. Known differences from the original may include: Chinese fonts are uniformly rendered as SongTi (no font files embedded), annotations and seals may be displayed incompletely, and the Node path does not support interlaced PNG
+- **Known differences from the original**: Chinese fonts are uniformly rendered as SongTi (no font files embedded), annotations and seals may be displayed incompletely, and the Node path does not support interlaced PNG
 

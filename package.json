@@ -1,12 +1,17 @@
 {
-  "name": "ofd-js",
+  "name": "ofd-core",
   "version": "1.0.0",
   "private": true,
-  "description": "OFD（GB/T 33190）纯前端解析与 SVG 渲染引擎",
+  "description": "OFD预览器与渲染引擎",
   "scripts": {
-    "build": "node build/build.js"
+    "build": "node build/build.js",
+    "build:pdf2ofd": "node build/build-pdf2ofd.js",
+    "prepublishOnly": "node build/build-pdf2ofd.js"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
+    "pdfjs-dist": "^5.7.284",
+    "sm-crypto": "^0.5.7",
     "terser": "^5.44.0"
   }
 }

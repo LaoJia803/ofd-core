@@ -62,11 +62,20 @@
     }
     function readNode() {
       if (pos >= data.length) return null;
+      const nodeOff = pos;
       const tag = data[pos++];
       const len = readLen();
       const start = pos;
       const content = data.subarray(start, start + len);
-      const node = { tag, len, content, children: [], parent: null };
+      const node = {
+        tag,
+        len,
+        content,
+        children: [],
+        parent: null,
+        off: nodeOff,
+        derLen: start - nodeOff + len,
+      };
       const isContainer = tag === 0x30 || tag === 0x31 || (tag & 0xe0) === 0xa0;
       if (isContainer) {
         pos = start;
@@ -84,6 +93,87 @@
       return node;
     }
     return readNode();
+  }
+
+  // X.509 证书有效期：TBSCertificate 里唯一「恰好两个时间子节点」的 SEQUENCE
+  function extractCertValidity(derBytes) {
+    let found = null;
+    (function walk(node) {
+      if (!node || found) return;
+      if (
+        node.tag === 0x30 &&
+        node.children.length === 2 &&
+        node.children.every((c) => c.tag === 0x17 || c.tag === 0x18)
+      ) {
+        found = node.children.map(decodeAscii);
+        return;
+      }
+      for (const c of node.children) walk(c);
+    })(parseTlvTree(derBytes));
+    return found ? { notBefore: found[0], notAfter: found[1] } : null;
+  }
+
+  // ASN.1 时间 / OFD 签章时间 → Unix 毫秒（UTC）
+  // 兼容 UTCTime(YYMMDDHHMMSSZ)、GeneralizedTime(YYYYMMDDHHMMSSZ) 与 "2020-08-17T11:13:29"
+  // GB/T 38540 SES 签名块：父 SEQUENCE 的子节点形如
+  //   [待签数据 SEQUENCE, 证书 OCTET STRING, 算法 OID, 签名值 BIT STRING]
+  // 返回的节点仍指向原字节（tbs.off / derLen 用于切出原始 DER，签名不可重新编码）
+  function parseSesSignBlocks(data) {
+    const out = [];
+    (function walk(node) {
+      if (!node) return;
+      const ch = node.children;
+      for (let k = 2; k < ch.length - 1; k++) {
+        if (
+          ch[k].tag === 0x06 &&
+          ch[k + 1].tag === 0x03 &&
+          ch[k - 1].tag === 0x04 &&
+          (ch[k - 2].tag === 0x30 || ch[k - 2].tag === 0x31)
+        ) {
+          out.push({ tbs: ch[k - 2], cert: ch[k - 1], alg: ch[k], sig: ch[k + 1] });
+        }
+      }
+      for (const c of ch) walk(c);
+    })(parseTlvTree(data));
+    return out;
+  }
+
+  // 证书 SubjectPublicKeyInfo → SM2 未压缩公钥点（130 位 hex，含 04 前缀）
+  function extractCertPublicKey(derBytes) {
+    const root = parseTlvTree(derBytes);
+    const tbs = root && root.children[0];
+    if (!tbs) return "";
+    for (const c of tbs.children) {
+      if (c.tag !== 0x30 || c.children.length < 2) continue;
+      const algId = c.children[0];
+      const bits = c.children[1];
+      if (algId.tag !== 0x30 || bits.tag !== 0x03) continue;
+      if (bits.len !== 66 && bits.len !== 65) continue;
+      const skip = bits.len === 66 ? 1 : 0; // 66 = 1 字节 unusedBits + 65 字节点
+      const pt = bits.content.subarray(skip, skip + 65);
+      if (pt.length === 65 && pt[0] === 0x04) {
+        let hex = "";
+        for (let i = 0; i < pt.length; i++) hex += ("0" + pt[i].toString(16)).slice(-2);
+        return hex;
+      }
+    }
+    return "";
+  }
+
+  function asn1TimeToMs(str) {
+    const d = String(str || "").replace(/[^0-9]/g, "");
+    if (d.length < 10) return NaN;
+    const short = d.length <= 12; // UTCTime 的两位年
+    const yy = Number(d.slice(0, short ? 2 : 4));
+    const year = short ? (yy < 50 ? 2000 + yy : 1900 + yy) : yy;
+    const off = short ? 2 : 4;
+    const month = Number(d.slice(off, off + 2)) - 1;
+    const day = Number(d.slice(off + 2, off + 4));
+    const hour = Number(d.slice(off + 4, off + 6));
+    const min = Number(d.slice(off + 6, off + 8));
+    const sec = Number(d.slice(off + 8, off + 10)) || 0;
+    if ([month, day, hour, min].some((v) => !isFinite(v))) return NaN;
+    return Date.UTC(year, month, day, hour, min, sec);
   }
 
   function asn1IntToStr(content) {

@@ -52,16 +52,24 @@
     }));
     const templateById = new Map(templates.map((t) => [t.id, t]));
 
-    const res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+    const res = {
+      fonts: {},
+      colorSpaces: {},
+      multiMedias: {},
+      drawParams: {},
+      compositeUnits: {},
+    };
     const publicRes = child(common, "PublicRes");
     const documentRes = child(common, "DocumentRes");
     if (publicRes)
       mergeRes(res, await parseRes(resolvePath(docPath, text(publicRes)), zip));
-    if (documentRes)
-      mergeRes(
-        res,
-        await parseRes(resolvePath(docPath, text(documentRes)), zip),
-      );
+    if (documentRes) {
+      const docResPath = resolvePath(docPath, text(documentRes));
+      mergeRes(res, await parseRes(docResPath, zip));
+      // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
+      // 故单独解析后挂到 res 上，供渲染 CompositeObject 时展开。
+      res.compositeUnits = await parseCompositeUnits(docResPath, zip);
+    }
     embeddedFontMap.clear();
     fontLoadCache.clear();
     fontIndexCache = null;

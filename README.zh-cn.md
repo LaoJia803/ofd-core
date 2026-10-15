@@ -1,269 +1,345 @@
-# OFD 预览器
+# OFD 预览器与渲染引擎
 
-基于浏览器的 OFD（GB/T 33190）文档预览器，使用纯 SVG 渲染，零依赖、无构建步骤。
+基于浏览器的 OFD（GB/T 33190 电子文件存储与交换格式·版式文档）预览器。**纯 SVG 矢量渲染，零运行时依赖，无需构建步骤**。
+
+[English](README.md) | 简体中文
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## 功能特性
+## 这是什么
 
-- **SVG 矢量渲染**：页面矢量缩放不失真，文本可选、可搜索
+OFD 是电子公文的国标格式（类似 PDF，但更贴合中文排版与电子签章）。本项目提供：
 
-- **数字签名**：签章解析、文件摘要比对（SM3/SHA）、证书信息展示。**验签边界：仅实现文件摘要比对**，不含签名值（RSA/SM2）、证书链、时间戳验证（详见 [docs/ofd.zh-cn.md](docs/ofd.zh-cn.md)）
-
-- **盖章**：支持第三方取章、自定义印章放置与删除
-
-- **搜索**：跨页全文搜索，按字符精确高亮定位
-
-- **视图控制**：缩放（自动/页宽/实际大小/自定义）、旋转（90° 步进）、缩略图侧边栏
-
-- **文件加载**：支持 URL、本地文件、拖放打开
-
-- **打印下载**：新窗口打印、下载当前文档
-
-- **PDF 转换**：纯前端 OFD → PDF 转换，模态框实时显示进度并自动下载（依赖 toPdf.js）
-
-- **跨平台**：支持现代浏览器（Chrome 80+、Firefox 78+、Safari 14+、Edge 80+）和 Node.js
-
-- **轻量级**：零依赖，无需构建步骤，直接托管静态文件即可运行
-
-## 目录结构
-
-```
-ofd-viewer/
-├── build/
-│   ├── ofd.js      # 核心引擎：OFD 解析、SVG 渲染、文件摘要比对（SM3，IIFE，挂载为全局 OFD）
-│   ├── ofd.min.js  # 核心引擎压缩版（由 ofd.js 经 terser 生成）
-│   └── toPdf.js         # OFD → PDF 转换（纯前端，见 docs/toPdf.zh-cn.md）
-├── font/                # 补充字体（OFD 中未映射的字体名自动从此目录加载）
-├── web/
-│   ├── viewer.html      # 预览器页面
-│   ├── viewer.css       # PDF.js 风格样式
-│   ├── viewer.js        # 应用逻辑（无框架原生 JS）
-│   └── images/          # SVG 图标
-├── docs/
-│   ├── ofd.zh-cn.md     # 核心引擎文档（API、设计理念、函数调用流程）
-│   ├── viewer.zh-cn.md   # 预览器文档（API、集成示例、函数调用流程）
-│   ├── toPdf.zh-cn.md    # OFD → PDF 转换文档（API、示例、限制）
-│   ├── ofd.md            # Core engine docs (English)
-│   ├── viewer.md         # Viewer docs (English)
-│   └── toPdf.md          # OFD → PDF conversion docs (English)
-└── test/
-    ├── example-basic.html           # 核心引擎开放 API 示例（load / renderPage / getSignatures / verifySignature 等）
-    ├── example-intro.html           # 核心引擎入门介绍（内嵌文档 + 在线演示）
-    ├── benchmark.html               # 性能剖析（load / 模板 / 页面 / 签名 / 渲染各阶段计时）
-    ├── example-topdf.html           # OFD → PDF 转换示例
-    ├── example-seal.html            # 盖章 · 第三方接入示例
-    └── ofdFile/                     # 测试用 OFD 样本文件（含 GB/T 33190 符合性样本 6.1.x / 6.2.x、999.ofd 发票）
-```
-
-## 浏览器兼容性
-
-| 浏览器     | 最低版本 |
-| ------- | ---- |
-| Chrome  | 80+  |
-| Firefox | 78+  |
-| Safari  | 14+  |
-| Edge    | 80+  |
-
-> **注意**：PDF 转换功能需要 `CompressionStream` API（Chrome 80+、Firefox 113+、Safari 16.4+）。
-
-## 使用手册
-
-将 OFD 预览器集成到您的应用前，建议按需精简以下内容，避免应用体积增大：
-
-- **`test/`** **文件夹**：测试页面与 OFD 样本文件，仅用于演示
-
-- **`docs/`** **文件夹**：项目文档，不影响运行
-
-精简后仅需保留 `build/ofd.js`、`build/toPdf.js`、`web/` 与 `font/` 即可正常运行。
-
-## 文件大小参考
-
-| 文件                 | 说明        | 大小（约）    |
-| ------------------ | --------- | -------- |
-| `build/ofd.js`     | 核心引擎（未压缩） | \~113 KB |
-| `build/ofd.min.js` | 核心引擎（压缩版） | \~54 KB  |
-| `build/toPdf.js`   | PDF 转换模块  | \~60 KB  |
-| `web/viewer.js`    | 预览器应用逻辑   | \~82 KB  |
-| `web/viewer.css`   | 预览器样式     | \~42 KB  |
+| 能力 | 说明 |
+| --- | --- |
+| **OFD 预览** | 纯前端解析渲染，矢量缩放不失真，文本可选可搜索 |
+| **数字签名** | 签章解析、SM2 签名值验证、文件摘要比对（SM3/SHA）、证书与印章有效期校验 |
+| **电子签章** | 支持第三方取章回调、自定义印章放置与删除 |
+| **全文搜索** | 跨页搜索，按字符精确高亮定位 |
+| **OFD → PDF** | 纯前端转换，零依赖（`build/toPdf.js`） |
+| **PDF → OFD** | Node 命令行脚本 / npm 包（`build/pdf2ofd.js`，beta） |
 
 ## 快速开始
 
-无需构建，直接用 HTTP 服务器托管即可（浏览器不能通过 `file://` 加载 OFD 文件）：
+### 方式一：直接用（零构建）
+
+克隆后用任意 HTTP 服务器托管，打开即用：
 
 ```bash
-cd ofd-viewer
+git clone https://gitee.com/LaoJia803/ofd-core.git
+cd ofd-core
 python -m http.server 8090
 ```
 
-访问：
+浏览器访问：
 
 ```
 http://127.0.0.1:8090/web/viewer.html
 ```
 
-### 其他 HTTP 服务器
-
-**Node.js (http-server):**
+其他等效命令：
 
 ```bash
-npx http-server -p 8090
+npx http-server -p 8090     # Node
+npx serve -p 8090# Node
+php -S 127.0.0.1:8090# PHP
+ruby -run -e httpd . -p 8090  # Ruby
 ```
 
-**Node.js (serve):**
+> **为什么必须用 HTTP 而不能 `file://`**：预览器需要用 `fetch` 按 URL 加载 OFD 文件，`file://` 协议下会被浏览器拦截。
+> 直接双击 `web/viewer.html` 能看到界面，但只能用工具栏「打开 OFD 文件」按钮手动选文件。
+
+### 方式二：集成到自己的系统
+
+引入引擎，两行代码渲染：
+
+```html
+<script src="build/ofd.min.js"></script>
+<script>
+  const ofd = await OFD.load('document.ofd');
+  const svg = await OFD.renderPage(ofd, 0, { width: 800 });
+  document.body.appendChild(svg);
+</script>
+```
+
+完整 API 见 [核心引擎文档](docs/ofd.zh-cn.md)。
+
+### 方式三：PDF → OFD 命令行
 
 ```bash
-npx serve -p 8090
+npm install
+node build/pdf2ofd.js input.pdf output.ofd
 ```
 
-**PHP:**
+或作为 npm 包：
 
 ```bash
-php -S 127.0.0.1:8090
+npm install pdf2ofd pdfjs-dist
+pdf2ofd input.pdf output.ofd
 ```
 
-**Ruby:**
+详见 [PDF → OFD 文档](docs/pdf2ofd.zh-cn.md)。
+
+## 构建
+
+源码在 `src/`（浏览器/Node 通用），用 esbuild 拼装、terser 压缩：
 
 ```bash
-ruby -run -e httpd . -p 8090
+npm install       # 安装 esbuild / terser / pdfjs-dist
+npm run build     # → build/ofd.js、build/ofd.min.js、dist/ofdjs-<版本>-dist.zip
+npm run build:pdf2ofd   # → dist/pdf2ofd/（可发布的 npm 包）
 ```
 
-## 使用方式
+`build.js` 读取 `package.json` 的 `version`，写入引擎头注释、`OFD.version` 与 dist 包名，三者始终同步。
+
+## 目录结构
+
+```
+ofd-core/
+├── build/                    # 构建产物 + 构建脚本
+│   ├── ofd.js                # 核心引擎（未压缩，~177 KB）
+│   ├── ofd.min.js                # 核心引擎（压缩，~97 KB）—— 实际加载这个
+│   ├── toPdf.js              # OFD → PDF 转换模块（~61 KB）
+│   ├── pdf2ofd.js            # PDF → OFD 转换脚本（Node，beta，~75 KB）
+│   ├── build.js              # 引擎构建 + 发行 zip 打包
+│   └── build-pdf2ofd.js      # 把 pdf2ofd.js 组装成 npm 包
+├── src/                      # 引擎源码（22 个文件）
+│   ├── index.js              # 公开 API 定义
+│   ├── core/                 # 解析层：zip / parser / page / res / signature / verify / seal / asn1 / md / image
+│   ├── display/              # 渲染层：api / svg / font
+│   └── shared/               # 工具：util / xml / color / path / lru
+├── web/                      # 预览器（viewer.html / css / js，~175 KB）
+├── font/                     # 外部字体投放目录（`npm run build` 创建；需服务器输出目录列表才生效）
+├── external/                 # 第三方 vendored 代码：sm-crypto.js（国密，~42 KB）
+├── docs/                     # 详细文档（中英双语）
+├── dist/                     # 构建输出（发行 zip + npm 包）
+├── test/                     # 测试页面与 OFD 样本
+├── LICENSE                   # Apache-2.0
+└── 免责声明.md
+```
+
+### 最小部署体积
+
+集成到自己的应用时，按需精简：
+
+| 保留 | 大小 | 用途 |
+| --- | --- | --- |
+| `build/ofd.min.js` | ~97 KB | **必需**，核心引擎 |
+| `build/toPdf.js` | ~61 KB | 仅需 OFD → PDF 时保留 |
+| `external/sm-crypto.js` | ~42 KB | 仅需验签时保留 |
+| `web/` | ~175 KB | 仅需完整预览器时保留 |
+| `font/`（仓库根） | `npm run build` 创建 | 未映射 OFD 字体名的外部字体投放目录；所在目录需被服务器**输出目录列表**才生效 |
+
+**可删**：`src/`（源码，构建用）、`external/pdf.min.js`（无使用方）、`docs/`、`test/`、`build/ofd.js`（未压缩版）、`build/pdf2ofd.js` 与 `build/build*.js`（Node 侧，浏览器不需要）。
+
+精简到最小只需 `build/ofd.min.js` 即可渲染。外部字体是可选的：`npm run build` 会在包根创建 `font/` 目录，引擎据 `ofd.min.js` 的位置自动识别它为外部字体目录，把 `字体原名.ttf|.otf|.woff2` 放进去即可生效，无需调用 `OFD.setFontBase()`。但该目录必须被服务器**输出目录列表**（如 nginx `autoindex`，或 `serve`/`http-server`），否则索引抓取失败、外部字体加载不上；此时渲染仍会回退到 OFD 内嵌字体与内置系统字体栈映射。只有要把字体放到别处时，才用 `OFD.setFontBase('你的路径/')` 指定。
+
+### 文件大小参考
+
+| 文件 | 说明 | 大小 |
+| --- | --- | --- |
+| `build/ofd.js` | 核心引擎（未压缩） | ~177 KB |
+| `build/ofd.min.js` | 核心引擎（压缩版） | ~97 KB |
+| `build/toPdf.js` | OFD → PDF 转换模块 | ~61 KB |
+| `build/pdf2ofd.js` | PDF → OFD 转换脚本（Node，beta） | ~75 KB |
+| `external/sm-crypto.js` | 国密算法库 | ~42 KB |
+| `web/viewer.js` | 预览器应用逻辑 | ~84 KB |
+| `web/viewer.css` | 预览器样式（图标已内联为 data URI） | ~91 KB |
+
+## 使用
 
 ### URL 参数
 
-| 参数       | 说明                                      |
-| -------- | --------------------------------------- |
-| `file`   | OFD 文件 URL，默认 `../test/ofdFile/999.ofd` |
-| `page`   | 打开后跳转到指定页（1-based）                      |
-| `rotate` | 初始旋转角度（90 的整数倍，顺时针）                     |
-| `search` | 打开搜索栏并自动执行搜索                            |
+| 参数 | 说明 |
+| --- | --- |
+| `file` | OFD 文件 URL（不传则不自动加载，需用工具栏按钮选文件） |
+| `page` | 打开后跳转到指定页（1-based） |
+| `rotate` | 初始旋转角度（90 的整数倍，顺时针） |
+| `search` | 打开搜索栏并自动执行搜索 |
 
-```text
+```
 http://127.0.0.1:8090/web/viewer.html?file=../test/ofdFile/999.ofd&page=3&rotate=90&search=发票
 ```
 
-### 集成到第三方系统
-
-预览器将扩展能力挂载到全局 `OFD` 对象上：
-
-```js
-// 监听页码变化
-OFD.onPageChange((page, total) => console.log(page + '/' + total));
-
-// 注册取章回调（用户点击「盖章」按钮时触发）
-OFD.onGetSeal(async () => {
-  OFD.setSeal({ sealImg: await fetchSeal(), width: 40, height: 40 });
-});
-
-// 监听签章变化，提交到后端
-OFD.onSealChange((list, action) => saveSeals(list));
-```
-
-## 核心引擎 API
+### 核心引擎 API
 
 ```js
 const ofd = await OFD.load('999.ofd');              // 加载并解析
 const svg = await OFD.renderPage(ofd, 0);           // 渲染页面为 SVG DOM
 const sigs = await OFD.getSignatures(ofd);          // 获取数字签名
-const result = await OFD.verifySignature(ofd, 0);   // 文件摘要比对（非完整验签，见下方边界）
+const result = await OFD.verifySignature(ofd, 0);   // SM2 验签 + 摘要比对 + 有效期
 OFD.setFontBase('../assets/font/');                 // 覆盖 font/ 字体目录 URL
 ```
 
-> **验签边界**：`verifySignature` 当前**只做文件摘要比对**——用签名登记的 `References[].CheckValue` 与重算摘要逐字节比对，检测受保护文件是否被改动或缺失。
-> **未实现**：签名值验证（RSA / SM2 公钥验签）、证书链验证、时间戳（TSA）验证、保护范围 / 夹带文件检测。
-> `CheckValue` 存放在 OFD 文件内部、可随篡改内容同步重算，因此 `valid: true` 只代表文件自洽，**不能证明签名真实有效**；印章与签名值仅解析展示。完整边界见 [docs/ofd.zh-cn.md](docs/ofd.zh-cn.md)。
-
-### 常用操作
-
-**从不同来源加载：**
+**加载方式**（`load` 接受多种类型）：
 
 ```js
-// 从 URL 加载
-const ofd = await OFD.load('https://example.com/document.ofd');
-
-// 从文件输入框加载
-const file = document.getElementById('fileInput').files[0];
-const ofd = await OFD.load(file);
-
-// 从 ArrayBuffer 加载
-const buffer = await fetch('document.ofd').then(r => r.arrayBuffer());
-const ofd = await OFD.load(buffer);
+await OFD.load('https://example.com/document.ofd');  // URL（拒绝 javascript:/file:/data: 协议）
+await OFD.load(fileInput.files[0]);                  // File / Blob
+await OFD.load(arrayBuffer);                         // ArrayBuffer
+await OFD.load(uint8Array);                          // Uint8Array
 ```
 
-**渲染和显示：**
+**渲染与查询**：
 
 ```js
-// 渲染为 SVG 字符串
-const svgString = await OFD.renderPageToString(ofd, 0);
-document.getElementById('container').innerHTML = svgString;
-
-// 渲染为 SVG DOM 元素
-const svgElement = await OFD.renderPage(ofd, 0);
-document.getElementById('container').appendChild(svgElement);
-
-// 渲染所有页面
-const pages = await OFD.renderAll(ofd);
-pages.forEach(page => container.appendChild(page));
+const svgString  = await OFD.renderPageToString(ofd, 0);  // SVG 字符串
+const svgElement = await OFD.renderPage(ofd, 0);           // SVG DOM 元素
+const pages      = await OFD.renderAll(ofd);                // 全部页面
+OFD.getPageCount(ofd);                                      // 总页数
+await OFD.getPageDimensions(ofd, 0);                        // { width, height, unit: 'mm' }
+OFD.getDocumentInfo(ofd);                                   // 文档元信息
 ```
 
-**获取文档信息：**
+**性能打点**（排查大文档性能问题）：
 
 ```js
-const pageInfo = OFD.getPageCount(ofd);           // 总页数
-const dimensions = await OFD.getPageDimensions(ofd, 0); // { width, height, unit: 'mm' }
-const docInfo = OFD.getDocumentInfo(ofd);          // 文档元信息
+OFD.setProfiling(true);
+await OFD.renderPage(ofd, 0);
+console.table(OFD.getLastProfile());  // 各阶段耗时
 ```
+
+### 预览器扩展 API
+
+预览器把扩展能力挂到全局 `OFD` 上（详见[预览器文档](docs/viewer.zh-cn.md)）：
+
+```js
+OFD.onPageChange((page, total) => console.log(page + '/' + total));// 页码变化
+OFD.goToPage(3);                                                     // 跳转到第 3 页
+OFD.onGetSeal(async () => {                                          // 取章回调
+  OFD.setSeal({ sealImg: await fetchSeal(), width: 40, height: 40 });
+});
+OFD.onSealChange((list, action) => saveSeals(list));                 // 签章变化（place/delete）
+```
+
+## 验签能力边界
+
+这一节请务必读完再决定能否依赖本项目的验签结果。
+
+**已实现**：
+
+- **SM2 签名值验证** —— 用签章人证书的公钥对 GB/T 38540 SES 的 `toSign` 原始 DER 验签
+- **文件摘要比对** —— 各 `References[].CheckValue` 以 SM3 / SHA 系列重算比对，检测受保护文件是否被改动或缺失
+- **有效期校验** —— 印章有效期与签名数据内所有证书的有效期，是否覆盖**签名时刻**
+
+**未实现**：
+
+- 证书链与信任根验证
+- 吊销状态检查（CRL / OCSP）
+- 时间戳（TSA）验证
+- 印章自身签名验证
+
+> `valid: true` 表示签名值自洽、受保护文件未被改动、有效期覆盖签名时间。
+> **不表示签名者是被信任的权威机构签发的。** 由于证书是「按原样信任」、不构建证书链，
+> 任何人都能自签一份证书并通过验证。
+>
+> 另注：签名文件被修改后摘要可被同步重算，因此「摘要一致」只说明文件自洽；
+> 签名值验证才是身份与完整性的依据。
+>
+> 法律意义上的电子签名有效性需要合规的 CA 体系与时间戳服务，本项目不提供。
+
+## 浏览器支持
+
+| 浏览器 | 最低版本 |
+| --- | --- |
+| Chrome / Edge | 80+ |
+| Firefox | 113+ |
+| Safari | 16.4+ |
+
+ZIP 解压依赖原生 `DecompressionStream` API。
+**Firefox 78–112 与 Safari 14–16.3 缺少该 API，无法解压 OFD。**
+
+`toPdf.js` 的 PDF 压缩优先用 `CompressionStream`，但有 `zlib` 兜底路径（Node 环境），因此不额外抬高浏览器版本要求。
+
+Node.js 18+ 可用于 PDF → OFD 转换（需要 `DecompressionStream`，Node 18+ 具备）。
+
+## 安全说明
+
+本项目会解析不受信任的 OFD 文件，已做以下防护，但**未经过专业安全审计**：
+
+- ZIP 解压体积上限 256 MB/条目，条目缓存 64 项（防解压炸弹）
+- 图像解码像素上限 1 亿像素（`toPdf.js`）
+- 拒绝 `javascript:` / `file:` / `data:` URL 协议
+- XML 字符引用做码点合法性校验，畸形引用返回 U+FFFD 而非抛异常中断解析
+- 签名数据解析全程 `try/catch`，单个签名损坏不影响文档加载
+
+处理外部来源的 OFD 前，请自行评估风险。
 
 ## 文档
 
-### 中文文档
+### 中文
 
-- [核心引擎文档](docs/ofd.zh-cn.md)：设计理念、公开 API、函数调用流程
+| 文档 | 内容 |
+| --- | --- |
+| [核心引擎](docs/ofd.zh-cn.md) | 公开 API、解析流程、签名验证范围与局限、性能打点、实现要点 |
+| [预览器](docs/viewer.zh-cn.md) | 集成示例、URL 参数、5 个扩展 API、盖章流程、内部状态 |
+| [OFD → PDF](docs/toPdf.zh-cn.md) | 转换能力、字体策略、图像支持、已知损失 |
+| [PDF → OFD](docs/pdf2ofd.zh-cn.md) | CLI / npm 包、转换原理、与数科产物的对齐情况 |
 
-- [预览器文档](docs/viewer.zh-cn.md)：设计理念、对外接口、完整集成示例
+可运行的示例页面在 `test/` 下：`example-intro.html`（入门）、`example-basic.html`（API 演示）、`example-seal.html`（盖章接入）、`example-topdf.html`（PDF 转换）、`benchmark.html`（性能剖析）。
 
-- [OFD → PDF 转换文档](docs/toPdf.zh-cn.md)：API、示例、beta 版本限制
+### English
 
-### English Documentation
+[Core engine](docs/ofd.md) · [Viewer](docs/viewer.md) · [toPdf](docs/toPdf.md) · [pdf2ofd](docs/pdf2ofd.md) · [README](README.md)
 
-- [Core engine docs](docs/ofd.md): design philosophy, public API, call flows
+## 常见问题
 
-- [Viewer docs](docs/viewer.md): design philosophy, extension API, integration example
+**Q：所有字体都显示为黑体/无衬线**
 
-- [toPdf docs](docs/toPdf.md): API, examples, beta limitations
+内嵌字体没匹配上。OFD 自带的字体文件（`res.fonts[].fontFile`）没被成功注册为
+`@font-face`，CSS 就落到最后一档 `sans-serif`，而 Windows 上它解析为黑体。
 
-- [README (English)](README.md)
+先诊断：
 
-## 贡献
+```js
+const ofd = await OFD.load('doc.ofd');
+const fonts = ofd.document.res.fonts;
+console.log('字体总数', Object.keys(fonts).length);
+console.log('带内嵌文件', Object.values(fonts).filter(f => f.fontFile).length);
+```
 
-欢迎贡献代码！请随时提交 Pull Request。
+若 `fontFile` 存在却仍显示黑体，是本项目的 bug，请连同 `docs/ofd.zh-cn.md`
+的复现信息提 issue。排查路径见该文档的「常见故障排查」。
 
-1. Fork 本仓库
-2. 创建您的功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的更改 (`git commit -m '添加某个新功能'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开一个 Pull Request
+**Q：OFD 里的字体名找不到对应字体**
 
-## 开源许可
+OFD 未内嵌字体的文档依赖系统字体。Windows 上一般有宋体/黑体/楷体/仿宋，
+macOS/Linux 需自行安装或用 `OFD.setFontBase()` 指定字体目录。
 
-本项目采用 [Apache License 2.0](LICENSE)。使用、复制、修改与分发请遵守许可证条款。
+**Q：`verifySignature` 返回 `valid: true`，能作为法律证据吗？**
+
+不能。见上方「验签能力边界」—— 证书按原样信任、不建链，自签证书也能通过。
+
+**Q：Firefox 上打不开**
+
+ZIP 解压需要 `DecompressionStream`，Firefox 需 113+。
+
+## 参与贡献
+
+欢迎提issue 与 PR。
+
+改动前请先读 `docs/` 下对应文档的「实现要点」一节 —— 那里记录了若干**反直觉的设计约束**，例如：
+
+- `LineWidth` / `DashPattern` 绝不可预先乘 CTM（会缩小近3 倍）
+- 页面层绝不输出 `<ofd:Clips>`（会让 WPS 把内容整块裁没）
+- 内嵌字体必须按 Font ID 区分，不能只用字体名做 key
+
+不看注释直接改，很容易引入回归。
 
 ## 致谢
 
-本项目的实现参考了以下开源项目，在此表示感谢：
-
-- [OFD 解析流程（CSDN 博客）](https://blog.csdn.net/u013823545/article/details/108151914)：借鉴 OFD 解析流程
-
-- [ofd.js](https://github.com/DLTech21/ofd.js)：借鉴 OFD 解析
-
-- [ofdrw](https://github.com/ofdrw/ofdrw)：OFD 相关代码参考
-
-- [pdf.js](https://github.com/mozilla/pdf.js)：阅读器界面参考
+- [ofd.js](https://github.com/DLTech21/ofd.js) —— OFD 解析思路参考
+- [ofdrw](https://github.com/ofdrw/ofdrw) —— OFD 相关代码参考
+- [pdf.js](https://github.com/mozilla/pdf.js) —— 阅读器界面风格参考
+- Qoder CN，以及 Qwen3.8-Flash、Mimo-V2.6-Flash 大模型
 
 ## 项目地址
 
 - Gitee：<https://gitee.com/LaoJia803/ofd-core>
-
 - GitHub：<https://github.com/LaoJia803/ofd-core>
 
+## 许可
+
+Apache-2.0，见 [LICENSE](LICENSE)。另附[免责声明](免责声明.md)。
+
+本项目与国家密码管理局、电子文件标准制定机构及任何 OFD 软件厂商无隶属关系；「OFD」相关标准归其发布方所有。

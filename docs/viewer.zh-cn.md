@@ -107,18 +107,18 @@ onSearchInput(query)
 web/
 ├─ viewer.html   页面骨架（工具栏 / 侧栏 / 查找条 / 主容器）
 ├─ viewer.js     应用逻辑（本文件）
-├─ viewer.css    样式
-└─ images/       图标（按钮图标均为 SVG）
+├─ viewer.css    样式（工具栏图标已内联为 data URI，不再请求外部图片）
+└─ images/       独立 SVG 图标（保留备查，viewer.css 已不引用）
 
 依赖：
-├─ ../build/ofd.js     解析与渲染（必须）
-├─ ../build/toPdf.js   导出 PDF（可选，缺失时按钮报「未加载 toPdf.js」）
-└─ 外部字体目录          由 OFD.setFontBase 指定，本仓库为 external/font/
+├─ ../build/ofd.min.js  解析与渲染（必须；viewer.html 加载的是压缩版引擎）
+├─ ../build/toPdf.js    导出 PDF（可选，缺失时按钮报「未加载 toPdf.js」）
+└─ 外部字体目录          可选；放入 `<根>/font/`（`npm run build` 创建，据 ofd.min.js 自动识别），该目录需被服务器输出目录列表才生效
 ```
 
 ## 启动流程与 URL 参数
 
-用静态服务器打开（`file://` 下 fetch 受限）：
+界面在 `file://` 下也能打开（图标已内联），但**按 URL 加载 OFD** 需要 HTTP（`file://` 下 `fetch` 被拦截）——在 `file://` 下请用工具栏「打开 OFD 文件」按钮选择本地 `.ofd`。
 
 ```bash
 npx http-server .     # 根目录指向本仓库
@@ -128,7 +128,10 @@ npx http-server .     # 根目录指向本仓库
 
 | 参数 | 说明 |
 | --- | --- |
-| `file` | 要打开的 OFD 路径或 URL，缺省 `../test/ofdFile/999.ofd` |
+| `file` | 要打开的 OFD 路径或 URL，仓库内缺省 `../test/ofdFile/999.ofd`；`dist` 发行包会剥离测试文件选择器与该缺省（无 `?file=` 时不自动加载） |
+| `page` | 打开后自动跳转的页码（1-based） |
+| `rotate` | 初始旋转角度（度） |
+| `search` | 文档打开后自动检索并高亮的文本 |
 
 ## 功能模块
 
@@ -285,8 +288,8 @@ OFD.onPageChange((page, total) => {
 <script src="build/toPdf.js"></script>
 <script src="web/viewer.js"></script>
 <script>
-  // 外部字体目录（本仓库字体在 external/font/）
-  OFD.setFontBase('external/font/');
+  // 外部字体目录（可选；默认自动用 <根>/font/，此处演示指到别处）
+  OFD.setFontBase('assets/font/');
 
   // 取章：点「盖章」时弹自己的取章框
   OFD.onGetSeal(async () => {
@@ -308,6 +311,100 @@ OFD.onPageChange((page, total) => {
 </script>
 ```
 
+### iframe 内嵌
+
+viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再通过 iframe 自身 `window` 上同样的 **5 个接口** 驱动。下面是一个完整的宿主页示例：用 URL 打开文档、等文档真正就绪后挂上全部 5 个接口，并由控件驱动。
+
+> 宿主页与 viewer 必须通过 **HTTP(S) 同源** 访问（如在仓库根 `npx http-server .`）——跨域时 `contentWindow.OFD` 会被浏览器拦截，且 `?file=` 依赖 `fetch`（`file://` 下不可用）。
+
+```html
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>OFD viewer iframe 示例</title>
+</head>
+<body>
+  <div>
+    <button id="open">加载 OFD</button>
+    <input id="pg" type="number" min="1" value="3">
+    <button id="go">goToPage</button>
+    <button id="seal">setSeal 盖章</button>
+    <span id="pgind">页: -</span>
+  </div>
+
+  <!-- viewer 自包含，纯靠 URL 参数打开文档（无需任何 JS） -->
+  <iframe id="ofd" src="about:blank" style="width:100%;height:80vh"></iframe>
+
+<script>
+  const frame = document.getElementById('ofd');
+  const log = (m) => console.log('[viewer]', m);
+  const placeholderSeal = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">' +
+    '<circle cx="40" cy="40" r="36" fill="none" stroke="#c00" stroke-width="3"/></svg>');
+
+  let api = null;
+
+  function wireIframe() {
+    // load 只代表骨架就绪；viewer.js 跑完后 contentWindow.OFD 才存在。
+    // ?file= 解析仍是异步，「真正可用」由首次 onPageChange 确认。
+    try {
+      api = frame.contentWindow.OFD;             // 仅限同源
+    } catch (e) {
+      log('拿不到 contentWindow.OFD —— 宿主页与 viewer 必须同源');
+      return;
+    }
+    if (!api || !api.goToPage) { setTimeout(wireIframe, 50); return; }  // viewer.js 尚未执行完
+
+    api.onPageChange((page, total) => {
+      document.getElementById('pgind').textContent = `页: ${page}/${total}`;
+    });
+
+    // 取章：点工具栏「盖章」按钮时触发
+    api.onGetSeal(async () => {
+      const seal = await mySealService.pick();    // 你自己的取章 / 验密流程
+      api.setSeal({ sealImg: seal.img, width: 36, height: 36, sealId: seal.id });
+    });
+
+    // 签章位置变化（放置 / 删除）→ 提交后端
+    api.onSealChange((list, action) => {
+      // list: [{ sealImg, width, height, sealId, page, x, y }]，page 为 1-based，x/y 单位毫米
+      myApi.save(list, action);
+    });
+  }
+  frame.addEventListener('load', wireIframe);
+
+  document.getElementById('open').onclick = () => {
+    const file = prompt('OFD 路径/URL（相对仓库根）', '../test/ofdFile/999.ofd');
+    if (file) frame.src = 'web/viewer.html?file=' + encodeURIComponent(file);
+  };
+
+  document.getElementById('go').onclick = () => {
+    const n = parseInt(document.getElementById('pg').value, 10);
+    // 文档未加载完时返回 false
+    if (!api || !api.goToPage(n, { smooth: false })) log(`第 ${n} 页暂不可用`);
+  };
+
+  document.getElementById('seal').onclick = () => {
+    if (api) api.setSeal({ sealImg: placeholderSeal, width: 36, height: 36, sealId: 'MANUAL' });
+  };
+</script>
+</body>
+</html>
+```
+
+### 最简形式
+
+宿主页若只需打开并定位文档，完全不用写 JS，直接把 iframe 指向 viewer 即可：
+
+```html
+<iframe src="web/viewer.html?file=../test/ofdFile/999.ofd&page=3&search=合同" width="100%" height="800"></iframe>
+```
+
+- **优先用 URL 参数打开 / 定位**：`?file=`（配合 `page` / `rotate` / `search`）无需任何 JS，是把 viewer 交给宿主页最简单的方式。
+- **JS 接口需同源**：跨域父页只能传 URL 参数，浏览器会拦截 `contentWindow.OFD` 访问；要让 viewer 与宿主页同源才能调用接口。
+- **时序**：`load` 事件只代表骨架就绪，`?file=` 解析仍是异步——文档未就绪时 `goToPage` 返回 `false`；若需在页面可用后再操作，等首次 `onPageChange` 触发。
+
 ## 交互约定
 
 - 页码、`goToPage` / `onPageChange` 的页码均为 **1-based**；引擎 API 的 `pageIndex` 为 0-based
@@ -315,10 +412,45 @@ OFD.onPageChange((page, total) => {
 - 已放置印章 **右键删除**；删除后 `onSealChange` 回调 `action='delete'`，`list` 为剩余签章
 - 点击页面签名区域弹签章详情
 
+## 安全注意事项
+
+预览器会加载并解析外部 OFD 文件，这在设计上不可避免（OFD 就是用来展示外来文件的）。请注意：
+
+### 引擎侧的解析防护
+
+已实现（详见[核心引擎文档](ofd.zh-cn.md#安全与健壮性)）：
+
+- ZIP 解压体积上限 256 MB/条目（防解压炸弹）、条目缓存 64 项
+- 图像解码像素上限 1 亿
+- 拒绝 `javascript:` / `file:` / `data:` URL 协议
+- XML 字符引用做码点合法性校验，畸形引用返回 U+FFFD
+- 签名/批注/目录解析各自 `try/catch`，单点失败不拖垮整份文档
+
+**但未经过专业安全审计**，且已知未覆盖压缩比异常、XML 嵌套深度、手写 TIFF/LZW 解码器的边界完整性。处理外部文件前请自行评估。
+
+### 转义情况
+
+签名详情弹窗与印章列表会把引擎生成的 SVG 字符串直接赋给 `innerHTML`（`web/viewer.js` 中 `seal.innerHTML = sig.sealImage.data`）。这条路径上的转义状况：
+
+- **文字内容** —— 经 `escapeXml()` 转义 ✓
+- **图像 data URL** —— 经 `escapeXml()` 转义 ✓
+- **字体名** —— 经 `cssFontName()` 剥离引号与反斜杠，属性无法逃逸 ✓
+- **数值型属性**（`box.w` / `Boundary` / `CTM` / `lineWidth`）—— 经 `parseBox` / `parseFloat` 转成 number，无字符串拼接 ✓
+
+渲染层未发现可利用的注入点。但这依赖"所有拼接点都走转义"这一约定 —— **新增图元类型时务必复用 `escapeXml()`**。
+
+### 部署侧需要自己做的
+
+1. **验签结果不是可信证明**。预览器里的「验证通过」仅代表签名值自洽、受保护文件未被改动、有效期覆盖签名时间。**不代表签名者被受信任机构签发** —— 证书按原样信任，不构建证书链。合规场景必须另建 CA 校验体系。
+2. **验签的 `unknown` 不是 `valid`**。数据不足时返回 `status: 'unknown'`，UI 必须区分显示，不能渲染成通过。
+3. **iframe 内嵌请配 `sandbox` 与 CSP**。默认参数下预览器执行同源 JS。
+4. **`file` URL 参数会发起跨域请求**。面向公网开放时请对 `file` 做白名单校验，否则可能被用于探测内网资源（SSRF）。
+
 ## 注意事项
 
-1. 必须用静态服务器打开（`file://` 下 `fetch` 不可用）
+1. 界面在 `file://` 下可打开（图标已内联），但按 URL 加载 OFD 需 HTTP；`file://` 下请用「打开 OFD 文件」按钮
 2. 导出 PDF 是演示级转换，复杂版式以实际效果为准；缺 `build/toPdf.js` 时报「未加载 toPdf.js，无法转换」
-3. 外部字体目录默认 `<根>/font/`，本仓库是 `external/font/`，需显式 `OFD.setFontBase('external/font/')`
+3. 外部字体是可选的。`npm run build` 会创建 `<根>/font/`，引擎据 `ofd.min.js` 位置自动识别，把 `字体原名.ttf|.otf|.woff2` 放进去即可，无需 `setFontBase`。但该目录必须被服务器**输出目录列表**（如 nginx autoindex、`serve`/`http-server`），否则 `fetchFontIndex()` 返回 `null`、外部字体加载不上；此时渲染仍回退到内嵌/系统字体栈（声明了却加载不了的内嵌字体同样回落系统栈）。仅当要指到别处时才用 `OFD.setFontBase('你的目录/')`
 4. 打印会渲染全部页，超大文档注意内存与耗时
 5. 盖章回调只记录**位置**，不做落章写回 OFD 文件；落库/写文件由第三方系统完成
+6. `file` 参数为空时**不自动加载任何文件**（发行包已剥离仓库内的测试文件），需用户用工具栏按钮选择

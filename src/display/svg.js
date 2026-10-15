@@ -69,7 +69,7 @@
 
   function renderTextObject(obj, res) {
     const font = res.fonts[obj.fontId] || {};
-    const fv = mapFontFamily(font.fontName);
+    const fv = mapFontFamily(font.fontName, obj.fontId);
     const hScale = obj.hScale != null ? obj.hScale : 1;
     const ctm = obj.ctm;
     const bx = obj.boundary.x,
@@ -78,15 +78,48 @@
     const weight = fv.weight || (obj.weight >= 700 ? "bold" : "normal");
     const fontStyle = fv.style || (obj.italic ? "italic" : "normal");
 
-    // 生成单个 TextCode 的 tspan 片段：
-    // - 可合并（无需逐字符 rotate）：输出一个 tspan，x/y 用值列表保留每字符绝对坐标，
-    //   文本为整段内容，textContent 与逐字符 tspan 完全一致（渲染/搜索/选中不受影响）。
-    // - readDirection=90/270 需逐字符 rotate：保持逐字符 tspan + rotate。
-    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection) {
+    // 渲染单个 TextCode 的 tspan 片段。
+    //
+    // 「无轮廓字符」的判定：**cmap 与 Glyphs 双重确认**，缺一不可。
+    //
+    // 为什么不能只看 cmap：子集字体里大量字符用**私有区假码**（U+E000–U+E0FF）。
+    // 实测 Calibri-Bold 子集：n/k/h/c/o/A 这些正文常用字母的 cmap 里全都没有，
+    // 只有等量的私有区条目。只看 cmap 会把第 6 页的 Anchor / Branch / AnchorTable
+    // 整片误杀（实测 117 处）。
+    //
+    // 为什么不能只看 Glyphs：转换器对查不到字形的码位写 gid 1，
+    // 但 gid 1 在不同子集字体里指向的东西完全不同（实测 Calibri 子集
+    // gid 1 无人引用、gid 17 其实是 `>`），
+    // 「gid===1 就跳过」会漏判 —— 第 11 页的 `#` 拿到 gid 17 就被画了出来。
+    //
+    // 正确判据（两者都指向「无轮廓」才跳过）：
+    //   1. cmap 里查不到该码位（hasGlyphFor 为false），**且**
+    //   2. Glyphs 对应位置是占位 gid（gid === 1），或没有 Glyphs 信息
+    // 这样：私有区假码的正文靠 Glyphs 的非占位 gid 保留；
+    //真正无轮廓的 `#` 因 cmap 查不到且 gid 为占位而被剔除。
+    //
+    // 跳过后**保留 DeltaX 占位**，后续字符绝对坐标不受影响，
+    // 与 WPS/Acrobat 打开原 PDF 的表现一致（原 PDF 那格也是空白）。
+    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection, fontName, glyphs) {
       const txt = tc.text;
       if (!txt) return "";
       const dxArr = expandDelta(tc.deltaX);
       const dyArr = expandDelta(tc.deltaY);
+      // 预先算出每个字符是否可绘制
+      const draw = [];
+      let anySkip = false;
+      for (let i = 0; i < txt.length; i++) {
+        const cp = txt.codePointAt(i);
+        let ok = true;
+        if (!hasGlyphFor(fontName, cp)) {
+          // cmap 无此码位 —— 再看 Glyphs 是否为占位
+          const gid = glyphs ? glyphs[i] : undefined;
+          const isPlaceholder = gid === undefined || gid === 1;
+          ok = !isPlaceholder; // 有真字形（私有区假码）-> 仍要画
+        }
+        draw.push(ok);
+        if (!ok) anySkip = true;
+      }
       let ox = ox0,
         oy = oy0;
       if (readDirection === 90 || readDirection === 270) {
@@ -94,22 +127,38 @@
         let s = "";
         for (let i = 0; i < txt.length; i++) {
           const adjX = hScale !== 1 ? ox / hScale : ox;
-          s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
+          if (draw[i])
+            s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
           ox += i < dxArr.length ? dxArr[i] : 0;
           oy += i < dyArr.length ? dyArr[i] : 0;
         }
         return s;
       }
-      let xs = "",
-        ys = "";
+      // 常规方向：可合并为一个 tspan；但若需要跳过部分字符，则逐字符输出，
+      // 跳过字符用空 tspan 占位（保留坐标推进，不绘制任何东西）。
+      if (!anySkip) {
+        let xs = "",
+          ys = "";
+        for (let i = 0; i < txt.length; i++) {
+          const adjX = hScale !== 1 ? ox / hScale : ox;
+          xs += (i ? " " : "") + adjX.toFixed(4);
+          ys += (i ? " " : "") + oy.toFixed(4);
+          ox += i < dxArr.length ? dxArr[i] : 0;
+          oy += i < dyArr.length ? dyArr[i] : 0;
+        }
+        return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
+      }
+
+      let s = "";
       for (let i = 0; i < txt.length; i++) {
         const adjX = hScale !== 1 ? ox / hScale : ox;
-        xs += (i ? " " : "") + adjX.toFixed(4);
-        ys += (i ? " " : "") + oy.toFixed(4);
+        // 无轮廓字符 -> 输出空 tspan 只推进坐标，不绘制
+        const body = draw[i] ? escapeXml(txt[i]) : "";
+        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}">${body}</tspan>`;
         ox += i < dxArr.length ? dxArr[i] : 0;
         oy += i < dyArr.length ? dyArr[i] : 0;
       }
-      return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
+      return s;
     }
 
     // CTM 分支：使用 SVG matrix 变换（含旋转），文字坐标为局部坐标
@@ -119,7 +168,7 @@
       const fontSize = obj.size != null ? obj.size : 3;
       const parts = [];
       for (const tc of obj.textCodes) {
-        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0));
+        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0, fv.key || font.fontName, obj.glyphs));
       }
       const transform = `translate(${bx} ${by}) matrix(${ctm[0]} ${ctm[1]} ${ctm[2]} ${ctm[3]} ${ctm[4]} ${ctm[5]})`;
       return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}" transform="${transform}" xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
@@ -130,7 +179,7 @@
     const parts = [];
     for (const tc of obj.textCodes) {
       parts.push(
-        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection),
+        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection, fv.key || font.fontName, obj.glyphs),
       );
     }
     let transform = "";
@@ -169,8 +218,33 @@
         return renderTextObject(obj, res);
       case "image":
         return await renderImageObject(obj, res);
+      case "composite":
+        return renderCompositeObject(obj, res);
     }
     return "";
+  }
+
+  // 展开 <ofd:CompositeObject>：把 DocumentRes 里对应 CompositeGraphicUnit 的
+  // 内部图元套上「Unit 边界 → 页面 CTM/Boundary」的组合变换后渲染。
+  //
+  // OFD 渲染语义与 PathObject 一致：图元实际位置 = Boundary原点 + CTM·(内部路径点)，
+  // Unit 内部的图元用 Unit 自己的 Boundary 作为局部原点，因此合成矩阵为
+  //   页面变换 = translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
+  function renderCompositeObject(obj, res) {
+    const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
+    if (!unit || !unit.layers) return "";
+    const b = obj.boundary;
+    const ub = unit.boundary;
+    const m = obj.ctm;
+    // 组装：先移到页面 Boundary，再按 CTM 变换，最后抵消 Unit 的局部原点
+    let tf = `translate(${b.x} ${b.y})`;
+    if (m) tf += ` matrix(${m.join(" ")})`;
+    if (ub && (ub.x !== 0 || ub.y !== 0)) tf += ` translate(${-ub.x} ${-ub.y})`;
+    const inner = unit.layers
+      .map((layer) => (layer.objects || []).map((o) => renderObject(o, res)).join(""))
+      .join("");
+    if (!inner) return "";
+    return `<g transform="${tf}">${inner}</g>`;
   }
 
   async function getTemplateLayers(tpl, ofd) {

@@ -192,6 +192,11 @@
       }
 
       const sealAttrs = svBytes ? extractSealAttrs(svBytes) : null;
+      const certValidity = svBytes
+        ? collectCerts(svBytes)
+            .map(extractCertValidity)
+            .filter(Boolean)
+        : [];
 
       signatures.push({
         id: attr(sig, "ID") || "",
@@ -212,6 +217,7 @@
         signatureDigest,
         signatureValueHex,
         sealAttrs,
+        certValidity,
         hasSignedValue: !!(svBytes && svBytes.length),
       });
     }

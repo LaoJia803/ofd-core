@@ -35,15 +35,19 @@
     if (_profiling)
       mark("页面 " + (pageIndex + 1) + "：加载模板/图层", pgTag);
 
+    // 必须**先**登记内嵌字体，再收集字体名 ——
+    // hasEmbeddedFont() 依赖 embeddedFontMap，顺序颠倒会导致全部字体被判为「无内嵌」
+    // 而退回系统字体栈（build/font/ 是空目录），字形与 PDF 原稿、WPS 都不一致。
+    registerEmbeddedFonts(doc.res.fonts);
+
     const imgIds = new Set();
-    const fontNames = new Set();
+    // 收集 **Font ID**（而不是字体名）：同名不同 ID 的内嵌字体必须各自预取，
+    // 否则只有第一个注册成功，其余静默回退系统字体（第 13 页整页乱码的真凶）。
+    const fontIds = new Set();
     for (const layer of layers) {
       for (const obj of layer.objects) {
         if (obj.type === "image") imgIds.add(obj.resourceId);
-        if (obj.type === "text") {
-          const f = doc.res.fonts[obj.fontId];
-          if (f && f.fontName) fontNames.add(f.fontName);
-        }
+        if (obj.type === "text" && obj.fontId != null) fontIds.add(obj.fontId);
       }
     }
 
@@ -52,17 +56,28 @@
       const mm = doc.res.multiMedias[id];
       if (mm && !mm.dataUrl) prefetchTasks.push(ensureImageDataUrl(mm));
     }
+    // 字体预取：与 mapFontFamily 的优先级保持一致 ——
+    // **只要有内嵌字体就必须加载**（内嵌优先于系统字体栈），
+    // 否则 Helvetica/Calibri 这类命中 builtinFontStack 的名字会被跳过预取，
+    // SVG 用系统字体渲染，字形与 PDF 原稿、WPS 都不一致。
     let needFontIndex = false;
-    for (const name of fontNames) {
+    for (const fid of fontIds) {
+      const f = doc.res.fonts[fid];
+      const name = f && f.fontName;
+      if (!name) continue;
       const v = splitFontVariant(name);
+      const family = uniqueFamily(fid, v.base || name);
+      if (hasEmbeddedFont(name, fid) || hasEmbeddedFont(v.base, fid)) {
+        prefetchTasks.push(ensureFontLoaded(family, fid));
+        continue;
+      }
       if (
         !builtinFontStack(v.base) &&
         !builtinFontStack(name) &&
         !localFontAvailable(v.base)
       ) {
         needFontIndex = true;
-        prefetchTasks.push(ensureFontLoaded(v.base));
-        if (v.base !== name) prefetchTasks.push(ensureFontLoaded(name));
+        prefetchTasks.push(ensureFontLoaded(family, fid));
       }
     }
     if (needFontIndex) prefetchTasks.push(fetchFontIndex());
@@ -171,6 +186,18 @@
     return s;
   }
 
+  // ASN.1 时间（UTCTime 12 位 / GeneralizedTime 14 位）→ "YYYY-MM-DD HH:MM:SS"（UTC）
+  function formatAsn1Time(s) {
+    const ms = asn1TimeToMs(s);
+    if (!isFinite(ms)) return s || "";
+    const d = new Date(ms);
+    const p = (v) => (v < 10 ? "0" + v : "" + v);
+    return (
+      d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) +
+      " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds())
+    );
+  }
+
   async function getSignatures(ofd) {
     const doc = ofd.document;
     const sigs = doc.signatures || [];
@@ -232,6 +259,10 @@
           signatureDigest: s.signatureDigest || "",
           signatureValueHex: s.signatureValueHex || "",
           sealAttrs,
+          certValidity: (s.certValidity || []).map((c) => ({
+            notBefore: formatAsn1Time(c.notBefore),
+            notAfter: formatAsn1Time(c.notAfter),
+          })),
           pages: pageNums,
           positions,
           sealImage,

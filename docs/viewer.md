@@ -107,18 +107,18 @@ scroll / prev-next / page input / thumbnail click / goToPage
 web/
 ├─ viewer.html   page skeleton (toolbar / sidebar / findbar / main container)
 ├─ viewer.js     application logic (this file)
-├─ viewer.css    styles
-└─ images/       icons (SVG)
+├─ viewer.css    styles (toolbar icons inlined as data URIs, so no external image requests)
+└─ images/       standalone SVG icons (kept for reference; not referenced by viewer.css)
 
 Dependencies:
-├─ ../build/ofd.js     parsing and rendering (required)
-├─ ../build/toPdf.js   PDF export (optional; the button reports "未加载 toPdf.js" if missing)
-└─ external fonts      pointed to by OFD.setFontBase — external/font/ in this repo
+├─ ../build/ofd.min.js  parsing and rendering (required; viewer.html loads the minified engine)
+├─ ../build/toPdf.js    PDF export (optional; the button reports "未加载 toPdf.js" if missing)
+└─ external fonts       optional; drop into <root>/font/ (created by `npm run build`, auto-detected from ofd.min.js) — the folder must be served with a directory listing
 ```
 
 ## Startup and URL Parameters
 
-Serve over HTTP (`fetch` is blocked on `file://`):
+The UI opens fine from `file://` (icons are inlined), but loading an OFD **by URL** needs HTTP (`fetch` is blocked on `file://`) — from `file://`, use the toolbar **Open File** button to pick a local `.ofd`.
 
 ```bash
 npx http-server .     # repo root
@@ -128,7 +128,10 @@ Open `http://localhost:8080/web/viewer.html?file=../test/ofdFile/999.ofd`.
 
 | Param | Description |
 | --- | --- |
-| `file` | OFD path or URL to open; default `../test/ofdFile/999.ofd` |
+| `file` | OFD path or URL to open; default `../test/ofdFile/999.ofd` in the repo. The `dist` package strips the test-file selector and this default (no auto-load without `?file=`). |
+| `page` | Initial page to jump to (1-based). |
+| `rotate` | Initial rotation angle in degrees. |
+| `search` | Text to search for and highlight once the document is open. |
 
 ## Feature Modules
 
@@ -284,8 +287,8 @@ OFD.onPageChange((page, total) => {
 <script src="build/toPdf.js"></script>
 <script src="web/viewer.js"></script>
 <script>
-  // external font directory (this repo keeps fonts in external/font/)
-  OFD.setFontBase('external/font/');
+  // external font directory (optional; not shipped, degrades to embedded/system fonts)
+  OFD.setFontBase('assets/font/');
 
   // seal acquisition: show your own picker when "Stamp" is clicked
   OFD.onGetSeal(async () => {
@@ -307,6 +310,100 @@ OFD.onPageChange((page, total) => {
 </script>
 ```
 
+### Embedding in an iframe
+
+The viewer is a self-contained page, so a host page can drop it into an `<iframe>` and drive the **same five interfaces** on the iframe's own window. The following is a complete host page: it opens a document by URL, waits until the document is actually ready, then wires all five interfaces and drives them from controls.
+
+> Serve the host page and the viewer over **HTTP(S) from the same origin** (e.g. `npx http-server .` at the repo root) — `contentWindow.OFD` is blocked cross-origin, and `?file=` needs `fetch` (unavailable on `file://`).
+
+```html
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>OFD viewer iframe example</title>
+</head>
+<body>
+  <div>
+    <button id="open">Load OFD</button>
+    <input id="pg" type="number" min="1" value="3">
+    <button id="go">goToPage</button>
+    <button id="seal">setSeal</button>
+    <span id="pgind">page: -</span>
+  </div>
+
+  <!-- viewer is self-contained; open the document purely via URL params (no JS needed) -->
+  <iframe id="ofd" src="about:blank" style="width:100%;height:80vh"></iframe>
+
+<script>
+  const frame = document.getElementById('ofd');
+  const log = (m) => console.log('[viewer]', m);
+  const placeholderSeal = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">' +
+    '<circle cx="40" cy="40" r="36" fill="none" stroke="#c00" stroke-width="3"/></svg>');
+
+  let api = null;
+
+  function wireIframe() {
+    // load = skeleton ready only; contentWindow.OFD exists once viewer.js has run.
+    // ?file= parsing is still async, so "ready" is confirmed by the first onPageChange.
+    try {
+      api = frame.contentWindow.OFD;             // same-origin only
+    } catch (e) {
+      log('cannot read contentWindow.OFD — host and viewer must be same-origin');
+      return;
+    }
+    if (!api || !api.goToPage) { setTimeout(wireIframe, 50); return; }  // viewer.js not done yet
+
+    api.onPageChange((page, total) => {
+      document.getElementById('pgind').textContent = `page: ${page}/${total}`;
+    });
+
+    // Seal acquisition: fired when the toolbar "Stamp" button is clicked.
+    api.onGetSeal(async () => {
+      const seal = await mySealService.pick();    // your picker / password flow
+      api.setSeal({ sealImg: seal.img, width: 36, height: 36, sealId: seal.id });
+    });
+
+    // Seal positions changed (place / delete) -> submit to your backend.
+    api.onSealChange((list, action) => {
+      // list: [{ sealImg, width, height, sealId, page, x, y }], page 1-based, x/y in mm
+      myApi.save(list, action);
+    });
+  }
+  frame.addEventListener('load', wireIframe);
+
+  document.getElementById('open').onclick = () => {
+    const file = prompt('OFD path/URL (relative to repo root)', '../test/ofdFile/999.ofd');
+    if (file) frame.src = 'web/viewer.html?file=' + encodeURIComponent(file);
+  };
+
+  document.getElementById('go').onclick = () => {
+    const n = parseInt(document.getElementById('pg').value, 10);
+    // returns false while the document is not loaded yet
+    if (!api || !api.goToPage(n, { smooth: false })) log(`page ${n} not available yet`);
+  };
+
+  document.getElementById('seal').onclick = () => {
+    if (api) api.setSeal({ sealImg: placeholderSeal, width: 36, height: 36, sealId: 'MANUAL' });
+  };
+</script>
+</body>
+</html>
+```
+
+### Minimal form
+
+If the host only needs to open and position a document, no JS is required — just point the iframe at the viewer:
+
+```html
+<iframe src="web/viewer.html?file=../test/ofdFile/999.ofd&page=3&search=合同" width="100%" height="800"></iframe>
+```
+
+- **Open / position via URL params first**: `?file=` (plus `page` / `rotate` / `search`) need no JS at all — the recommended way to hand a viewer to a host page.
+- **Same-origin required for the JS API**: a cross-origin parent can only pass URL parameters; the browser blocks access to `contentWindow.OFD`. Serve the viewer and host from the same origin to call the interfaces.
+- **Timing**: the `load` event fires when the skeleton is ready, but `?file=` parsing is async — a `goToPage` before the document is ready returns `false`; wait for the first `onPageChange` if you need to act after pages are available.
+
 ## Interaction Conventions
 
 - Page numbers in `goToPage` / `onPageChange` are **1-based**; engine APIs take 0-based `pageIndex`
@@ -314,10 +411,45 @@ OFD.onPageChange((page, total) => {
 - Placed seals are deleted by **right-click**; deletion fires `onSealChange` with `action='delete'` and the remaining list
 - Clicking a signature region on the page opens the signature detail popup
 
+## Security notes
+
+The viewer loads and parses external OFD files — unavoidable by design, since OFD exists to display documents from elsewhere.
+
+### Engine-side mitigations
+
+Implemented (see the [core engine docs](ofd.md#security-and-robustness)):
+
+- ZIP decompression capped at 256 MB per entry (decompression-bomb defense), 64-entry cache
+- Image decoding capped at 100 megapixels
+- `javascript:` / `file:` / `data:` URL protocols rejected
+- XML character references range-checked; malformed ones yield U+FFFD
+- Signature / annotation / outline parsing individually wrapped in `try/catch`
+
+**Not professionally security audited.** Known gaps: anomalous compression ratios, XML nesting depth, and boundary completeness in the hand-written TIFF/LZW decoder. Evaluate before processing untrusted files.
+
+### Escaping status
+
+The signature modal and seal list assign engine-generated SVG strings straight to `innerHTML` (`seal.innerHTML = sig.sealImage.data` in `web/viewer.js`). Escaping on that path:
+
+- **Text content** — via `escapeXml()` ✓
+- **Image data URLs** — via `escapeXml()` ✓
+- **Font names** — via `cssFontName()`, which strips quotes and backslashes so attributes cannot break out ✓
+- **Numeric attributes** (`box.w` / `Boundary` / `CTM` / `lineWidth`) — coerced to `number` by `parseBox` / `parseFloat`; no string concatenation ✓
+
+No exploitable injection point was found in the render layer. But this relies on the convention that every concatenation point goes through escaping — **when adding a new graphic type, always reuse `escapeXml()`.**
+
+### What you must handle at deployment time
+
+1. **Verification is not proof of trust.** A "verified" badge in the viewer only means the signature value is self-consistent, protected files are unmodified, and the validity period covers the signing time. It does **not** mean a trusted authority signed it — certificates are trusted as-is with no chain building. Compliance scenarios require a separate CA validation layer.
+2. **`unknown` is not `valid`.** When data is insufficient the API returns `status: 'unknown'`; your UI must render it distinctly, never as a pass.
+3. **Configure `sandbox` and CSP when embedding via iframe.** By default the viewer executes same-origin JS.
+4. **The `file` URL parameter triggers a cross-origin request.** Whitelist it before exposing the viewer publicly, otherwise it can be abused to probe internal resources (SSRF).
+
 ## Notes
 
-1. Serve over HTTP (`fetch` does not work on `file://`)
+1. The UI opens from `file://` (icons inlined), but loading an OFD by URL needs HTTP; on `file://` use the **Open File** button
 2. PDF export is demo-grade; complex layouts should be checked visually. Missing `build/toPdf.js` reports "未加载 toPdf.js，无法转换"
-3. The default external font directory is `<root>/font/`; this repo uses `external/font/`, so call `OFD.setFontBase('external/font/')`
+3. External fonts are optional. `npm run build` creates `<root>/font/`, which the engine auto-detects (from `ofd.min.js`); drop `name.ttf|.otf|.woff2` there with no `setFontBase` call. The folder must be served with a **directory listing** (nginx autoindex, `serve`/`http-server`) or `fetchFontIndex()` returns `null` and external fonts won't load — in that case rendering still falls back to embedded / system-stack fonts (a declared-but-unloadable embedded font also falls back to the system stack). Use `OFD.setFontBase('your/path/')` only to point elsewhere
 4. Printing renders every page — watch memory and time on very large documents
 5. Seal callbacks record **positions only**; writing seals back into the OFD file is up to the integrating system
+6. With no `file` parameter **nothing loads automatically** (the release package strips the repo's test files); the user must pick one via the toolbar

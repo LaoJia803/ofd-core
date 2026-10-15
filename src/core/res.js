@@ -4,10 +4,17 @@
     Object.assign(target.colorSpaces, src.colorSpaces);
     Object.assign(target.multiMedias, src.multiMedias);
     Object.assign(target.drawParams, src.drawParams);
+    Object.assign(target.compositeUnits, src.compositeUnits);
   }
 
   async function parseRes(resPath, zip) {
-    const res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+    const res = {
+      fonts: {},
+      colorSpaces: {},
+      multiMedias: {},
+      drawParams: {},
+      compositeUnits: {},
+    };
     const xmlText = await readEntryText(zip, resPath);
     if (!xmlText) return res;
     const root = parseXml(xmlText).documentElement;

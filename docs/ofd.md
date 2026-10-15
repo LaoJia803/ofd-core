@@ -1,4 +1,7 @@
-# ofd.js — OFD Parsing and Rendering Engine
+# ofd-core Core Engine — OFD Parsing and SVG Rendering
+
+> Library name **ofd-core**; the engine artifact is `build/ofd.js`, exposed as the global `OFD`.
+> Throughout this document `ofd.js` refers to the file and `OFD` to the global object.
 
 ## Overview
 
@@ -6,9 +9,47 @@
 
 - **Parsing**: reads OFD (ZIP container) files — OFD.xml / Document.xml / pages / resources / signatures / annotations
 - **Rendering**: renders each page as an SVG string or DOM element (text, paths, images, templates, seals)
-- **Verification**: file digest comparison (SM3/SHA), ASN.1 certificate/signature structure parsing, seal extraction (no signature-value / certificate-chain / timestamp verification)
+- **Verification**: signature-value verification (GB/T 38540 SES `toSign` verified with the signer certificate's SM2 public key), file digest comparison (SM3/SHA), seal and certificate validity (checked against the signing time). Not included: certificate chain & trust anchors / revocation lookups / timestamp verification / the seal's own signature
 
 The artifact is assembled from `src/` fragments (`node build/build.js`). It mounts a global `OFD` object in browsers and also exports via CommonJS (`module.exports`).
+
+## Quick start
+
+```html
+<script src="build/ofd.min.js"></script>
+<script>
+  const ofd   = await OFD.load('document.ofd');   // URL / File / ArrayBuffer / Uint8Array
+  const count = OFD.getPageCount(ofd);             // page count
+  const svg   = await OFD.renderPage(ofd, 0);      // page 1 → SVG DOM element
+  document.body.appendChild(svg);
+
+  // digital signatures
+  const sigs = await OFD.getSignatures(ofd);
+  const r    = await OFD.verifySignature(ofd, 0); // { valid, status, message, checks }
+</script>
+```
+
+Node.js (CommonJS):
+
+```js
+const fs  = require('fs');
+const OFD = require('./build/ofd.js');
+const ofd = await OFD.load(new Uint8Array(fs.readFileSync('a.ofd')));
+const svg = await OFD.renderPageToString(ofd, 0);
+```
+
+**Runtime requirement**: `DecompressionStream` (Chrome/Edge 80+, Firefox 113+, Safari 16.4+, Node 18+).
+
+### Algorithm verification
+
+SM3 is a hand-written implementation, validated against the GB/T 32905-2016 standard test vectors:
+
+```
+SM3("abc")      = 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+SM3("abcd"×16)  = debe9ff92275b8a138604889c18e5a4d6fdb70e5387e5765293dcba39c0c5732
+```
+
+SM2 verification relies on `external/sm-crypto.js` (national crypto library, inlined into the bundle).
 
 ## Design
 
@@ -97,16 +138,22 @@ OFD.renderPageToString(ofd, pageIndex, opts)
   └─ assemble <svg viewBox="0 0 W H"> and cache
 ```
 
-### Signature verification (digest comparison only)
+### Signature verification (signature value + digest + validity periods)
 
 ```
 OFD.verifySignature(ofd, index)
   ├─ take doc.signatures[index]
+  ├─ read signedValuePath → parseSesSignBlocks locates the SES block
+  │    [toSign SEQUENCE, certificate OCTET, algorithm OID, signature BIT STRING]
+  ├─ extractCertPublicKey reads the SM2 key from the cert SPKI → SM_CRYPTO.sm2 verifies the raw toSign DER
   ├─ for each reference: readEntry(zip, fileRef) → hashBytes(data, checkMethod)
-  └─ compare recomputed digest against base64ToBytes(checkValue)
-       ├─ all match      → { valid: true,  status: 'valid',   checked, failed: [] }
-       ├─ mismatch       → { valid: false, status: 'invalid', checked, failed }
-       └─ nothing to check → { valid: false, status: 'unknown' }
+  ├─ compare recomputed digest against base64ToBytes(checkValue)
+  ├─ checkPeriods: is signTime inside sealAttrs.notBefore~notAfter?
+  │               is signTime inside each certificate's Validity? (collectCerts → extractCertValidity)
+  └─ aggregate into { valid, status, checks: { sigValue, digest, sealPeriod, certPeriod } }
+       ├─ no item is 'fail' → { valid: true,  status: 'valid' }
+       ├─ any item fails    → { valid: false, status: 'invalid' }
+       └─ nothing to check  → { valid: false, status: 'unknown' }
 ```
 
 ## Usage
@@ -291,6 +338,7 @@ Returns the signature list (parsed from `Signatures.xml`):
   signatureDigest,
   signatureValueHex,
   sealAttrs,           // { id, name, type, createTime, notBefore, notAfter }
+  certValidity,        // certificate validity periods [{ notBefore, notAfter }] (formatted); [] when absent
   pages: [],           // page numbers carrying the seal (1-based)
   positions: [
     { page, boundary } // page 1-based; boundary in page coordinates
@@ -301,7 +349,7 @@ Returns the signature list (parsed from `Signatures.xml`):
 
 ### OFD.verifySignature(ofd, index)
 
-Digest-comparison verification of signature `index`:
+Verifies signature `index`:
 
 ```js
 {
@@ -311,10 +359,25 @@ Digest-comparison verification of signature `index`:
   digestValid,  // all digests matched (absent when status is 'unknown')
   checked,      // files that passed
   failed,       // files that failed (with reasons)
+  checks: {     // per-item results, each 'pass' | 'fail' | 'unknown'
+    sigValue,    // signature-value verification (SM2 over the raw toSign DER)
+    digest,      // file digest comparison
+    sealPeriod,  // seal validity covers the signing time
+    certPeriod,  // certificate validity covers the signing time
+  },
 }
 ```
 
-> **Important**: this is *digest comparison only* — the `CheckValue` entries recorded in the signature are compared byte-by-byte against freshly computed digests, which detects modified content or missing protected files. Signature values, certificate chains and timestamps are not verified. And since `CheckValue` lives inside the OFD file itself, it can be recomputed after tampering — so "valid" only means the file is self-consistent, **not** that the signature is authentic (see the comment at the top of `src/core/verify.js`).
+Rule: `valid = no item is 'fail'`. Missing data yields `unknown` — it never fails the signature but is reported in `message` (e.g. "未找到 SES 签名块", "印章有效期无数据，未校验").
+
+**Validity is judged at the signing time**, using `SignedInfo/SignatureDateTime` — not the current date. A certificate or seal that expires today says nothing about a signature made years earlier.
+
+```js
+const res = await OFD.verifySignature(ofd, 0);
+console.log(res.status, res.checks, res.message);
+```
+
+> **Important**: signature-value verification (SM2/SM3), digest comparison and validity periods are implemented. Still missing: **certificate chain and trust anchors, revocation status (CRL/OCSP), timestamp verification and the seal's own signature**. Signature-value verification needs `external/sm-crypto.js`; without it `checks.sigValue` returns `unknown` and every other item still runs. Note also that `CheckValue` lives inside the OFD file and can be recomputed after tampering — real trust comes from the signature value plus a valid certificate (see the comment at the top of `src/core/verify.js`).
 
 ### OFD.setProfiling(on) / OFD.getLastProfile()
 
@@ -330,15 +393,20 @@ OFD.setProfiling(false);
 
 ### OFD.setFontBase(base)
 
-Sets the external font directory URL prefix (ending in `/`). Fonts are tried as `encodeURIComponent(name) + '.ttf|otf|woff2'`; the directory listing (e.g. nginx autoindex) is parsed for `href`s to build an index.
+Sets the external font directory URL prefix (ending in `/`). Fonts are tried as `encodeURIComponent(name) + '.ttf|otf|woff2'`.
 
-Default is inferred: the **parent** of the directory containing `<script src=".../ofd.js">` plus `font/` — so `build/ofd.js` looks for `<root>/font/`.
+Default is inferred: the **parent** of the directory containing the engine `<script>` — it matches **both** `ofd.js` and `ofd.min.js` — plus `font/`. So `build/ofd.min.js` resolves to `<root>/font/`. `npm run build` also creates that root `font/` (with a `README.txt` placeholder), so dropping font files there works without calling `setFontBase`.
 
 ```js
-OFD.setFontBase('external/font/');
+OFD.setFontBase('assets/font/');   // only needed when the font directory lives elsewhere
 ```
 
-> This repository keeps fonts in `external/font/`, so pages must call the line above or external fonts won't load (built-in and OFD-embedded fonts are unaffected).
+> **External fonts require a directory listing.** The engine builds its font index by parsing the directory HTML for file `href`s — so the folder must be served with a listing enabled (e.g. nginx `autoindex on`, or `serve` / `http-server`'s default index page). A static server that does not list the directory 404s on the folder fetch, `fetchFontIndex()` returns `null`, and external fonts won't load even when the files are present.
+> When the directory is absent or unlistable, rendering degrades silently to OFD-embedded fonts and the built-in system-stack mapping (a declared-but-unloadable embedded font also falls back to the system stack). Only supply external fonts for OFDs whose embedded fonts are missing or incomplete.
+
+### OFD.version
+
+String, e.g. `"1.0.0"`. Injected at build time from `package.json` `version` (also mirrored in the file's banner comment and the `dist` zip name), so it always matches the released version.
 
 ### OFD.\_internals
 
@@ -372,7 +440,8 @@ build/
 ├─ ofd.min.js           artifact (minified)
 └─ toPdf.js             OFD → PDF converter (standalone, not part of the engine)
 
-external/               third-party code and assets (font/ fonts; third-party JS is concatenated first)
+external/               vendored third-party code: sm-crypto.js (SM2/SM3 for signature-value verification; concatenated first by build.js); pdf.min.js (Apache-2.0, listed in build.js `STANDALONE` — excluded from the engine bundle, unused)
+font/                   external font drop-in; created by `npm run build`, auto-detected as the external font directory (see `OFD.setFontBase`)
 ```
 
 > The concatenation order lives in `build.js` and is load-bearing: `class LRUCache` (`src/shared/lru.js`) is not hoisted, while `src/display/svg.js` constructs one at top level. Read the comment at the top of `build.js` before reordering.
@@ -394,11 +463,231 @@ external/               third-party code and assets (font/ fonts; third-party JS
 - **ZIP**: `readZip` scans the central directory, `readEntry` caches inflated entries (`LRUCache`), `readEntryText` decodes UTF-8
 - **Digests**: `md.js` implements SM3; `hashBytes(data, method)` dispatches by OID (SM3 / SHA family)
 
+## Security and robustness
+
+This engine parses untrusted OFD files. The mitigations below are implemented, but **the code has not undergone professional security auditing**. Evaluate the risk yourself before processing files from external sources.
+
+### Implemented mitigations
+
+| Risk | Countermeasure | Location |
+| --- | --- | --- |
+| Decompression bomb | Per-entry uncompressed size capped at **256 MB**, checked once against the declared size and again against the actual result | `core/zip.js` `MAX_UNCOMPRESSED_SIZE` |
+| Memory growth | ZIP entry cache capped at **64 entries** (LRU); SVG page cache 256; abbreviated-path cache 4096; colour cache flushed at 256 | `core/zip.js`, `display/api.js`, `display/svg.js`, `shared/color.js` |
+| Malicious URLs | `javascript:` / `file:` / `data:` protocols rejected | `display/api.js` `load()` |
+| Malformed XML entities | Character references are range-checked; surrogates and out-of-range code points yield U+FFFD instead of throwing `RangeError` | `core/parser.js` `decodeEntities` |
+| Tag mismatch | A closing tag that doesn't match the stack top raises an explicit error (with tag names and position) rather than silently producing a broken tree | `core/parser.js` `parseXml` |
+| One bad element sinking everything | Signature, annotation and outline parsing are individually wrapped in `try/catch`; image decode failures return `null` | `core/document.js`, `core/image.js` |
+| ZIP64 | Explicitly detected and reported as unsupported rather than misreading offsets | `core/zip.js` |
+
+### Not covered
+
+- **Anomalous compression ratios**: only absolute size (256 MB) is capped, not the ratio. A high-ratio entry can still consume CPU.
+- **Parser complexity attacks**: the XML parser is a single linear pass with no nesting-depth limit. Deeply nested XML can exhaust stack space.
+- **Image decoders**: the TIFF/LZW decoder in `core/image.js` is hand-written with incomplete bounds checking.
+- **Verification is not trust**: see below.
+
+## Signature verification boundaries
+
+The most easily misused part of this project. Please read fully.
+
+### Implemented
+
+| Check | Method |
+| --- | --- |
+| **SM2 signature value** | Parses the GB/T 38540 SES structure and verifies the **original DER bytes** of `toSign` with the signer's SM2 public key |
+| **File digests** | Walks `References[]`, recomputes each digest (`CheckMethod`: SM3 / SHA-1 / 256 / 384 / 512) and compares byte-for-byte with `CheckValue` |
+| **Validity periods** | Whether the seal's `notBefore`/`notAfter` and **every** embedded certificate's `Validity` covers the **signing time** |
+
+Signature algorithms other than OID `1.2.156.10197.1.501` (SM2withSM3) return `unknown` rather than `fail`.
+
+Validity is judged against the **signing time** (`SignatureDateTime`), not the current time — a certificate that has since expired was still valid when it was used.
+
+### Not implemented
+
+- **Certificate chain and trust-root validation**
+- **Revocation status** (CRL / OCSP)
+- **Timestamp (TSA) verification**
+- **Verification of the seal's own signature**
+
+### Why `valid: true` does not mean "trusted"
+
+The signing certificate is **trusted as-is** — the code extracts it from `SignedValue`, verifies with its public key, and **never builds a chain or consults a trust store**. Anyone can generate a key pair, self-sign a certificate, and pass verification.
+
+Furthermore, `CheckValue` digests live **inside** the OFD file, so an attacker who modifies content can recompute them. "Digest matches" only proves the file is self-consistent; **signature-value verification is the actual basis for identity and integrity**.
+
+### Return shape
+
+```js
+const r = await OFD.verifySignature(ofd, 0);
+// {
+//   valid: false,
+//   status: 'invalid' | 'unknown',   // 'valid' accompanies valid: true
+//   message: '验证失败：Doc_0/xxx.xml（摘要不一致）',
+//   digestValid: false,
+//   checked: ['Doc_0/a.xml', ...],
+//   failed:  ['Doc_0/b.xml（文件缺失）', ...],
+//   checks: {
+//     digest:     'pass' | 'fail' | 'unknown',
+//     sigValue:   'pass' | 'fail' | 'unknown',
+//     sealPeriod: 'pass' | 'fail' | 'unknown',
+//     certPeriod: 'pass' | 'fail' | 'unknown',
+//   },
+// }
+```
+
+`status: 'unknown'` means **insufficient data to judge**, not "verified". UI must distinguish it from `valid` — never render `unknown` as a pass.
+
+One compatibility detail: some Chinese-vendor SDKs write digests into a fixed-size buffer (128 bytes observed) and pad the tail with zeros, so `CheckValue` can be longer than the digest itself. `digestMatches()` accepts that all-zero-tail form and compares only the first `digest.length` bytes.
+
+## Implementation notes
+
+These are decisions made after hitting real problems. Read the code comments before changing any of them — most are counter-intuitive.
+
+### Embedded font keys must match the generated family names
+
+The keys written by `registerEmbeddedFonts()` must **exactly match** the family names produced by `mapFontFamily()`, or `loadFontFace()` will miss when it looks the embedded font back up.
+
+`mapFontFamily` uses `uniqueFamily(fontId, v.base)`, where `v.base` is the name **after `splitFontVariant()` strips the variant suffix**:
+
+```
+res.fonts[1289].fontName = "DengXian-Regular"
+                           ↓ strip "-Regular"
+mapFontFamily produces   = "ofdf_1289_DengXian"
+```
+
+If `registerEmbeddedFonts` registers the **raw** name, the key becomes `ofdf_1289_DengXian-Regular` — a miss.
+
+**The failure chain** (this is exactly what "every font renders as SimHei" looks like):
+
+```
+lookup misses → emb = null
+  → falls back to fetchFontIndex() against the font/ directory
+  → that directory doesn't exist, catch(() => null) returns silently
+  → new FontFace() never registered
+  → CSS falls through to the last family: sans-serif
+  → on Windows, sans-serif resolves to **SimHei**
+```
+
+**Symptom**: every font in the document suddenly becomes SimHei/sans-serif even though `res.fonts` clearly has `fontFile` entries.
+
+**Fix**: `registerEmbeddedFonts()` registers four keys — `ofdf_<id>_<base>`, `ofdf_<id>_<rawName>`, bare `<base>`, and bare `<rawName>`. `hasEmbeddedFont()` tries both base and raw forms. `loadFontFace()` must not build a bogus `ofdf_<id>_<id>` key.
+
+### Embedded fonts must be keyed by Font ID
+
+OFD allows the same `FontName` to be declared multiple times with different IDs pointing at different font files. One document had 5 distinct IDs (121–125) all named `Calibri`, each with a completely different cmap and glyph set.
+
+Keying on `fontName` alone means `ensureFontLoaded('Calibri')` loads only the first; the other four never register an `@font-face`. Browsers silently fall back to system fonts, scrambling glyphs and metrics.
+
+**The fix**: family names are made unique as `ofdf_<FontID>_<FontName>` (`uniqueFamily`), and cmaps are cached under that same unique name.
+
+### Font priority: embedded > system stack > local > external directory
+
+The old order preferred system fonts, mapping Helvetica to system Arial and Calibri to system Calibri so embedded fonts never loaded. `mapFontFamily` now prefers embedded fonts.
+
+Committing to an embedded font is gated on it actually loading: `mapFontFamily` locks the `ofdf_<id>_<name>` family only when `loadFontFace()` succeeded (tracked in `embeddedLoaded`). A font that is *declared* embedded but whose file is missing from the package no longer dead-locks on an unregistered `@font-face` — it falls through to the system stack / local font / external `font/` directory, matching what WPS and the PDF original render.
+
+### Register embedded fonts *before* collecting font names
+
+In `renderPageToString`, `registerEmbeddedFonts(doc.res.fonts)` must run **before** font names are collected. `hasEmbeddedFont()` depends on `embeddedFontMap`; reversing the order makes every font look non-embedded.
+
+### Glyphless characters: confirmed by cmap *and* Glyphs
+
+Subset fonts use many **private-use-area pseudo-codes** (U+E000–U+E0FF). In one Calibri-Bold subset, `n/k/h/c/o/A` are absent from the cmap, replaced by an equal number of PUA entries.
+
+The correct test (skip only when both agree):
+
+1. the cmap has no entry for the code point (`hasGlyphFor` is false), **and**
+2. the corresponding `Glyphs` slot holds a placeholder gid (`gid === 1`) or there is no Glyphs info
+
+Checking only the cmap kills real body text (117 false positives observed). Checking only `gid === 1` misses cases — a `#` on page 11 of one document had gid 17 and got drawn.
+
+Skipped characters still **advance `DeltaX`**, so following characters keep their absolute positions.
+
+### Combined CTM and coordinate transform
+
+An element's actual position is `Boundary` origin + `CTM·(local coords)`. Rendering always uses:
+
+```
+translate(boundary.x boundary.y) matrix(a b c d e f)
+```
+
+Expanding a `CompositeObject` additionally cancels the Unit's local origin:
+
+```
+translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
+```
+
+### Template layer order
+
+Background templates (`zOrder != "Foreground"`) → page Content layers → foreground templates. Reversing this lets foreground templates be painted over.
+
+### Only strip XML indentation from `text`
+
+`TextCode` text must have XML formatting newlines stripped, but **in-line leading/trailing spaces must be kept** — they occupy `DeltaX` slots, and deleting them merges following glyphs at narrow spacing.
+
+### Stroked lines are exempt from clip-region culling
+
+Table borders span whole rows or columns and are often emitted before the cell clip region exists, or span several of them. Culling them by clip region removes large numbers of legitimate borders.
+
+## Troubleshooting
+
+### Fonts
+
+**Symptom: every font renders as SimHei / sans-serif**
+
+Almost always an embedded-font lookup miss. Diagnose:
+
+```js
+const ofd = await OFD.load('doc.ofd');
+const fonts = ofd.document.res.fonts;
+console.log('total fonts', Object.keys(fonts).length);
+console.log('with embedded file', Object.values(fonts).filter(f => f.fontFile).length);
+```
+
+`fontFile` present yet everything renders as SimHei → check whether the keys written by `registerEmbeddedFonts` match the family names produced by `mapFontFamily` (see "Implementation notes" above).
+
+Rendered `font-family` should read `"ofdf_<FontID>_<BaseName>"`. Bare font names or a stack like `Arial,Helvetica,sans-serif` mean that font didn't match an embedded file.
+
+**Symptom: wrong glyphs / garbled text**
+
+Only the first of several same-named font IDs takes effect — see "Embedded fonts must be keyed by Font ID".
+
+**Symptom: a character renders as a different symbol**
+
+The subset font has no outline for that code point. The engine already drops glyphless characters using a cmap + Glyphs double check, but if the **converter** emitted private-use pseudo-codes as real characters, glyphs will still be wrong — that's a `pdf2ofd.js` (conversion-side) issue, not a rendering one.
+
+### Rendering
+
+**Symptom: an entire page is blank or clipped away**
+
+The engine emits no page-level `<ofd:Clips>`. If your OFD relies on page-level clipping to express the visible region, confirm the engine's `clipBoxes` culling covers that case.
+
+**Symptom: one page fails to render while others are fine**
+
+Per-page parse failures usually degrade to an empty page rather than throwing. Locate it with profiling:
+
+```js
+OFD.setProfiling(true);
+await OFD.renderPage(ofd, 10);
+console.table(OFD.getLastProfile());
+```
+
+### Signature verification
+
+**Symptom: `status: 'unknown'`**
+
+That is **not** a pass — it means there wasn't enough data to judge. Common causes: the signature algorithm is not `1.2.156.10197.1.501` (SM2withSM3), `SignedValue` is missing, or the signed file carries no `References` digests. UIs must render it distinctly from `valid`.
+
+**Symptom: I modified the file but the digest check still passes**
+
+`CheckValue` lives **inside** the OFD file and can be recomputed alongside tampered content. "Digest matches" only proves the file is self-consistent; signature-value verification (`checks.sigValue`) is the actual integrity basis.
+
 ## Notes
 
 1. Sizes are **millimetres**; `pageIndex` is **0-based** everywhere (except `getSignatures`' `pages` / `positions.page`, which are 1-based)
-2. `verifySignature` is digest comparison, **not** an authenticity judgement
-3. External fonts need `setFontBase`; this repository uses `external/font/`
+2. `verifySignature` boundaries — see "Signature verification boundaries" above
+3. The external font directory is not shipped — create it and point `setFontBase` at it; absence degrades silently
 4. The `ofd` object is an opaque handle — pass it around, don't read its fields
-5. `_internals` may change at any time
-6. Node usage requires Node 20+ (`DecompressionStream`)
+5. The `_internals` allowlist may change; it exists for `toPdf.js` and the benchmark page
+6. Node.js requires **18+** (`DecompressionStream`)
+7. ZIP64 is not supported and reports so explicitly
