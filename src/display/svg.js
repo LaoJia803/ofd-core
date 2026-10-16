@@ -41,6 +41,33 @@
     return d;
   }
 
+  let _gradSeq = 0;
+  function buildGradient(gradient, ownerId) {
+    if (!gradient || !gradient.stops || !gradient.stops.length) return null;
+    const id = `ofd-grad-${ownerId != null ? ownerId : "x"}-${_gradSeq++}`;
+    const clamp01 = (v) => (v == null || isNaN(v) ? 0 : Math.max(0, Math.min(1, v)));
+    const stops = gradient.stops
+      .map((s) => {
+        const c = s.color || { r: 0, g: 0, b: 0, a: 1 };
+        const op = c.a != null ? c.a : 1;
+        return `<stop offset="${clamp01(s.pos)}" stop-color="${colorToCss({ r: c.r, g: c.g, b: c.b, a: 1 })}"${op < 1 ? ` stop-opacity="${op}"` : ""}/>`;
+      })
+      .join("");
+    const spread =
+      /repeat/i.test(gradient.extend) ? "repeat"
+        : /reflect/i.test(gradient.extend) ? "reflect"
+          : "pad";
+    let def;
+    if (gradient.kind === "axial") {
+      const s = gradient.start || [], e = gradient.end || [];
+      def = `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${s[0] || 0}" y1="${s[1] || 0}" x2="${e[0] || 0}" y2="${e[1] || 0}" spreadMethod="${spread}">${stops}</linearGradient>`;
+    } else {
+      const e = (gradient.end && gradient.end.length >= 3) ? gradient.end : (gradient.start || []);
+      def = `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${e[0] || 0}" cy="${e[1] || 0}" r="${e[2] || 0}" spreadMethod="${spread}">${stops}</radialGradient>`;
+    }
+    return { id, def };
+  }
+
   function renderPathObject(obj, res) {
     const d = abbreviatedToSvgPath(obj.abbreviatedData);
     if (!d) return "";
@@ -58,13 +85,24 @@
           : 0.7;
     const strokeColor = obj.strokeColor || (dp && dp.strokeColor) || null;
     const fillColor = obj.fillColor || (dp && dp.fillColor) || null;
-    let attrs = `fill="none"`;
-    if (obj.fill && fillColor) attrs = `fill="${colorToCss(fillColor)}"`;
+    const fillGrad = obj.fillGradient || (dp && dp.fillGradient) || null;
+
+    let defs = "";
+    let attrs = "";
+    if (obj.fill) {
+      if (fillGrad) {
+        const g = buildGradient(fillGrad, obj.id);
+        if (g) { attrs += ` fill="url(#${g.id})"`; defs = `<defs>${g.def}</defs>`; }
+        else attrs += ' fill="none"';
+      } else if (fillColor) attrs += ` fill="${colorToCss(fillColor)}"`;
+      else attrs += ' fill="none"';
+    } else attrs += ' fill="none"';
     if (obj.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
     if (obj.stroke) {
       attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${lineWidth}"`;
+      if (obj.dash) attrs += ` stroke-dasharray="${obj.dash}"`;
     }
-    return `<g transform="${transform}"><path d="${d}" ${attrs}/></g>`;
+    return `<g transform="${transform}">${defs}<path d="${d}"${attrs}/></g>`;
   }
 
   function renderTextObject(obj, res) {

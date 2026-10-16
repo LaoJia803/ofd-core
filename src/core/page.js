@@ -43,19 +43,66 @@
     return units;
   }
 
+  // 解析填充/描边色节点里的渐变子元素（OFD AxialShd / RadialShd）。
+  // 返回 null 表示普通纯色（调用方走 parseColor）；否则返回
+  //   { kind:'axial'|'radial', extend, start:[x,y,(r)], end:[x,y,(r)], stops:[{pos,color}] }
+  // StartPoint/EndPoint 与 AbbreviatedData 同在对象用户坐标系（渐变按 userSpaceOnUse 对齐）。
+  function parseGradient(el) {
+    if (!el) return null;
+    const ax = child(el, "AxialShd");
+    const rad = child(el, "RadialShd");
+    const g = ax || rad;
+    if (!g) return null;
+    const nums = (s) =>
+      (s || "")
+        .trim()
+        .split(/\s+/)
+        .map(parseFloat)
+        .filter((n) => !isNaN(n));
+    const readStops = (name) =>
+      children(g, name).map((seg) => {
+        let pos = parseFloat(
+          attr(seg, "Position") != null ? attr(seg, "Position") : attr(seg, "Offset"),
+        );
+        if (isNaN(pos)) pos = null;
+        const colorEl = child(seg, "Color") || seg;
+        return { pos, color: parseColor(colorEl) };
+      });
+    let stops = readStops("Segment");
+    if (!stops.length) stops = readStops("Stop");
+    // 缺省 Position 时按下标均分 0..1
+    if (stops.some((s) => s.pos === null)) {
+      const n = stops.length || 1;
+      stops = stops.map((s, i) => ({ pos: s.pos === null ? i / (n - 1 || 1) : s.pos, color: s.color }));
+    }
+    return {
+      kind: ax ? "axial" : "radial",
+      extend: attr(g, "Extend") || "",
+      start: nums(attr(g, "StartPoint")),
+      end: nums(attr(g, "EndPoint")),
+      stops,
+    };
+  }
+
   function parsePathObject(el, layerDp) {
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const abbr = child(el, "AbbreviatedData");
+    const fillGrad = parseGradient(fillEl);
+    const strokeGrad = parseGradient(strokeEl);
     return {
       type: "path",
+      id: attr(el, "ID"),
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       lineWidth: num(el, "LineWidth", null),
+      dash: attr(el, "DashPattern") || null,
       stroke: bool(el, "Stroke", true),
       fill: bool(el, "Fill", false),
-      fillColor: fillEl ? parseColor(fillEl) : null,
-      strokeColor: strokeEl ? parseColor(strokeEl) : null,
+      fillColor: fillGrad ? null : fillEl ? parseColor(fillEl) : null,
+      fillGradient: fillGrad,
+      strokeColor: strokeGrad ? null : strokeEl ? parseColor(strokeEl) : null,
+      strokeGradient: strokeGrad,
       abbreviatedData: abbr ? text(abbr) : "",
       rule: attr(el, "Rule"),
       drawParam: attr(el, "DrawParam") || layerDp,

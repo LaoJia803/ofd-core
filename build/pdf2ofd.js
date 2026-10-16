@@ -215,7 +215,7 @@ function esc(s) {
 //     内部图元只保留 Form 空间内的相对变换，避免子图元 CTM 无限累积。
 // ===========================================================================
 function walkOperators(tc, OPS, page, ctx) {
-  const { pageWpt, pageHpt, fonts, fontResMap, imageStore, compositeUnits, fontCmap, gradShades, nextId } = ctx;
+  const { pageWpt, pageHpt, fonts, fontResMap, imageStore, compositeUnits, fontCmap, gradShades, patternColors, nextId } = ctx;
   const scale = PT_TO_MM;
   const Hmm = pageHpt * scale;
 
@@ -483,6 +483,18 @@ function walkOperators(tc, OPS, page, ctx) {
       case 'setStrokeGray':
         strokeColor = { r: args[0], g: args[0], b: args[0] };
         break;
+      case 'setFillColorN':
+      case 'setStrokeColorN': {
+        // TilingPattern 填充：用预取好的图案平均色替换当前色。
+        // 其它色彩空间（Indexed/CMYK/Lab）暂不支持 → 保持上一个颜色，至少不塌成黑。
+        const id = patternImageId(args, OPS);
+        const c = id && patternColors && patternColors.get(id);
+        if (c) {
+          if (name === 'setFillColorN') fillColor = c;
+          else strokeColor = c;
+        }
+        break;
+      }
       case 'setLineWidth':
         lineWidth = args[0];
         break;
@@ -1075,7 +1087,73 @@ async function prefetchGradients(page, tc, OPS) {
   return map;
 }
 
-// 渐变的平均色（两端色标的线性均值），供无法表达渐变时兜底
+// ---- setFillColorN / setStrokeColorN：平铺图案（TilingPattern）取色 ----
+//
+// 有些 PDF（如 tracemonkey 第 13 页 Figure 12）把图表色块/图例用「一张 80×80 小图作为
+// 平铺图案」来填色：setFillColorN 的参数形如
+//   [ 'TilingPattern', backdrop, {fnArray,argsArray}, matrix, bbox, ... ]
+// 图案内容(argsArray[2]) 里是 paintImageXObject ['img_pX_Y', w, h]。
+// 旧 walkOperators 完全没有 setFillColorN 分支，这类填充沿用上一个颜色（默认黑），
+// 于是彩色柱状图/图例整片变黑或缺失 —— 数科同样支持不全。
+//
+// 方案（不违反「禁用栅格化」）：图案内联的图**本身就是已存在的位图**，我们只是**读取**
+// 它的平均色当作该形状的填充色（图例色块通常是纯色，平均色即精确色），不产生新位图。
+// 与渐变一样必须**预先 await** 解析 image 公共对象（运行期 objs.get 只能拿到 Promise）。
+
+// 从 setFillColorN/setStrokeColorN 的 args 里取出 TilingPattern 内联图片的 objId；非图案返回 null。
+function patternImageId(args, OPS) {
+  if (!Array.isArray(args) || args[0] !== 'TilingPattern') return null;
+  const content = args[2];
+  if (!content || !content.fnArray) return null;
+  for (let i = 0; i < content.fnArray.length; i++) {
+    if (content.fnArray[i] === OPS.paintImageXObject) {
+      const a = content.argsArray[i];
+      const id = a && a[0];
+      if (typeof id === 'string') return id;
+    }
+  }
+  return null;
+}
+
+// RGBA 缓冲的（按 alpha 加权的）平均色，分量 0..1；无有效像素返回 null。
+function avgRgba(rgba) {
+  if (!rgba || !rgba.length) return null;
+  let r = 0, g = 0, b = 0, w = 0;
+  for (let i = 0; i + 3 < rgba.length; i += 4) {
+    const a = rgba[i + 3];
+    if (!a) continue;
+    r += rgba[i] * a;
+    g += rgba[i + 1] * a;
+    b += rgba[i + 2] * a;
+    w += a;
+  }
+  if (!w) return null;
+  return { r: r / w / 255, g: g / w / 255, b: b / w / 255 };
+}
+
+// 预取页面里所有 TilingPattern 填充图的平均色，返回 Map<objId,{r,g,b}>。
+async function prefetchPatternColors(page, tc, OPS) {
+  const ids = new Set();
+  for (let i = 0; i < tc.fnArray.length; i++) {
+    const f = tc.fnArray[i];
+    if (f === OPS.setFillColorN || f === OPS.setStrokeColorN) {
+      const id = patternImageId(tc.argsArray[i], OPS);
+      if (id) ids.add(id);
+    }
+  }
+  const map = new Map();
+  for (const id of ids) {
+    try {
+      const img = await page.objs.get(id);
+      const rgba = img && imageToRgba(img);
+      const c = avgRgba(rgba);
+      if (c) map.set(id, c);
+    } catch (e) {
+      /* 解析不出来就走原色兜底，不阻断整页 */
+    }
+  }
+  return map;
+}
 function stopsAvgColor(stops) {
   let r = 0,
     g = 0,
@@ -1295,6 +1373,7 @@ async function convert(pdfPath, ofdPath, options) {
     // 渐变 pattern 同样必须**预先 await 解析** —— 运行期 objs.get() 只能拿到未解析的
     // Promise，取不到色标就会退回灰色兜底（表现为图表颜色整片消失）
     const gradShades = await prefetchGradients(page, tc, OPS);
+    const patternColors = await prefetchPatternColors(page, tc, OPS);
     const body = walkOperators(tc, OPS, page, {
       pageWpt,
       pageHpt,
@@ -1304,6 +1383,7 @@ async function convert(pdfPath, ofdPath, options) {
       compositeUnits,
       fontCmap,
       gradShades,
+      patternColors,
       nextId: () => ++maxUnitId,
     });
     pageContents.push(body);

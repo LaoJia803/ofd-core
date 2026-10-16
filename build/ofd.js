@@ -1840,19 +1840,66 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     return units;
   }
 
+  // 解析填充/描边色节点里的渐变子元素（OFD AxialShd / RadialShd）。
+  // 返回 null 表示普通纯色（调用方走 parseColor）；否则返回
+  //   { kind:'axial'|'radial', extend, start:[x,y,(r)], end:[x,y,(r)], stops:[{pos,color}] }
+  // StartPoint/EndPoint 与 AbbreviatedData 同在对象用户坐标系（渐变按 userSpaceOnUse 对齐）。
+  function parseGradient(el) {
+    if (!el) return null;
+    const ax = child(el, "AxialShd");
+    const rad = child(el, "RadialShd");
+    const g = ax || rad;
+    if (!g) return null;
+    const nums = (s) =>
+      (s || "")
+        .trim()
+        .split(/\s+/)
+        .map(parseFloat)
+        .filter((n) => !isNaN(n));
+    const readStops = (name) =>
+      children(g, name).map((seg) => {
+        let pos = parseFloat(
+          attr(seg, "Position") != null ? attr(seg, "Position") : attr(seg, "Offset"),
+        );
+        if (isNaN(pos)) pos = null;
+        const colorEl = child(seg, "Color") || seg;
+        return { pos, color: parseColor(colorEl) };
+      });
+    let stops = readStops("Segment");
+    if (!stops.length) stops = readStops("Stop");
+    // 缺省 Position 时按下标均分 0..1
+    if (stops.some((s) => s.pos === null)) {
+      const n = stops.length || 1;
+      stops = stops.map((s, i) => ({ pos: s.pos === null ? i / (n - 1 || 1) : s.pos, color: s.color }));
+    }
+    return {
+      kind: ax ? "axial" : "radial",
+      extend: attr(g, "Extend") || "",
+      start: nums(attr(g, "StartPoint")),
+      end: nums(attr(g, "EndPoint")),
+      stops,
+    };
+  }
+
   function parsePathObject(el, layerDp) {
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const abbr = child(el, "AbbreviatedData");
+    const fillGrad = parseGradient(fillEl);
+    const strokeGrad = parseGradient(strokeEl);
     return {
       type: "path",
+      id: attr(el, "ID"),
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       lineWidth: num(el, "LineWidth", null),
+      dash: attr(el, "DashPattern") || null,
       stroke: bool(el, "Stroke", true),
       fill: bool(el, "Fill", false),
-      fillColor: fillEl ? parseColor(fillEl) : null,
-      strokeColor: strokeEl ? parseColor(strokeEl) : null,
+      fillColor: fillGrad ? null : fillEl ? parseColor(fillEl) : null,
+      fillGradient: fillGrad,
+      strokeColor: strokeGrad ? null : strokeEl ? parseColor(strokeEl) : null,
+      strokeGradient: strokeGrad,
       abbreviatedData: abbr ? text(abbr) : "",
       rule: attr(el, "Rule"),
       drawParam: attr(el, "DrawParam") || layerDp,
@@ -3082,6 +3129,33 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     return d;
   }
 
+  let _gradSeq = 0;
+  function buildGradient(gradient, ownerId) {
+    if (!gradient || !gradient.stops || !gradient.stops.length) return null;
+    const id = `ofd-grad-${ownerId != null ? ownerId : "x"}-${_gradSeq++}`;
+    const clamp01 = (v) => (v == null || isNaN(v) ? 0 : Math.max(0, Math.min(1, v)));
+    const stops = gradient.stops
+      .map((s) => {
+        const c = s.color || { r: 0, g: 0, b: 0, a: 1 };
+        const op = c.a != null ? c.a : 1;
+        return `<stop offset="${clamp01(s.pos)}" stop-color="${colorToCss({ r: c.r, g: c.g, b: c.b, a: 1 })}"${op < 1 ? ` stop-opacity="${op}"` : ""}/>`;
+      })
+      .join("");
+    const spread =
+      /repeat/i.test(gradient.extend) ? "repeat"
+        : /reflect/i.test(gradient.extend) ? "reflect"
+          : "pad";
+    let def;
+    if (gradient.kind === "axial") {
+      const s = gradient.start || [], e = gradient.end || [];
+      def = `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${s[0] || 0}" y1="${s[1] || 0}" x2="${e[0] || 0}" y2="${e[1] || 0}" spreadMethod="${spread}">${stops}</linearGradient>`;
+    } else {
+      const e = (gradient.end && gradient.end.length >= 3) ? gradient.end : (gradient.start || []);
+      def = `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${e[0] || 0}" cy="${e[1] || 0}" r="${e[2] || 0}" spreadMethod="${spread}">${stops}</radialGradient>`;
+    }
+    return { id, def };
+  }
+
   function renderPathObject(obj, res) {
     const d = abbreviatedToSvgPath(obj.abbreviatedData);
     if (!d) return "";
@@ -3099,13 +3173,24 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
           : 0.7;
     const strokeColor = obj.strokeColor || (dp && dp.strokeColor) || null;
     const fillColor = obj.fillColor || (dp && dp.fillColor) || null;
-    let attrs = `fill="none"`;
-    if (obj.fill && fillColor) attrs = `fill="${colorToCss(fillColor)}"`;
+    const fillGrad = obj.fillGradient || (dp && dp.fillGradient) || null;
+
+    let defs = "";
+    let attrs = "";
+    if (obj.fill) {
+      if (fillGrad) {
+        const g = buildGradient(fillGrad, obj.id);
+        if (g) { attrs += ` fill="url(#${g.id})"`; defs = `<defs>${g.def}</defs>`; }
+        else attrs += ' fill="none"';
+      } else if (fillColor) attrs += ` fill="${colorToCss(fillColor)}"`;
+      else attrs += ' fill="none"';
+    } else attrs += ' fill="none"';
     if (obj.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
     if (obj.stroke) {
       attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${lineWidth}"`;
+      if (obj.dash) attrs += ` stroke-dasharray="${obj.dash}"`;
     }
-    return `<g transform="${transform}"><path d="${d}" ${attrs}/></g>`;
+    return `<g transform="${transform}">${defs}<path d="${d}"${attrs}/></g>`;
   }
 
   function renderTextObject(obj, res) {

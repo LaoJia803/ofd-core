@@ -1253,12 +1253,30 @@
   }
 
   function applyScale(scale) {
+    const container = els.viewerContainer;
+    // 缩放前记录「视口顶部锚点页 + 它滚出顶部的比例」：缩放会改容器高度，
+    // 若只保留 scrollTop 数值，重排后同一数值会落到别的页上（跳转页丢失）。
+    const oldTop = container.scrollTop;
+    let anchorIdx = 0, anchorOldTop = 0, anchorOldH = 0;
+    for (let i = 0; i < state.pageCount; i++) {
+      const slot = state.pageContainers[i];
+      if (!slot) continue;
+      if (slot.offsetTop <= oldTop) { anchorIdx = i; anchorOldTop = slot.offsetTop; anchorOldH = slot.offsetHeight || 1; }
+      else break;
+    }
+    const anchorRatio = anchorOldH ? Math.max(0, Math.min(1, (oldTop - anchorOldTop) / anchorOldH)) : 0;
+
     state.scale = scale;
     for (let i = 0; i < state.pageCount; i++) {
       applyPageStyle(i, scale);
     }
     updateScaleSelect();
     applySigHighlight();
+
+    // 按锚点页缩放后的新几何还原滚动位置，保持跳转页不跑偏
+    const anchorSlot = state.pageContainers[anchorIdx];
+    if (anchorSlot) container.scrollTop = anchorSlot.offsetTop + anchorRatio * anchorSlot.offsetHeight;
+
     // 缩放改变页面布局尺寸，重新计算可视范围
     scheduleSyncVisiblePages();
   }
