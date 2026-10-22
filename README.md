@@ -16,6 +16,7 @@ OFD is the Chinese national standard format for electronic official documents (s
 | **Digital signatures** | Signature parsing, SM2 signature-value verification, file digest comparison (SM3/SHA), certificate and seal validity checks |
 | **Electronic seals** | Third-party seal-provider callback, custom seal placement and removal |
 | **Full-text search** | Cross-page search with precise per-character highlighting |
+| **Layout fidelity** | Object-level Clips, CMYK/gray/palette colors, gradient strokes, text stroke and HScale/ReadDirection |
 | **OFD → PDF** | Pure front-end conversion, zero dependencies (`build/toPdf.js`) |
 | **PDF → OFD** | Node CLI script / npm package (`build/pdf2ofd.js`, beta) |
 
@@ -97,10 +98,10 @@ npm run build:pdf2ofd        # → dist/pdf2ofd/ (publishable npm package)
 ```
 ofd-core/
 ├── build/                    # build outputs + build scripts
-│   ├── ofd.js                # core engine, unminified (~177 KB)
-│   ├── ofd.min.js                # core engine, minified (~97 KB) — this is what you load
+│   ├── ofd.js                # core engine, unminified (~198 KB)
+│   ├── ofd.min.js                # core engine, minified (~104 KB) — this is what you load
 │   ├── toPdf.js              # OFD → PDF module (~61 KB)
-│   ├── pdf2ofd.js            # PDF → OFD script (Node, beta, ~75 KB)
+│   ├── pdf2ofd.js            # PDF → OFD script (Node, beta, ~78 KB)
 │   ├── build.js              # engine build + distribution zip
 │   └── build-pdf2ofd.js      # assembles pdf2ofd.js into an npm package
 ├── src/                      # engine sources (22 files)
@@ -108,9 +109,9 @@ ofd-core/
 │   ├── core/                 # parsing: zip / parser / page / res / signature / verify / seal / asn1 / md / image
 │   ├── display/              # rendering: api / svg / font
 │   └── shared/               # utils: util / xml / color / path / lru
-├── web/                      # viewer (viewer.html / css / js, ~175 KB)
+├── web/                      # viewer (viewer.html / css / js + SVG icons, ~186 KB)
 ├── font/                     # external font drop-in (created by `npm run build`; needs a directory listing to serve)
-├── external/                 # third-party vendored code: sm-crypto.js (SM2/SM3, ~42 KB)
+├── external/                 # third-party vendored code: sm-crypto.js (SM2/SM3, ~42 KB), pdf.min.js (unused, deletable)
 ├── docs/                     # detailed documentation (bilingual)
 ├── dist/                     # build output (distribution zip + npm package)
 ├── test/                     # demo pages and OFD samples
@@ -124,10 +125,10 @@ Trim by what you actually need:
 
 | Keep | Size | Why |
 | --- | --- | --- |
-| `build/ofd.min.js` | ~97 KB | **required**, the core engine |
+| `build/ofd.min.js` | ~104 KB | **required**, the core engine |
 | `build/toPdf.js` | ~61 KB | only for OFD → PDF |
 | `external/sm-crypto.js` | ~42 KB | only for signature verification |
-| `web/` | ~175 KB | only for the full viewer |
+| `web/` | ~186 KB | only for the full viewer |
 | `font/` (repo root) | created by `npm run build` | external-font drop-in for unmapped OFD font names; the served folder must expose a **directory listing** to take effect |
 
 **Safe to delete**: `src/` (sources, build-time only), `external/pdf.min.js` (unused), `docs/`, `test/`, `build/ofd.js` (unminified), `build/pdf2ofd.js` and `build/build*.js` (Node-side).
@@ -138,13 +139,13 @@ The absolute minimum for rendering is just `build/ofd.min.js`. External fonts ar
 
 | File | Description | Size |
 | --- | --- | --- |
-| `build/ofd.js` | core engine, unminified | ~177 KB |
-| `build/ofd.min.js` | core engine, minified | ~97 KB |
+| `build/ofd.js` | core engine, unminified | ~198 KB |
+| `build/ofd.min.js` | core engine, minified | ~104 KB |
 | `build/toPdf.js` | OFD → PDF module | ~61 KB |
-| `build/pdf2ofd.js` | PDF → OFD script (Node, beta) | ~75 KB |
+| `build/pdf2ofd.js` | PDF → OFD script (Node, beta) | ~78 KB |
 | `external/sm-crypto.js` | Chinese national crypto library | ~42 KB |
-| `web/viewer.js` | viewer application logic | ~84 KB |
-| `web/viewer.css` | viewer styles (icons inlined as data URIs) | ~91 KB |
+| `web/viewer.js` | viewer application logic | ~93 KB |
+| `web/viewer.css` | viewer styles (icons reference `images/*.svg`; no base64) | ~43 KB |
 
 ## Usage
 
@@ -158,13 +159,13 @@ The absolute minimum for rendering is just `build/ofd.min.js`. External fonts ar
 | `search` | open the search bar and run a search automatically |
 
 ```
-http://127.0.0.1:8090/web/viewer.html?file=../test/ofdFile/999.ofd&page=3&rotate=90&search=invoice
+http://127.0.0.1:8090/web/viewer.html?file=../test/ofdFile/<your-sample>.ofd&page=3&rotate=90&search=invoice
 ```
 
 ### Core engine API
 
 ```js
-const ofd = await OFD.load('999.ofd');              // load and parse
+const ofd = await OFD.load('sample.ofd');              // load and parse
 const svg = await OFD.renderPage(ofd, 0);           // render a page as an SVG element
 const sigs = await OFD.getSignatures(ofd);          // list digital signatures
 const result = await OFD.verifySignature(ofd, 0);   // SM2 verify + digest compare + validity
@@ -232,7 +233,7 @@ Read this before relying on this project's verification results.
 > `valid: true` means the signature value is self-consistent, protected files are unmodified, and the validity periods cover the signing time.
 > It does **not** mean the signer is a trusted authority. Since certificates are trusted as-is with no chain building, anyone can self-sign a certificate and pass verification.
 >
-> Also note that digests live inside the OFD file and can be recomputed after tampering, so "digest matches" only proves the file is self-consistent. Signature-value verification is the actual basis for identity and integrity.
+> Also note that digests live inside the OFD file and can be recomputed after tampering, so "digest matches" only proves the file is self-consistent. Signature-value verification is the actual basis for identity and integrity. If digests match but the signature value cannot be verified (missing SM2 library or non-SES structure), the result is `status: "partial"` with `valid: false`, shown as "Partial" in the viewer.
 >
 > Legally binding electronic signatures require a compliant CA infrastructure and timestamp service, which this project does not provide.
 
@@ -270,7 +271,7 @@ Evaluate the risk yourself before processing OFD files from untrusted sources.
 | Document | Contents |
 | --- | --- |
 | [Core engine](docs/ofd.md) | Public API, parsing flow, signature verification scope and limits, profiling, implementation notes |
-| [Viewer](docs/viewer.md) | Integration examples, URL parameters, 5 extension APIs, sealing flow, internal state |
+| [Viewer](docs/viewer.md) | Integration examples, URL parameters, toolbar/seal/navigation APIs, sealing flow, internal state |
 | [OFD → PDF](docs/toPdf.md) | Conversion capabilities, font strategy, image support, known losses |
 | [PDF → OFD](docs/pdf2ofd.md) | CLI / npm package, conversion principles, alignment with reference output |
 

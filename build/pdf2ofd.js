@@ -376,7 +376,7 @@ function walkOperators(tc, OPS, page, ctx) {
   //   'clip'（填充块）→ 按裁剪区求交，这才是 PDF 语义要求的
   //
   // 为什么描边线也要豁免裁剪区：表格框线横跨整行/整列，往往在「单元格裁剪区建立之前」
-  // 就已发出，或跨越多个裁剪区。实测「电签通用签名板对接」第 2 页 12 条表格框线
+  // 就已发出，或跨越多个裁剪区。实测一份国产表单类 PDF 的第 2 页 12 条表格框线
   // （box=[29.8,25.5,150.5,0] 横跨 150mm 整行宽）里有 10 条被单元格 eoClip 剔掉，
   // 表现就是「表格边框显示不全」—— 只剩零星几段竖线。
   //
@@ -542,7 +542,7 @@ function walkOperators(tc, OPS, page, ctx) {
         // `Array.isArray(args[0])` 恒为 false，只能用 length 或 ArrayBuffer 判别。
         // 旧写法判断不了嵌套，把整个外层数组赋给 tm，平移分量取到 undefined，
         // 包围盒算成 NaN，visible() 把 1239 个文字对象里的 1200 个误剔
-        //（实测「电签通用签名板对接」3 页只剩 39 个文字，中文几乎全丢）。
+        //（实测某份 3 页表单文档只剩 39 个文字，中文几乎全丢）。
         let m = args;
         if (m && m.length === 1 && m[0] && typeof m[0].length === 'number' && m[0].length >= 6)
           m = Array.from(m[0]); // TypedArray → 普通数组，避免下游按数组方法取值踩空
@@ -687,7 +687,7 @@ if (Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) < 1e-6) {
 //
 // 关键：Td/TD/T* 的位移量是**文本空间**单位，必须在 tlm 的**右侧**相乘（后乘）。
 // 写成 matMul(trans, tlm)（左乘）会把位移施加到行起点之前，导致逐字 x 累加过快
-//（实测「电签通用签名板对接」每字 155mm 一步，整行被推出页面，visible() 全部误剔）。
+//（实测某份 3 页表单文档每字 155mm 一步，整行被推出页面，visible() 全部误剔）。
 function advanceLine(x, y) {
   tlm = matMul(tlm, [1, 0, 0, 1, x, y]);
   tm = tlm.slice();
@@ -698,9 +698,9 @@ function emitText(glyphArr) {
     const M = matMul(ctm, tm); // 文本空间(em) → 设备(pt, y-up)
     //
     // 两种 PDF 写法都要支持（这决定 Size 与边界盒怎么算）：
-    //  a) 常规 PDF：Tm 是单位阵，setFont 的 size 就是磅值（tracemonkey 那份，size=9.6）
+    //  a) 常规 PDF：Tm 是单位阵，setFont 的 size 就是磅值（学术论文类样本，size=9.6）
     //  b) 「字号编进 Tm」：setFont size=209 而 Tm=[0.05,0,0,-0.05,...]
-    //     （国产 PDF / WPS 导出常见，电签那份即是）—— 真实磅值 = 209×0.05 = 10.45pt。
+    //     （国产 PDF / WPS 导出常见，表单签章类样本即是）—— 真实磅值 = 209×0.05 = 10.45pt。
     //     若直接用 209，字会放大 20 倍，整页文字溢出页面被 visible() 剔光。
     //
     // OFD 的 Size 属性语义是「磅值」，而 CTM 承担其余缩放，所以这里：
@@ -796,7 +796,7 @@ function emitText(glyphArr) {
     // 渲染器按 Size 属性换算成实际磅值。
     //
     // Mdev 已把 tm 的缩放剥离（字号交给 Size 属性），所以这里用 sizeTs（磅值）
-    // 直接乘，与tracemonkey 基准的原有行为完全一致，不引入回归。
+    // 直接乘，与基准样本的原有行为完全一致，不引入回归。
     const emAsc = f && isFinite(f.ascent) ? f.ascent : 0.88;
     const emDesc = f && isFinite(f.descent) ? f.descent : -0.22;
     let total = 0;
@@ -1016,7 +1016,7 @@ function emitText(glyphArr) {
     // CTM 的 Y 分量**必须保持正值**，不能像路径那样取负。
     // 原因：OFD 渲染器算的是 `B0 + L·p`（图像的绘制矩形就是 Boundary 本身，p∈[0,1]²），
     // 若L 含 Y 翻转，就会把图像整体上下颠倒并推到 Boundary 的另一侧 ——
-    // 实测「电签通用签名板对接」第 1 页落点变成 y −42.9~68.8（跑到页面外，WPS 直接不显示），
+    // 实测某份表单签章类文档的第 1 页落点变成 y −42.9~68.8（跑到页面外，WPS 直接不显示），
     // 而能显示的第 2 页恰好因为 CTM 的 b/c 分量为 0、翻转只影响 d 才没暴露问题。
     //
     // Y 翻转已由 Boundary（px() 里完成的 `Hmm − Y`）承担，这里只保留 PDF 的真实缩放/旋转。
@@ -1089,7 +1089,7 @@ async function prefetchGradients(page, tc, OPS) {
 
 // ---- setFillColorN / setStrokeColorN：平铺图案（TilingPattern）取色 ----
 //
-// 有些 PDF（如 tracemonkey 第 13 页 Figure 12）把图表色块/图例用「一张 80×80 小图作为
+// 有些 PDF（比如论文里第 13 页的 Figure 图注区）把图表色块/图例用「一张 80×80 小图作为
 // 平铺图案」来填色：setFillColorN 的参数形如
 //   [ 'TilingPattern', backdrop, {fnArray,argsArray}, matrix, bbox, ... ]
 // 图案内容(argsArray[2]) 里是 paintImageXObject ['img_pX_Y', w, h]。
@@ -1310,7 +1310,7 @@ async function convert(pdfPath, ofdPath, options) {
     disableFontFace: false, // 关键：保留字体字节
     isEvalSupported: false,
     // 中文/日文等 CID 字体会报「Ensure that the `cMapUrl` API parameter is provided.」，
-    // 字体加载随之失败 → 字体表为空 → 整页文字被丢弃（实测 tests.pdf 文字 0、字体 0）。
+    // 字体加载随之失败 → 字体表为空 → 整页文字被丢弃（实测中日文混排样本：文字 0、字体 0）。
     // 注意：pdf.js 要求以「正斜杠」结尾，Windows 的 path.sep 是反斜杠，必须手工拼 '/'。
     cMapUrl: cmapsUrl(),
     cMapPacked: true,
@@ -1407,7 +1407,7 @@ async function convert(pdfPath, ofdPath, options) {
   // 也包括 PDF 文档未内嵌的 Helvetica/Times）。这类字体 pdf.js 拿不到字节
   // （commonobj 里 mimetype=null、无 data），此前在下面被 `if (!f) continue` 跳过，
   // 结果页面里的 TextObject 全部引用了一个不存在的 Font ID
-  // （实测 tests.pdf：1064 个文字对象，PublicRes 里 0 个字体）—— 严格渲染器会拒绝或显示异常。
+  //（实测某份 1064 个文字对象的样本：PublicRes 里 0 个字体）—— 严格渲染器会拒绝或显示异常。
   // 正确做法：声明字体但不给 FontFile，由渲染器按 FontName 回退到系统字体。
   const fontEntries = [];
   const fontFiles = [];

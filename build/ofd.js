@@ -111,46 +111,72 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
 
   // ==================== 颜色 ====================
   // "156 82 35" | "#9C5223" | "#ee #20 #25" | "255"(灰度)
-  function parseColor(el) {
+  // ColorSpace 支持 GRAY / RGB / CMYK，以及调色板（<Color Index="n">）。
+  function parseColorComponents(str) {
+    const parts = String(str || "").trim().split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const s of parts) {
+      if (s.startsWith("#")) {
+        const v = parseInt(s.slice(1), 16);
+        out.push(isNaN(v) ? 0 : v);
+      } else {
+        const v = parseFloat(s);
+        out.push(isNaN(v) ? 0 : v);
+      }
+    }
+    return out;
+  }
+
+  function colorFromComponents(vals, cs, a) {
+    const type = ((cs && cs.type) || "RGB").toUpperCase();
+    const bits = cs && +cs.bits > 0 ? +cs.bits : 8;
+    const max = Math.pow(2, bits) - 1;
+    const ch = vals.map((v) => {
+      const n = Math.max(0, Math.min(max, v));
+      return Math.round((n * 255) / max);
+    });
+    if (type === "GRAY") {
+      const g = ch.length ? ch[0] : 0;
+      return { r: g, g, b: g, a };
+    }
+    if (type === "CMYK") {
+      const c = ch.length > 0 ? ch[0] : 0;
+      const m = ch.length > 1 ? ch[1] : 0;
+      const y = ch.length > 2 ? ch[2] : 0;
+      const k = ch.length > 3 ? ch[3] : 0;
+      // 简单 CMYK→RGB（不做 ICC 色彩管理）
+      return {
+        r: Math.round(255 * (1 - c / 255) * (1 - k / 255)),
+        g: Math.round(255 * (1 - m / 255) * (1 - k / 255)),
+        b: Math.round(255 * (1 - y / 255) * (1 - k / 255)),
+        a,
+      };
+    }
+    return {
+      r: ch.length > 0 ? ch[0] : 0,
+      g: ch.length > 1 ? ch[1] : 0,
+      b: ch.length > 2 ? ch[2] : 0,
+      a,
+    };
+  }
+
+  function parseColor(el, res, defaultCs) {
     if (!el) return null;
-    const val = attr(el, "Value");
     const alpha = attr(el, "Alpha");
     let a = 1;
     if (alpha !== null && alpha !== "")
       a = Math.max(0, Math.min(1, parseFloat(alpha) / 255));
-    if (!val) return { r: 0, g: 0, b: 0, a };
-    const parts = val.trim().split(/\s+/);
-    if (parts.length === 1) {
-      if (parts[0].startsWith("#")) {
-        const hex = parts[0].slice(1);
-        const full =
-          hex.length === 3
-            ? hex
-                .split("")
-                .map((c) => c + c)
-                .join("")
-            : hex;
-        const n = parseInt(full, 16);
-        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a };
-      }
-      const g = parseInt(parts[0]);
-      return { r: g, g: g, b: g, a };
+    const csId = attr(el, "ColorSpace") || defaultCs || "";
+    const cs =
+      res && res.colorSpaces && csId != null ? res.colorSpaces[csId] : null;
+    const index = attr(el, "Index");
+    if (index !== null && index !== "" && cs && cs.palette) {
+      const entry = cs.palette[parseInt(index, 10)];
+      if (entry) return colorFromComponents(entry, cs, a);
     }
-    // 多分量：可能是 "156 82 35" 或 "#ee #20 #25"
-    const parseComp = (s) => {
-      if (s.startsWith("#")) {
-        const v = parseInt(s.slice(1), 16);
-        return isNaN(v) ? 0 : v;
-      }
-      const v = parseInt(s);
-      return isNaN(v) ? 0 : v;
-    };
-    return {
-      r: parseComp(parts[0]),
-      g: parseComp(parts[1]),
-      b: parseComp(parts[2]),
-      a,
-    };
+    const val = attr(el, "Value");
+    if (!val) return { r: 0, g: 0, b: 0, a };
+    return colorFromComponents(parseColorComponents(val), cs, a);
   }
   const _colorCache = new Map();
   function colorToCss(c) {
@@ -166,7 +192,6 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     _colorCache.set(key, css);
     return css;
   }
-
   // ==================== XML 解析器 ====================
   // 节点 { tag, attrs, children, text }，无 DOM 中间产物，浏览器/Node 通用
   function parseXml(str) {
@@ -1491,8 +1516,24 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         checks: checks,
       };
     }
+    // 摘要一致不等于签名值已验证。签名值未验证时必须降级为 partial，
+    // 不能返回 valid: true（CheckValue 可以随文件内容一起被重算）。
+    if (sv.state !== "pass") {
+      return {
+        valid: false,
+        status: "partial",
+        message:
+          "摘要校验通过（" +
+          checked.length +
+          " 个文件），但签名值未验证：" +
+          (sv.message || "无可用签名值数据"),
+        digestValid: true,
+        checked: checked,
+        failed: failed,
+        checks: checks,
+      };
+    }
     const skipped = [];
-    if (sv.state === "unknown") skipped.push(sv.message);
     if (periods.sealPeriod === "unknown") skipped.push("印章有效期");
     if (periods.certPeriod === "unknown") skipped.push("证书有效期");
     return {
@@ -1519,7 +1560,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     Object.assign(target.compositeUnits, src.compositeUnits);
   }
 
-  async function parseRes(resPath, zip) {
+  async function parseRes(resPath, zip, defaultCs) {
     const res = {
       fonts: {},
       colorSpaces: {},
@@ -1533,6 +1574,20 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     const baseLoc = attr(root, "BaseLoc") || "";
     const baseDir = baseLoc ? resolvePath(resPath, baseLoc) : dirOf(resPath);
 
+    // 先解析颜色空间：后面的 DrawParam / 页面图元都要按它解释通道
+    const csEl = child(root, "ColorSpaces");
+    if (csEl)
+      for (const c of children(csEl, "ColorSpace")) {
+        const palEl = child(c, "Palette");
+        res.colorSpaces[attr(c, "ID")] = {
+          type: attr(c, "Type"),
+          bits: attr(c, "BitsPerComponent"),
+          palette: palEl
+            ? children(palEl, "CV").map((cv) => parseColorComponents(text(cv)))
+            : null,
+        };
+      }
+
     const fontsEl = child(root, "Fonts");
     if (fontsEl)
       for (const f of children(fontsEl, "Font")) {
@@ -1543,14 +1598,6 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
           fontFile: fontFileEl ? text(fontFileEl) : null,
           fontBaseDir: baseDir,
           _zip: zip,
-        };
-      }
-    const csEl = child(root, "ColorSpaces");
-    if (csEl)
-      for (const c of children(csEl, "ColorSpace")) {
-        res.colorSpaces[attr(c, "ID")] = {
-          type: attr(c, "Type"),
-          bits: attr(c, "BitsPerComponent"),
         };
       }
     const mmEl = child(root, "MultiMedias");
@@ -1568,18 +1615,36 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     const dpEl = child(root, "DrawParams");
     if (dpEl)
       for (const d of children(dpEl, "DrawParam")) {
-        const dp = { id: attr(d, "ID"), lineWidth: num(d, "LineWidth", null) };
+        const dp = {
+          id: attr(d, "ID"),
+          lineWidth: num(d, "LineWidth", null),
+          dashPattern: attr(d, "DashPattern") || null,
+          cap: attr(d, "Cap"),
+          join: attr(d, "Join"),
+          miterLimit: num(d, "MiterLimit", null),
+          dashOffset: num(d, "DashOffset", null),
+        };
         const sc = child(d, "StrokeColor");
-        if (sc) dp.strokeColor = parseColor(sc);
+        if (sc) {
+          const g = parseGradient(sc);
+          if (g) dp.strokeGradient = g;
+          else dp.strokeColor = parseColor(sc, res, defaultCs);
+        }
         const fc = child(d, "FillColor");
-        if (fc) dp.fillColor = parseColor(fc);
+        if (fc) {
+          const g = parseGradient(fc);
+          if (g) dp.fillGradient = g;
+          else dp.fillColor = parseColor(fc, res, defaultCs);
+        }
         res.drawParams[attr(d, "ID")] = dp;
       }
     return res;
   }
-
   // ==================== 图像解码 ====================
   const TIFF_TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+  // TIFF 宽高来自文件标签，必须先限制再分配内存；32MP 可覆盖约 400dpi 的 A4 扫描件
+  const TIFF_MAX_PIXELS = 32 * 1000 * 1000;
+  const TIFF_MAX_BMP_BYTES = 160 * 1024 * 1024;
   function parseTiffTags(bytes) {
     const le = bytes[0] === 0x49 && bytes[1] === 0x49;
     const u16 = (o) =>
@@ -1623,7 +1688,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     return tags;
   }
 
-  function tiffLzwDecode(data) {
+  function tiffLzwDecode(data, maxOut) {
     const out = [];
     const dict = new Array(4096);
     let bitPos = 0,
@@ -1651,7 +1716,10 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       else if (code < next) entry = dict[code];
       else if (code === next && prev) entry = prev.concat(prev[0]);
       else break;
-      for (let j = 0; j < entry.length; j++) out.push(entry[j]);
+      for (let j = 0; j < entry.length; j++) {
+        if (maxOut && out.length >= maxOut) return null;
+        out.push(entry[j]);
+      }
       if (prev) {
         dict[next++] = prev.concat(entry[0]);
         if (codeWidth === 9 && next >= 511) codeWidth = 10;
@@ -1665,18 +1733,30 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   function tiffToBmpDataUrl(bytes) {
     const tags = parseTiffTags(bytes);
     if (!tags) return null;
-    const w = tags[256] ? tags[256].vals[0] : 0;
-    const h = tags[257] ? tags[257].vals[0] : 0;
-    if (!w || !h) return null;
+    const w = Math.floor(tags[256] ? tags[256].vals[0] : 0);
+    const h = Math.floor(tags[257] ? tags[257].vals[0] : 0);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0)
+      return null;
+    if (w * h > TIFF_MAX_PIXELS) {
+      console.warn(
+        "[OFD] TIFF 尺寸过大，已跳过解码：" + w + "x" + h + " 像素",
+      );
+      return null;
+    }
     const bps = tags[258] ? tags[258].vals : [8];
     if (bps.some((b) => b !== 8)) return null;
-    const spp = tags[277] ? tags[277].vals[0] : bps.length;
+    const spp = Math.floor(tags[277] ? tags[277].vals[0] : bps.length);
+    if (!Number.isInteger(spp) || spp < 1 || spp > 4) return null;
     const comp = tags[259] ? tags[259].vals[0] : 1;
     if (comp !== 1 && comp !== 5) return null;
     const photo = tags[262] ? tags[262].vals[0] : 1;
     const planar = tags[284] ? tags[284].vals[0] : 1;
     if (planar !== 1) return null;
-    const rowsPerStrip = tags[278] ? tags[278].vals[0] : h;
+    let rowsPerStrip = Math.floor(
+      tags[278] ? tags[278].vals[0] : h,
+    );
+    if (!Number.isInteger(rowsPerStrip) || rowsPerStrip <= 0)
+      rowsPerStrip = h;
     const offsets = tags[273] ? tags[273].vals : [];
     const counts = tags[279] ? tags[279].vals : [];
     if (!offsets.length || !counts.length) return null;
@@ -1685,16 +1765,32 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       photo === 3 && tags[320] && tags[320].vals.length >= 768
         ? tags[320].vals
         : null;
-    const rgb = new Uint8Array(w * h * 3);
     const rowBytes = w * spp;
-    for (let s = 0; s < offsets.length; s++) {
-      if (offsets[s] + counts[s] > bytes.length) continue;
-      const raw = bytes.subarray(offsets[s], offsets[s] + counts[s]);
+    const rowSize = Math.floor((w * 24 + 31) / 32) * 4;
+    const dataSize = rowSize * h;
+    if (54 + dataSize > TIFF_MAX_BMP_BYTES) {
+      console.warn(
+        "[OFD] TIFF 解码后体积过大，已跳过：" + (54 + dataSize) + " 字节",
+      );
+      return null;
+    }
+    const rgb = new Uint8Array(w * h * 3);
+    const stripCount = Math.min(offsets.length, counts.length);
+    for (let s = 0; s < stripCount; s++) {
+      const rowsThis = Math.min(rowsPerStrip, h - s * rowsPerStrip);
+      if (rowsThis <= 0) break;
+      const off = offsets[s];
+      const cnt = counts[s];
+      if (off < 0 || cnt <= 0 || off + cnt > bytes.length) continue;
+      const raw = bytes.subarray(off, off + cnt);
+      const maxOut = rowBytes * rowsThis;
       const px =
-        comp === 5 ? tiffLzwDecode(raw) : Array.prototype.slice.call(raw);
+        comp === 5
+          ? tiffLzwDecode(raw, maxOut)
+          : Array.prototype.slice.call(raw);
+      if (!px || px.length < maxOut) continue;
       if (predictor === 2) {
-        const rowsThis0 = Math.min(rowsPerStrip, h - s * rowsPerStrip);
-        for (let r = 0; r < rowsThis0; r++) {
+        for (let r = 0; r < rowsThis; r++) {
           const base = r * rowBytes;
           for (let x = 1; x < w; x++) {
             const cur = base + x * spp,
@@ -1704,7 +1800,6 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
           }
         }
       }
-      const rowsThis = Math.min(rowsPerStrip, h - s * rowsPerStrip);
       for (let r = 0; r < rowsThis; r++) {
         const y = s * rowsPerStrip + r;
         const srcOff = r * rowBytes,
@@ -1738,8 +1833,6 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         }
       }
     }
-    const rowSize = Math.floor((w * 24 + 31) / 32) * 4;
-    const dataSize = rowSize * h;
     const buf = new Uint8Array(54 + dataSize);
     buf[0] = 0x42;
     buf[1] = 0x4d;
@@ -1796,33 +1889,83 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   }
 
   // ==================== OFD 页面解析 ====================
-  function parseLayer(layerEl, layerDp) {
+  // 解析上下文：文档版本（决定 Clips 的 TransFlag 默认值）、资源表（颜色空间）、默认颜色空间
+  function normalizeCtx(ctx) {
+    return ctx || {};
+  }
+
+  // Clips 采用对象空间坐标系：
+  //   - 多个 Clip 取交集；
+  //   - 一个 Clip 内的多个 Area（Path）取并集。
+  // TransFlag 控制裁剪区是否受“图元自身 CTM”影响。OFD 1.2 起缺省为 false；
+  // 1.1 文档（如 Foxit 产物）实测缺省为 true，否则裁剪区会被缩到左上角。
+  function parseClips(el, ctx) {
+    const clipsEl = child(el, "Clips");
+    if (!clipsEl) return null;
+    const tfAttr = attr(clipsEl, "TransFlag");
+    let transFlag;
+    if (tfAttr !== null && tfAttr !== "") {
+      transFlag = /^(true|1)$/i.test(tfAttr);
+    } else {
+      const ver = parseFloat(ctx && ctx.version);
+      transFlag = isFinite(ver) ? ver < 1.2 : true;
+    }
+    const clips = [];
+    for (const clipEl of children(clipsEl, "Clip")) {
+      const areas = [];
+      for (const areaEl of children(clipEl, "Area")) {
+        const ctm = parseMatrix(attr(areaEl, "CTM"));
+        const paths = children(areaEl, "Path").map((p) => ({
+          boundary: parseBox(attr(p, "Boundary")),
+          ctm: parseMatrix(attr(p, "CTM")),
+          abbr: text(child(p, "AbbreviatedData")),
+          rule: attr(p, "Rule"),
+        }));
+        // Area 的裁剪对象也可以是文字（CT_Text），其结构与 TextObject 相同
+        const texts = children(areaEl, "Text").map((t) =>
+          parseTextObject(t, undefined, ctx),
+        );
+        if (paths.length || texts.length) areas.push({ ctm, paths, texts });
+      }
+      if (areas.length) clips.push({ transFlag, areas });
+    }
+    return clips.length ? clips : null;
+  }
+
+  function parseObjectEl(c, layerDp, ctx) {
+    const name = stripNs(c.tag);
+    if (name === "PathObject") return parsePathObject(c, layerDp, ctx);
+    if (name === "TextObject") return parseTextObject(c, layerDp, ctx);
+    if (name === "ImageObject") return parseImageObject(c, ctx);
+    if (name === "CompositeObject")
+      // 复合图元：只记引用，真正的图元在 DocumentRes 的 CompositeGraphicUnit 里。
+      // 渲染时由 renderObject 展开（见 display/svg.js）。
+      return {
+        type: "composite",
+        resourceId: attr(c, "ResourceID"),
+        ctm: parseMatrix(attr(c, "CTM")),
+        boundary: parseBox(attr(c, "Boundary")),
+        drawParam: attr(c, "DrawParam") || layerDp,
+        clips: parseClips(c, ctx),
+      };
+    return null;
+  }
+
+  function parseLayer(layerEl, layerDp, ctx) {
     const drawParam = attr(layerEl, "DrawParam") || layerDp;
     const objects = [];
     for (const c of layerEl.children) {
-      const name = stripNs(c.tag);
-      if (name === "PathObject") objects.push(parsePathObject(c, drawParam));
-      else if (name === "TextObject")
-        objects.push(parseTextObject(c, drawParam));
-      else if (name === "ImageObject") objects.push(parseImageObject(c));
-      else if (name === "CompositeObject")
-        // 复合图元：只记引用，真正的图元在 DocumentRes 的 CompositeGraphicUnit 里。
-        // 渲染时由 renderObject 展开（见 display/svg.js）。
-        objects.push({
-          type: "composite",
-          resourceId: attr(c, "ResourceID"),
-          ctm: parseMatrix(attr(c, "CTM")),
-          boundary: parseBox(attr(c, "Boundary")),
-          drawParam: attr(c, "DrawParam") || layerDp,
-        });
+      const obj = parseObjectEl(c, drawParam, ctx);
+      if (obj) objects.push(obj);
     }
     return { drawParam, objects };
   }
 
-  // 解析 DocumentRes 里的 <ofd:CompositeGraphicUnit>，供 CompositeObject 引用展开。
-  // 数科等第三方产物把 Form XObject 的内容放在这里（实测 tracemonkey 那份 226 个 Unit，
-  // 内含 226 处 Clips），引擎此前完全忽略，导致页面里 731 个图元渲染不出来。
-  async function parseCompositeUnits(resPath, zip) {
+  // 解析 DocumentRes/PublicRes 里的 <ofd:CompositeGraphicUnit>，供 CompositeObject 引用展开。
+  // 两种常见写法都要支持：标准 <Content><Layer><PathObject/></Layer></Content>，
+  // 以及数科产物 <Content><PathObject/></Content>（图元直接挂在 Content 下）。
+  async function parseCompositeUnits(resPath, zip, ctx) {
+    ctx = normalizeCtx(ctx);
     const units = {};
     const xmlText = await readEntryText(zip, resPath);
     if (!xmlText) return units;
@@ -1830,12 +1973,22 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     const list = child(root, "CompositeGraphicUnits");
     if (!list) return units;
     for (const u of children(list, "CompositeGraphicUnit")) {
-      const content = child(u, "Content");
-      const layers = content ? children(content, "Layer").map((l) => parseLayer(l)) : [];
-      units[attr(u, "ID")] = {
-        boundary: parseBox(attr(u, "Boundary")),
-        layers,
-      };
+      const layers = [];
+      for (const content of children(u, "Content")) {
+        const layerEls = children(content, "Layer");
+        if (layerEls.length) {
+          for (const l of layerEls) layers.push(parseLayer(l, undefined, ctx));
+          // Layer 之外直接挂在 Content 下的图元也不能丢
+          const direct = parseLayer(content, undefined, ctx);
+          if (direct.objects.length) layers.push(direct);
+        } else {
+          layers.push(parseLayer(content, undefined, ctx));
+        }
+      }
+      const boundary = attr(u, "Boundary")
+        ? parseBox(attr(u, "Boundary"))
+        : { x: 0, y: 0, w: num(u, "Width", 0), h: num(u, "Height", 0) };
+      units[attr(u, "ID")] = { boundary, layers };
     }
     return units;
   }
@@ -1844,7 +1997,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   // 返回 null 表示普通纯色（调用方走 parseColor）；否则返回
   //   { kind:'axial'|'radial', extend, start:[x,y,(r)], end:[x,y,(r)], stops:[{pos,color}] }
   // StartPoint/EndPoint 与 AbbreviatedData 同在对象用户坐标系（渐变按 userSpaceOnUse 对齐）。
-  function parseGradient(el) {
+  function parseGradient(el, res, defaultCs) {
     if (!el) return null;
     const ax = child(el, "AxialShd");
     const rad = child(el, "RadialShd");
@@ -1863,7 +2016,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         );
         if (isNaN(pos)) pos = null;
         const colorEl = child(seg, "Color") || seg;
-        return { pos, color: parseColor(colorEl) };
+        return { pos, color: parseColor(colorEl, res, defaultCs) };
       });
     let stops = readStops("Segment");
     if (!stops.length) stops = readStops("Stop");
@@ -1881,12 +2034,13 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     };
   }
 
-  function parsePathObject(el, layerDp) {
+  function parsePathObject(el, layerDp, ctx) {
+    ctx = normalizeCtx(ctx);
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const abbr = child(el, "AbbreviatedData");
-    const fillGrad = parseGradient(fillEl);
-    const strokeGrad = parseGradient(strokeEl);
+    const fillGrad = parseGradient(fillEl, ctx.res, ctx.defaultCs);
+    const strokeGrad = parseGradient(strokeEl, ctx.res, ctx.defaultCs);
     return {
       type: "path",
       id: attr(el, "ID"),
@@ -1896,42 +2050,69 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       dash: attr(el, "DashPattern") || null,
       stroke: bool(el, "Stroke", true),
       fill: bool(el, "Fill", false),
-      fillColor: fillGrad ? null : fillEl ? parseColor(fillEl) : null,
+      fillColor: fillGrad
+        ? null
+        : fillEl
+          ? parseColor(fillEl, ctx.res, ctx.defaultCs)
+          : null,
       fillGradient: fillGrad,
-      strokeColor: strokeGrad ? null : strokeEl ? parseColor(strokeEl) : null,
+      strokeColor: strokeGrad
+        ? null
+        : strokeEl
+          ? parseColor(strokeEl, ctx.res, ctx.defaultCs)
+          : null,
       strokeGradient: strokeGrad,
       abbreviatedData: abbr ? text(abbr) : "",
       rule: attr(el, "Rule"),
       drawParam: attr(el, "DrawParam") || layerDp,
+      clips: parseClips(el, ctx),
     };
   }
 
   // 解析 <ofd:CGTransform>/<ofd:Glyphs>：字符码位 -> 字形索引的显式映射。
   //
   // 为什么必须解析：TextCode 的文本只是「可搜索副本」，真实字形由 Glyphs 指定。
-  // 子集字体里相当多的码位没有 cmap 映射（例如 tracemonkey 第 10 页刻度标签
-  // 里的 `#`），浏览器按 Unicode 交给 @font-face 时查不到轮廓，
+  // 子集字体里相当多的码位没有 cmap 映射（例如图表刻度标签里的
+  // `#`），浏览器按 Unicode 交给 @font-face 时查不到轮廓，
   // 会按字体回退链显示成另一个符号 —— 表现就是「图表标签多出 # 等杂符号」。
   // 拿到 Glyphs 后，引擎可以逐字定位，让缺字形的字符只影响自己。
-  function parseGlyphs(el) {
-    const cg = child(el, "CGTransform");
-    if (!cg) return null;
-    const g = child(cg, "Glyphs");
-    if (!g) return null;
-    const raw = (g.text || "").trim();
-    if (!raw) return null;
-    const gids = raw.split(/\s+/).map(Number);
-    if (!gids.length || gids.some((n) => !Number.isFinite(n))) return null;
-    const cp = +attr(cg, "CodePosition");
-    const cc = +attr(cg, "CodeCount");
-    return {
-      glyphs: gids,
-      codePosition: Number.isFinite(cp) ? cp : 0,
-      codeCount: Number.isFinite(cc) ? cc : gids.length,
-    };
+  //
+  // 一个 TextObject 可以包含多个 CGTransform，各自用 CodePosition/CodeCount
+  // 指定覆盖的字符区间；多个 TextCode 之间也要按累计字符偏移取字形。
+  function parseGlyphMap(el) {
+    const segments = [];
+    for (const cg of children(el, "CGTransform")) {
+      const g = child(cg, "Glyphs");
+      if (!g) continue;
+      const raw = (g.text || "").trim();
+      if (!raw) continue;
+      const gids = raw.split(/\s+/).map(Number);
+      if (!gids.length || gids.some((n) => !Number.isFinite(n))) continue;
+      const cp = +attr(cg, "CodePosition");
+      const cc = +attr(cg, "CodeCount");
+      segments.push({
+        codePosition: Number.isFinite(cp) && cp >= 0 ? cp : 0,
+        codeCount:
+          Number.isFinite(cc) && cc > 0
+            ? Math.min(cc, 1000000)
+            : gids.length,
+        glyphs: gids,
+      });
+    }
+    if (!segments.length) return null;
+    const map = [];
+    for (const seg of segments) {
+      for (let j = 0; j < seg.codeCount; j++) {
+        // GlyphCount < CodeCount 时，规范约定重复使用最后一个字形
+        const gid = seg.glyphs[Math.min(j, seg.glyphs.length - 1)];
+        map[seg.codePosition + j] = gid;
+      }
+    }
+    return map;
   }
 
-  function parseTextObject(el, layerDp) {
+  function parseTextObject(el, layerDp, ctx) {
+    ctx = normalizeCtx(ctx);
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const textCodes = children(el, "TextCode").map((tc) => ({
@@ -1940,12 +2121,20 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       deltaX: attr(tc, "DeltaX"),
       deltaY: attr(tc, "DeltaY"),
       // 仅剥离 XML 缩进产生的换行空白；保留行内首尾空格字形（它们按 DeltaX 占位，
-      // 若误删会导致后续字符合并到窄间距重叠，见 1287页.ofd 段首缩进）
-      text: (tc.text || "").replace(/^\s*\n[\s ]*/, "").replace(/[\s ]*\n\s*$/, ""),
+      // 若误删会导致后续字符合并到窄间距重叠，整段文字挤成一团）
+      text: (tc.text || "").replace(/^\s*\n[\s ]*/, "").replace(/[\s ]*\n\s*$/, ""),
     }));
-    const glyphInfo = parseGlyphs(el);
+    // CGTransform 的 CodePosition 以 TextObject 的全文为基准；为每个 TextCode
+    // 记录累计字符偏移（按码点计数，避免代理对把后续字形整体错位）。
+    let codeOffset = 0;
+    for (const tc of textCodes) {
+      tc.codeStart = codeOffset;
+      codeOffset += Array.from(tc.text).length;
+    }
+    const glyphMap = parseGlyphMap(el);
     return {
       type: "text",
+      id: attr(el, "ID"),
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       fontId: attr(el, "Font"),
@@ -1953,31 +2142,37 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       readDirection: num(el, "ReadDirection", 0),
       charDirection: num(el, "CharDirection", 0),
       hScale: num(el, "HScale", 1),
+      lineWidth: num(el, "LineWidth", null),
       weight: num(el, "Weight", 400),
       italic: bool(el, "Italic", false),
       stroke: bool(el, "Stroke", false),
       fill: bool(el, "Fill", true),
-      fillColor: fillEl ? parseColor(fillEl) : { r: 0, g: 0, b: 0, a: 1 },
-      strokeColor: strokeEl ? parseColor(strokeEl) : null,
+      fillColor: fillEl
+        ? parseColor(fillEl, ctx.res, ctx.defaultCs)
+        : { r: 0, g: 0, b: 0, a: 1 },
+      strokeColor: strokeEl
+        ? parseColor(strokeEl, ctx.res, ctx.defaultCs)
+        : null,
       textCodes,
-      // 逐字字形索引；为 null 表示该 TextObject 未提供 Glyphs
-      glyphs: glyphInfo ? glyphInfo.glyphs : null,
-      codePosition: glyphInfo ? glyphInfo.codePosition : 0,
-      codeCount: glyphInfo ? glyphInfo.codeCount : 0,
+      // 全文逐字字形索引；null 表示未提供 Glyphs
+      glyphMap,
       drawParam: attr(el, "DrawParam") || layerDp,
+      clips: parseClips(el, ctx),
     };
   }
 
-  function parseImageObject(el) {
+  function parseImageObject(el, ctx) {
     return {
       type: "image",
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       resourceId: attr(el, "ResourceID"),
+      clips: parseClips(el, ctx),
     };
   }
 
-  async function parsePage(pagePath, zip) {
+  async function parsePage(pagePath, zip, ctx) {
+    ctx = normalizeCtx(ctx);
     const xmlText = await readEntryText(zip, pagePath);
     if (!xmlText) return { pagePath, pageBox: null, templates: [], layers: [] };
     const root = parseXml(xmlText).documentElement;
@@ -1993,7 +2188,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     }));
     const content = child(root, "Content");
     const layers = content
-      ? children(content, "Layer").map((l) => parseLayer(l))
+      ? children(content, "Layer").map((l) => parseLayer(l, undefined, ctx))
       : [];
     return { pagePath, pageBox, templates, layers };
   }
@@ -2005,6 +2200,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       const ofdXmlText = await readEntryText(sealZip, "OFD.xml");
       if (!ofdXmlText) return null;
       const ofdRoot = parseXml(ofdXmlText).documentElement;
+      const version = attr(ofdRoot, "Version") || "";
       const docBody = child(ofdRoot, "DocBody");
       if (!docBody) return null;
       const docEle = child(docBody, "DocRoot");
@@ -2017,13 +2213,22 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       const docRoot = parseXml(docXmlText).documentElement;
 
       // 解析公共资源（CommonData > PublicRes）
-      let res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+      let res = {
+        fonts: {},
+        colorSpaces: {},
+        multiMedias: {},
+        drawParams: {},
+        compositeUnits: {},
+      };
       const commonDataEl = child(docRoot, "CommonData");
+      const defaultCs = commonDataEl
+        ? text(child(commonDataEl, "DefaultCS"))
+        : "";
       if (commonDataEl) {
         const publicResEl = child(commonDataEl, "PublicRes");
         if (publicResEl) {
           const publicResPath = resolvePath(docPath, text(publicResEl));
-          res = await parseRes(publicResPath, sealZip);
+          res = await parseRes(publicResPath, sealZip, defaultCs);
         }
       }
 
@@ -2035,7 +2240,11 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       const pageBaseLoc = attr(pageEl, "BaseLoc");
       if (!pageBaseLoc) return null;
       const pagePath = resolvePath(docPath, pageBaseLoc);
-      const page = await parsePage(pagePath, sealZip);
+      const page = await parsePage(pagePath, sealZip, {
+        version,
+        res,
+        defaultCs: null,
+      });
 
       return { page, res, pagePath };
     } catch (e) {
@@ -2043,7 +2252,6 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       return null;
     }
   }
-
   // ==================== 签名解析 ====================
   async function parseSignatures(signaturesPath, zip) {
     const stamps = [];
@@ -2359,7 +2567,33 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   }
 
   // ==================== 注解解析 ====================
-  async function parseAnnotations(annotationsPath, zip) {
+  // Appearance 是完整页块：可以包含 PathObject / TextObject / ImageObject / CompositeObject，
+  // 不能只认 PathObject（Watermark 常见文字/图片外观）。
+  function parseAppearance(appearance, ctx) {
+    const boundary = parseBox(attr(appearance, "Boundary"));
+    const dp = attr(appearance, "DrawParam") || null;
+    const objects = [];
+    const walk = (el) => {
+      for (const c of el.children) {
+        const name = stripNs(c.tag);
+        if (name === "Layer" || name === "Content") {
+          walk(c);
+          continue;
+        }
+        const obj = parseObjectEl(c, dp, ctx);
+        if (obj) objects.push(obj);
+      }
+    };
+    walk(appearance);
+    return {
+      boundary,
+      objects,
+      blendMode: attr(appearance, "BlendMode") || "Normal",
+    };
+  }
+
+  async function parseAnnotations(annotationsPath, zip, ctx) {
+    ctx = ctx || {};
     const stamps = [];
     const annotsXmlText = await readEntryText(zip, annotationsPath);
     if (!annotsXmlText) return stamps;
@@ -2376,62 +2610,83 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       const annotRoot = parseXml(annotXmlText).documentElement;
 
       for (const annot of children(annotRoot, "Annot")) {
+        if (!bool(annot, "Visible", true)) continue;
         const type = attr(annot, "Type");
         const subtype = attr(annot, "Subtype") || type;
+        const appearance = child(annot, "Appearance");
+        const app = appearance ? parseAppearance(appearance, ctx) : null;
+
         if (type === "Stamp") {
           if (subtype === "SignatureInFile") continue;
-          const appearance = child(annot, "Appearance");
-          if (appearance) {
-            const boundary = parseBox(attr(appearance, "Boundary"));
+          if (app && app.objects.length) {
             stamps.push({
               pageRef: pageId,
-              boundary,
+              boundary: app.boundary,
+              annotType: subtype,
+              objects: app.objects,
+              blendMode: app.blendMode,
+              isAnnot: true,
+            });
+          } else if (appearance) {
+            stamps.push({
+              pageRef: pageId,
+              boundary: app.boundary,
               clip: null,
               sealDataUrl: null,
               isPlaceholder: true,
             });
           }
-        } else if (type === "Highlight" || type === "Path") {
-          const appearance = child(annot, "Appearance");
-          if (appearance) {
-            const boundary = parseBox(attr(appearance, "Boundary"));
-            const appearanceBlend = attr(appearance, "BlendMode") || "Normal";
-            const paths = [];
-            for (const po of children(appearance, "PathObject")) {
-              paths.push({
-                boundary: parseBox(attr(po, "Boundary")),
-                stroke: bool(po, "Stroke", true),
-                fill: bool(po, "Fill", false),
-                fillColor: parseColor(child(po, "FillColor")),
-                strokeColor: parseColor(child(po, "StrokeColor")),
-                lineWidth: num(po, "LineWidth", null),
-                rule: attr(po, "Rule"),
-                blendMode: attr(po, "BlendMode") || appearanceBlend,
-                abbr: text(child(po, "AbbreviatedData")),
-              });
-            }
-            if (paths.length) {
-              stamps.push({
-                pageRef: pageId,
-                boundary,
-                annotType: subtype,
-                paths,
-                isAnnot: true,
-              });
-            }
+          continue;
+        }
+
+        const params = {};
+        const paramsEl = child(annot, "Parameters");
+        if (paramsEl)
+          for (const p of children(paramsEl, "Parameter")) {
+            const name = attr(p, "Name");
+            if (name) params[name] = text(p);
           }
+
+        if (type === "Link") {
+          let url = "";
+          for (const k in params)
+            if (k.toLowerCase() === "url" && params[k]) url = params[k];
+          if (app && (app.objects.length || url)) {
+            stamps.push({
+              pageRef: pageId,
+              boundary: app.boundary,
+              annotType: "Link",
+              objects: app.objects,
+              blendMode: app.blendMode,
+              linkUrl: url,
+              isAnnot: true,
+            });
+          }
+          continue;
+        }
+
+        // Path / Highlight / Watermark 以及其他带外观的注解统一按页块渲染
+        if (app && app.objects.length) {
+          stamps.push({
+            pageRef: pageId,
+            boundary: app.boundary,
+            annotType: subtype,
+            objects: app.objects,
+            blendMode: app.blendMode,
+            isAnnot: true,
+          });
         }
       }
     }
     return stamps;
   }
-
   // ==================== OFD 文档解析 ====================
   async function parseDocument(zip) {
     mark("解析 OFD.xml", "load");
     const ofdXmlText = await readEntryText(zip, "OFD.xml");
     if (!ofdXmlText) throw new Error("OFD.xml 不存在");
     const ofdRoot = parseXml(ofdXmlText).documentElement;
+    const version = attr(ofdRoot, "Version") || "";
     const docBody = child(ofdRoot, "DocBody");
     const docInfo = child(docBody, "DocInfo");
     const info = {
@@ -2472,6 +2727,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     const pageArea = child(common, "PageArea");
     const physBox = child(pageArea, "PhysicalBox");
     const pageBox = parseBox(text(physBox));
+    const defaultCs = common ? text(child(common, "DefaultCS")) : "";
 
     const templates = children(common, "TemplatePage").map((tp) => ({
       id: attr(tp, "ID"),
@@ -2489,18 +2745,32 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     };
     const publicRes = child(common, "PublicRes");
     const documentRes = child(common, "DocumentRes");
-    if (publicRes)
-      mergeRes(res, await parseRes(resolvePath(docPath, text(publicRes)), zip));
-    if (documentRes) {
-      const docResPath = resolvePath(docPath, text(documentRes));
-      mergeRes(res, await parseRes(docResPath, zip));
-      // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
-      // 故单独解析后挂到 res 上，供渲染 CompositeObject 时展开。
-      res.compositeUnits = await parseCompositeUnits(docResPath, zip);
+    let pubResPath = null;
+    let docResPath = null;
+    if (publicRes) {
+      pubResPath = resolvePath(docPath, text(publicRes));
+      mergeRes(res, await parseRes(pubResPath, zip, defaultCs));
     }
-    embeddedFontMap.clear();
-    fontLoadCache.clear();
-    fontIndexCache = null;
+    if (documentRes) {
+      docResPath = resolvePath(docPath, text(documentRes));
+      mergeRes(res, await parseRes(docResPath, zip, defaultCs));
+    }
+    // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
+    // 且颜色空间以两份 Res 合并后的结果为准，故等两份 Res 都解析完再收集复合图元。
+    const allCompositeUnits = {};
+    const parseCtx = { version, res, defaultCs };
+    if (pubResPath)
+      Object.assign(
+        allCompositeUnits,
+        await parseCompositeUnits(pubResPath, zip, parseCtx),
+      );
+    if (docResPath)
+      Object.assign(
+        allCompositeUnits,
+        await parseCompositeUnits(docResPath, zip, parseCtx),
+      );
+    res.compositeUnits = allCompositeUnits;
+    resetFontCaches();
     for (const id in res.fonts) {
       const f = res.fonts[id];
       if (f.fontFile && f.fontName && !embeddedFontMap.has(f.fontName)) {
@@ -2539,7 +2809,13 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     if (annotationsEl) {
       const annotationsPath = resolvePath(docPath, text(annotationsEl));
       try {
-        stamps.push(...(await parseAnnotations(annotationsPath, zip)));
+        stamps.push(
+          ...(await parseAnnotations(annotationsPath, zip, {
+            version,
+            res,
+            defaultCs,
+          })),
+        );
       } catch (e) {
         console.warn("[OFD] 解析批注文件失败：" + annotationsPath, e);
       }
@@ -2565,6 +2841,8 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       info,
       document: {
         docPath,
+        version,
+        defaultCs,
         pageBox,
         templates,
         templateById,
@@ -2758,7 +3036,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   // Font ID -> 唯一的 @font-face family 名
   //
   // 为什么必须按 ID 区分：OFD 允许同一个 FontName 声明多次（不同 ID 指向不同字体文件）。
-  // 实测 tracemonkey 产物里5 个不同 ID（121~125）都叫 Calibri，
+  // 实测某份转换产物里 5 个不同 ID（121~125）都叫 Calibri，
   // 各自的 cmap / 字形集完全不同（Font 122 有 `#` 的真实轮廓 gid 17，
   // Font 123 则完全没有）。
   // 若只用 fontName 做 key，ensureFontLoaded('Calibri') 只会加载**第一个**，
@@ -2961,7 +3239,8 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         const fontPath = resolvePath(emb.baseDir + "/_.x", emb.fontFile);
         const bytes = await readEntry(emb._zip, fontPath);
         if (bytes) {
-          const face = new FontFace(familyName, bytes.buffer);
+          // 必须传 bytes 本身：Stored 条目是 ZIP 的 subarray，bytes.buffer 会从 ZIP 头开始解析
+          const face = new FontFace(familyName, bytes);
           await face.load();
           document.fonts.add(face);
           // 同步解析 cmap：供 hasGlyphFor 判断某码位在本格栅字体里是否真有轮廓
@@ -3012,6 +3291,28 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   }
 
   let fontIndexCache = null;
+  // 切换文档时清空所有字体状态，并移除上一份文档注册的 @font-face。
+  // 仅清 Map 不够：同名 family 的旧 FontFace 仍留在 document.fonts 里，
+  // 新文档同 FontID/字体名会命中旧字形。
+  function resetFontCaches() {
+    embeddedFontMap.clear();
+    embeddedLoaded.clear();
+    fontLoadCache.clear();
+    fontCmapCache.clear();
+    fontIndexCache = null;
+    if (typeof document !== "undefined" && document.fonts) {
+      try {
+        const stale = [];
+        document.fonts.forEach((face) => {
+          if (face && face.family && /^ofdf_/.test(face.family))
+            stale.push(face);
+        });
+        for (const face of stale) document.fonts.delete(face);
+      } catch (e) {
+        // 某些环境没有 FontFaceSet.delete，忽略即可
+      }
+    }
+  }
   function fetchFontIndex() {
     if (fontIndexCache) return fontIndexCache;
     fontIndexCache = fetch(resolveFontBase())
@@ -3129,10 +3430,20 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     return d;
   }
 
+  // DashPattern 只允许数字序列（空格或逗号分隔），防止属性值逃逸
+  const DASH_TOKEN_RE = /^[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?$/;
+  function safeDashPattern(value) {
+    const tokens = String(value || "").trim().split(/[\s,]+/);
+    if (!tokens.length || !tokens[0]) return "";
+    for (const t of tokens) if (!DASH_TOKEN_RE.test(t)) return "";
+    return tokens.join(" ");
+  }
+
   let _gradSeq = 0;
-  function buildGradient(gradient, ownerId) {
+  function buildGradient(gradient) {
     if (!gradient || !gradient.stops || !gradient.stops.length) return null;
-    const id = `ofd-grad-${ownerId != null ? ownerId : "x"}-${_gradSeq++}`;
+    // ID 只由引擎生成，绝不拼接文档里的 ID（后者可用于属性注入）
+    const id = "ofd-grad-" + (++_gradSeq);
     const clamp01 = (v) => (v == null || isNaN(v) ? 0 : Math.max(0, Math.min(1, v)));
     const stops = gradient.stops
       .map((s) => {
@@ -3156,53 +3467,153 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     return { id, def };
   }
 
-  function renderPathObject(obj, res) {
+  // ==================== 对象级裁剪 ====================
+  // Clips 采用对象空间坐标系；多个 Clip 取交集，一个 Clip 内的多个 Area 取并集。
+  // TransFlag=true 时裁剪区受图元自身 CTM 影响（在 placement 组内引用）；
+  // false 时只受 Boundary 平移影响（在 placement 组外引用，祖先 CTM 仍自然生效）。
+  let _clipSeq = 0;
+  function areaToClipSvg(area, outerTransform, res) {
+    const parts = [];
+    const areaTf = area.ctm ? `matrix(${area.ctm.join(" ")}) ` : "";
+    for (const p of area.paths || []) {
+      const d = abbreviatedToSvgPath(p.abbr);
+      if (!d) continue;
+      let tf = outerTransform + areaTf;
+      if (p.boundary && (p.boundary.x || p.boundary.y))
+        tf += `translate(${p.boundary.x} ${p.boundary.y}) `;
+      if (p.ctm) tf += `matrix(${p.ctm.join(" ")}) `;
+      const rule = p.rule === "Even-Odd" ? ' clip-rule="evenodd"' : "";
+      parts.push(
+        `<path d="${d}"${rule}${tf.trim() ? ` transform="${tf.trim()}"` : ""}/>`,
+      );
+    }
+    for (const t of area.texts || []) {
+      const built = buildTextObject(t, res);
+      if (!built) continue;
+      parts.push(
+        `<g transform="${outerTransform}${areaTf}"><g transform="${built.transform}">${built.inner}</g></g>`,
+      );
+    }
+    return parts.join("");
+  }
+  function applyClips(inner, transform, clips, boundary, res) {
+    const placed = `<g transform="${transform}">${inner}</g>`;
+    if (!clips || !clips.length) return placed;
+    const defs = [];
+    const inside = [];
+    const outside = [];
+    for (const clip of clips) {
+      const id = "ofd-clip-" + (++_clipSeq);
+      const outer = clip.transFlag
+        ? ""
+        : `translate(${boundary.x} ${boundary.y}) `;
+      const paths = clip.areas
+        .map((a) => areaToClipSvg(a, outer, res))
+        .join("");
+      if (!paths) continue;
+      defs.push(
+        `<clipPath id="${id}" clipPathUnits="userSpaceOnUse">${paths}</clipPath>`,
+      );
+      (clip.transFlag ? inside : outside).push(id);
+    }
+    if (!defs.length) return placed;
+    let local = inner;
+    for (const id of inside) local = `<g clip-path="url(#${id})">${local}</g>`;
+    let out = `<g transform="${transform}">${local}</g>`;
+    for (const id of outside) out = `<g clip-path="url(#${id})">${out}</g>`;
+    return `<defs>${defs.join("")}</defs>${out}`;
+  }
+
+  const LINE_CAPS = ["butt", "round", "square"];
+  const LINE_JOINS = ["miter", "round", "bevel"];
+
+  function buildPathObject(obj, res) {
     const d = abbreviatedToSvgPath(obj.abbreviatedData);
-    if (!d) return "";
+    if (!d) return null;
     const b = obj.boundary;
-    const bx = b.x,
-      by = b.y;
-    let transform = `translate(${bx} ${by})`;
+    let transform = `translate(${b.x} ${b.y})`;
     if (obj.ctm) transform += ` matrix(${obj.ctm.join(" ")})`;
     const dp = obj.drawParam ? res.drawParams[obj.drawParam] : null;
-    const lineWidth =
+    let lineWidth =
       obj.lineWidth != null
         ? obj.lineWidth
         : dp && dp.lineWidth != null
           ? dp.lineWidth
           : 0.7;
+    if (!isFinite(lineWidth) || lineWidth < 0) lineWidth = 0.7;
     const strokeColor = obj.strokeColor || (dp && dp.strokeColor) || null;
     const fillColor = obj.fillColor || (dp && dp.fillColor) || null;
     const fillGrad = obj.fillGradient || (dp && dp.fillGradient) || null;
+    const strokeGrad = obj.strokeGradient || (dp && dp.strokeGradient) || null;
 
-    let defs = "";
+    const defs = [];
     let attrs = "";
     if (obj.fill) {
       if (fillGrad) {
-        const g = buildGradient(fillGrad, obj.id);
-        if (g) { attrs += ` fill="url(#${g.id})"`; defs = `<defs>${g.def}</defs>`; }
-        else attrs += ' fill="none"';
+        const g = buildGradient(fillGrad);
+        if (g) {
+          attrs += ` fill="url(#${g.id})"`;
+          defs.push(g.def);
+        } else attrs += ' fill="none"';
       } else if (fillColor) attrs += ` fill="${colorToCss(fillColor)}"`;
       else attrs += ' fill="none"';
     } else attrs += ' fill="none"';
     if (obj.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
     if (obj.stroke) {
-      attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${lineWidth}"`;
-      if (obj.dash) attrs += ` stroke-dasharray="${obj.dash}"`;
+      if (strokeGrad) {
+        const g = buildGradient(strokeGrad);
+        if (g) {
+          attrs += ` stroke="url(#${g.id})"`;
+          defs.push(g.def);
+        } else {
+          attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}"`;
+        }
+      } else {
+        attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}"`;
+      }
+      attrs += ` stroke-width="${lineWidth}"`;
+      const dash = safeDashPattern(
+        obj.dash != null && obj.dash !== ""
+          ? obj.dash
+          : dp && dp.dashPattern,
+      );
+      if (dash) attrs += ` stroke-dasharray="${dash}"`;
+      if (dp) {
+        const cap = LINE_CAPS[+dp.cap];
+        if (cap) attrs += ` stroke-linecap="${cap}"`;
+        const join = LINE_JOINS[+dp.join];
+        if (join) attrs += ` stroke-linejoin="${join}"`;
+        if (dp.dashOffset != null && isFinite(dp.dashOffset))
+          attrs += ` stroke-dashoffset="${dp.dashOffset}"`;
+      }
+      // OFD 的 MiterLimit 默认值是 3.528，SVG 是 4；未声明时也要显式对齐
+      const miter =
+        dp && dp.miterLimit != null && isFinite(dp.miterLimit)
+          ? dp.miterLimit
+          : !dp || dp.join == null || +dp.join === 0
+            ? 3.528
+            : null;
+      if (miter != null) attrs += ` stroke-miterlimit="${miter}"`;
     }
-    return `<g transform="${transform}">${defs}<path d="${d}"${attrs}/></g>`;
+    return {
+      transform,
+      inner: `${defs.length ? `<defs>${defs.join("")}</defs>` : ""}<path d="${d}"${attrs}/>`,
+    };
   }
 
-  function renderTextObject(obj, res) {
+  function buildTextObject(obj, res) {
     const font = res.fonts[obj.fontId] || {};
     const fv = mapFontFamily(font.fontName, obj.fontId);
-    const hScale = obj.hScale != null ? obj.hScale : 1;
-    const ctm = obj.ctm;
+    let hScale = obj.hScale != null ? obj.hScale : 1;
+    if (!isFinite(hScale) || hScale === 0) hScale = 1;
     const bx = obj.boundary.x,
       by = obj.boundary.y;
-    const fill = obj.fill ? colorToCss(obj.fillColor) : "none";
+    const fill = obj.fill
+      ? colorToCss(obj.fillColor || { r: 0, g: 0, b: 0, a: 1 })
+      : "none";
     const weight = fv.weight || (obj.weight >= 700 ? "bold" : "normal");
     const fontStyle = fv.style || (obj.italic ? "italic" : "normal");
+    const dp = obj.drawParam ? res.drawParams[obj.drawParam] : null;
 
     // 渲染单个 TextCode 的 tspan 片段。
     //
@@ -3226,128 +3637,225 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     //
     // 跳过后**保留 DeltaX 占位**，后续字符绝对坐标不受影响，
     // 与 WPS/Acrobat 打开原 PDF 的表现一致（原 PDF 那格也是空白）。
-    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection, fontName, glyphs) {
+    function buildTextCodeParts(
+      tc,
+      ox0,
+      oy0,
+      hScale,
+      readDirection,
+      charDirection,
+      fontName,
+      glyphMap,
+    ) {
       const txt = tc.text;
       if (!txt) return "";
+      const chars = Array.from(txt); // 按码点，避免代理对被拆成两个字符
       const dxArr = expandDelta(tc.deltaX);
       const dyArr = expandDelta(tc.deltaY);
-      // 预先算出每个字符是否可绘制
+      const codeStart = tc.codeStart || 0;
       const draw = [];
       let anySkip = false;
-      for (let i = 0; i < txt.length; i++) {
-        const cp = txt.codePointAt(i);
+      for (let i = 0; i < chars.length; i++) {
+        const cp = chars[i].codePointAt(0);
         let ok = true;
         if (!hasGlyphFor(fontName, cp)) {
           // cmap 无此码位 —— 再看 Glyphs 是否为占位
-          const gid = glyphs ? glyphs[i] : undefined;
+          const gid = glyphMap ? glyphMap[codeStart + i] : undefined;
           const isPlaceholder = gid === undefined || gid === 1;
           ok = !isPlaceholder; // 有真字形（私有区假码）-> 仍要画
         }
         draw.push(ok);
         if (!ok) anySkip = true;
       }
-      let ox = ox0,
-        oy = oy0;
-      if (readDirection === 90 || readDirection === 270) {
-        const ang = readDirection;
+      const step = (i) => (i < dxArr.length ? dxArr[i] : 0);
+      const stepY = (i) => (i < dyArr.length ? dyArr[i] : 0);
+      const adj = (x) => (hScale !== 1 ? x / hScale : x);
+      const vertical = readDirection === 90 || readDirection === 270;
+      // CharDirection 是单字符旋转；未指定时竖排沿用阅读方向
+      const rot =
+        charDirection && charDirection % 360
+          ? charDirection
+          : vertical
+            ? readDirection
+            : 0;
+
+      if (vertical) {
+        let ox = ox0,
+          oy = oy0;
         let s = "";
-        for (let i = 0; i < txt.length; i++) {
-          const adjX = hScale !== 1 ? ox / hScale : ox;
+        for (let i = 0; i < chars.length; i++) {
+          const x = adj(ox);
           if (draw[i])
-            s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
-          ox += i < dxArr.length ? dxArr[i] : 0;
-          oy += i < dyArr.length ? dyArr[i] : 0;
+            s += `<tspan x="${x.toFixed(4)}" y="${oy.toFixed(4)}"${rot ? ` transform="rotate(${rot} ${x.toFixed(4)} ${oy.toFixed(4)})"` : ""}>${escapeXml(chars[i])}</tspan>`;
+          ox += step(i);
+          oy += stepY(i);
         }
         return s;
       }
-      // 常规方向：可合并为一个 tspan；但若需要跳过部分字符，则逐字符输出，
-      // 跳过字符用空 tspan 占位（保留坐标推进，不绘制任何东西）。
-      if (!anySkip) {
+
+      // 180：字形保持直立，但字符顺序从右向左排
+      let rtlPos = null;
+      if (readDirection === 180) {
+        let total = 0;
+        for (let i = 0; i < chars.length; i++) total += step(i);
+        rtlPos = [];
+        let prefix = 0;
+        for (let i = 0; i < chars.length; i++) {
+          prefix += step(i);
+          rtlPos.push(ox0 + total - prefix);
+        }
+      }
+
+      // 常规方向：可合并为一个 tspan；但若需要跳过字符或逐字旋转，则逐字符输出
+      if (!anySkip && !rot) {
         let xs = "",
-          ys = "";
-        for (let i = 0; i < txt.length; i++) {
-          const adjX = hScale !== 1 ? ox / hScale : ox;
-          xs += (i ? " " : "") + adjX.toFixed(4);
+          ys = "",
+          ox = ox0,
+          oy = oy0;
+        for (let i = 0; i < chars.length; i++) {
+          const x = rtlPos ? rtlPos[i] : ox;
+          xs += (i ? " " : "") + adj(x).toFixed(4);
           ys += (i ? " " : "") + oy.toFixed(4);
-          ox += i < dxArr.length ? dxArr[i] : 0;
-          oy += i < dyArr.length ? dyArr[i] : 0;
+          ox += step(i);
+          oy += stepY(i);
         }
         return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
       }
 
       let s = "";
-      for (let i = 0; i < txt.length; i++) {
-        const adjX = hScale !== 1 ? ox / hScale : ox;
+      let ox = ox0,
+        oy = oy0;
+      for (let i = 0; i < chars.length; i++) {
+        const x = rtlPos ? rtlPos[i] : ox;
+        const adjX = adj(x);
         // 无轮廓字符 -> 输出空 tspan 只推进坐标，不绘制
-        const body = draw[i] ? escapeXml(txt[i]) : "";
-        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}">${body}</tspan>`;
-        ox += i < dxArr.length ? dxArr[i] : 0;
-        oy += i < dyArr.length ? dyArr[i] : 0;
+        const body = draw[i] ? escapeXml(chars[i]) : "";
+        const tr = rot
+          ? ` transform="rotate(${rot} ${adjX.toFixed(4)} ${oy.toFixed(4)})"`
+          : "";
+        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}"${tr}>${body}</tspan>`;
+        ox += step(i);
+        oy += stepY(i);
       }
       return s;
     }
 
-    // CTM 分支：使用 SVG matrix 变换（含旋转），文字坐标为局部坐标
-    // OFD CTM = [a, b, c, d, e, f]，变换：x' = a*x + c*y + e, y' = b*x + d*y + f
-    // SVG matrix(a, b, c, d, e, f) 同理
-    if (ctm) {
-      const fontSize = obj.size != null ? obj.size : 3;
-      const parts = [];
-      for (const tc of obj.textCodes) {
-        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0, fv.key || font.fontName, obj.glyphs));
-      }
-      const transform = `translate(${bx} ${by}) matrix(${ctm[0]} ${ctm[1]} ${ctm[2]} ${ctm[3]} ${ctm[4]} ${ctm[5]})`;
-      return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}" transform="${transform}" xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
-    }
-
-    // 无 CTM：简单定位
-    const fontSize = obj.size != null ? obj.size : 3;
+    const fontSize =
+      obj.size != null && isFinite(obj.size) && obj.size > 0 ? obj.size : 3;
     const parts = [];
     for (const tc of obj.textCodes) {
       parts.push(
-        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection, fv.key || font.fontName, obj.glyphs),
+        buildTextCodeParts(
+          tc,
+          tc.x,
+          tc.y,
+          hScale,
+          obj.readDirection,
+          obj.charDirection,
+          fv.key || font.fontName,
+          obj.glyphMap,
+        ),
       );
     }
-    let transform = "";
-    if (hScale !== 1) transform = ` transform="scale(${hScale} 1)"`;
-    return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}"${transform} xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
-  }
 
-  async function renderImageObject(obj, res) {
-    const mm = res.multiMedias[obj.resourceId];
-    if (!mm) return "";
-    if (!mm.dataUrl) await ensureImageDataUrl(mm); // 渲染到该页时才懒加载图像
-    if (!mm.dataUrl) return "";
-    const b = obj.boundary;
-    let x, y, w, h;
-    if (obj.ctm) {
-      const a = obj.ctm;
-      // CTM 将单位图像 (0..1) 映射到 boundary 局部坐标（Y 向下）
-      w = a[0];
-      h = a[3];
-      x = b.x + a[4];
-      y = b.y + a[5];
-    } else {
-      x = b.x;
-      y = b.y;
-      w = b.w;
-      h = b.h;
+    let attrs = ` font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}"`;
+    // 文字描边（Stroke/StrokeColor/LineWidth），缺省宽度沿用 DrawParam
+    if (obj.stroke) {
+      let sw =
+        obj.lineWidth != null
+          ? obj.lineWidth
+          : dp && dp.lineWidth != null
+            ? dp.lineWidth
+            : 0.7;
+      if (!isFinite(sw) || sw < 0) sw = 0.7;
+      const sc =
+        obj.strokeColor ||
+        (dp && dp.strokeColor) || { r: 0, g: 0, b: 0, a: 1 };
+      attrs += ` stroke="${colorToCss(sc)}" stroke-width="${sw}"`;
     }
-    return `<image x="${x}" y="${y}" width="${w}" height="${h}" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`;
+    if (hScale !== 1) attrs += ` transform="scale(${hScale} 1)"`;
+
+    // OFD CTM = [a,b,c,d,e,f]：x' = a*x + c*y + e, y' = b*x + d*y + f
+    let transform = `translate(${bx} ${by})`;
+    if (obj.ctm)
+      transform += ` matrix(${obj.ctm[0]} ${obj.ctm[1]} ${obj.ctm[2]} ${obj.ctm[3]} ${obj.ctm[4]} ${obj.ctm[5]})`;
+
+    return {
+      transform,
+      inner: `<text${attrs} xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`,
+    };
   }
 
-  async function renderObject(obj, res) {
+  async function buildImageObject(obj, res) {
+    const mm = res.multiMedias[obj.resourceId];
+    if (!mm) return null;
+    if (!mm.dataUrl) await ensureImageDataUrl(mm); // 渲染到该页时才懒加载图像
+    if (!mm.dataUrl) return null;
+    const b = obj.boundary;
+    if (obj.ctm) {
+      // 完整 CTM：单位图像 (0..1) 经 matrix 映射到页面，支持旋转/镜像/斜切
+      return {
+        transform: `translate(${b.x} ${b.y}) matrix(${obj.ctm.join(" ")})`,
+        inner: `<image x="0" y="0" width="1" height="1" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`,
+      };
+    }
+    return {
+      transform: `translate(${b.x} ${b.y})`,
+      inner: `<image x="0" y="0" width="${b.w}" height="${b.h}" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`,
+    };
+  }
+
+  async function buildObjectSvg(obj, res, depth) {
     switch (obj.type) {
       case "path":
-        return renderPathObject(obj, res);
+        return buildPathObject(obj, res);
       case "text":
-        return renderTextObject(obj, res);
+        return buildTextObject(obj, res);
       case "image":
-        return await renderImageObject(obj, res);
+        return await buildImageObject(obj, res);
       case "composite":
-        return renderCompositeObject(obj, res);
+        return await buildCompositeObject(obj, res, depth);
     }
-    return "";
+    return null;
+  }
+
+  async function renderObject(obj, res, depth = 0) {
+    const built = await buildObjectSvg(obj, res, depth);
+    if (!built || !built.inner) return "";
+    return applyClips(
+      built.inner,
+      built.transform,
+      obj.clips,
+      obj.boundary || { x: 0, y: 0, w: 0, h: 0 },
+      res,
+    );
+  }
+
+  // 收集图元及其引用的 CompositeGraphicUnit 内的图像/字体，供整页预取
+  function collectObjectResources(obj, res, imgIds, fontIds, seenUnits) {
+    if (!obj) return;
+    // 文字裁剪区里的 CT_Text 也要预取字体
+    if (obj.clips)
+      for (const clip of obj.clips)
+        for (const area of clip.areas)
+          for (const t of area.texts || [])
+            if (t.fontId != null) fontIds.add(t.fontId);
+    if (obj.type === "image") {
+      imgIds.add(obj.resourceId);
+      return;
+    }
+    if (obj.type === "text" && obj.fontId != null) {
+      fontIds.add(obj.fontId);
+      return;
+    }
+    if (obj.type !== "composite") return;
+    const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
+    if (!unit || !unit.layers || seenUnits.has(obj.resourceId)) return;
+    seenUnits.add(obj.resourceId);
+    for (const layer of unit.layers) {
+      for (const child of layer.objects || [])
+        collectObjectResources(child, res, imgIds, fontIds, seenUnits);
+    }
   }
 
   // 展开 <ofd:CompositeObject>：把 DocumentRes 里对应 CompositeGraphicUnit 的
@@ -3356,9 +3864,11 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   // OFD 渲染语义与 PathObject 一致：图元实际位置 = Boundary原点 + CTM·(内部路径点)，
   // Unit 内部的图元用 Unit 自己的 Boundary 作为局部原点，因此合成矩阵为
   //   页面变换 = translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
-  function renderCompositeObject(obj, res) {
+  async function buildCompositeObject(obj, res, depth = 0) {
+    // 防自引用/互相引用造成无限递归（正常文档不会超过几层）
+    if (depth > 64) return null;
     const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
-    if (!unit || !unit.layers) return "";
+    if (!unit || !unit.layers) return null;
     const b = obj.boundary;
     const ub = unit.boundary;
     const m = obj.ctm;
@@ -3366,15 +3876,28 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     let tf = `translate(${b.x} ${b.y})`;
     if (m) tf += ` matrix(${m.join(" ")})`;
     if (ub && (ub.x !== 0 || ub.y !== 0)) tf += ` translate(${-ub.x} ${-ub.y})`;
-    const inner = unit.layers
-      .map((layer) => (layer.objects || []).map((o) => renderObject(o, res)).join(""))
-      .join("");
-    if (!inner) return "";
-    return `<g transform="${tf}">${inner}</g>`;
+    const parts = [];
+    for (const layer of unit.layers) {
+      for (const o of layer.objects || [])
+        parts.push(await renderObject(o, res, depth + 1));
+    }
+    const inner = parts.join("");
+    if (!inner) return null;
+    return { transform: tf, inner };
+  }
+
+  function parseCtxOf(ofd) {
+    const doc = ofd.document;
+    return {
+      version: doc.version || "",
+      res: doc.res,
+      defaultCs: doc.defaultCs || "",
+    };
   }
 
   async function getTemplateLayers(tpl, ofd) {
-    if (!tpl._parsed) tpl._parsed = await parsePage(tpl.baseLoc, ofd.zip);
+    if (!tpl._parsed)
+      tpl._parsed = await parsePage(tpl.baseLoc, ofd.zip, parseCtxOf(ofd));
     return tpl._parsed.layers;
   }
 
@@ -3382,7 +3905,8 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     const doc = ofd.document;
     const p = doc.pages[pageIndex];
     if (!p) throw new Error("页码越界: " + pageIndex);
-    if (!p._parsed) p._parsed = await parsePage(p.baseLoc, ofd.zip);
+    if (!p._parsed)
+      p._parsed = await parsePage(p.baseLoc, ofd.zip, parseCtxOf(ofd));
     return p._parsed;
   }
 
@@ -3391,6 +3915,14 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
   // Clip 定义可见区域（Boundary 局部坐标，Y 向下）；骑缝章时 Clip 只占完整印章的一部分
   // 页面印章（签章）渲染透明度，1 为完全不透明。文本下方的印章需半透明以便透出字迹。
   const SEAL_OPACITY = 0.8;
+  // 只接受 CSS mix-blend-mode 的标准取值，避免把文档里的字符串直接拼进 style
+  const BLEND_MODES = new Set([
+    "normal", "multiply", "screen", "overlay", "darken", "lighten",
+    "color-dodge", "color-burn", "hard-light", "soft-light", "difference",
+    "exclusion", "hue", "saturation", "color", "luminosity",
+  ]);
+  // 多页同时内联时，印章裁剪 ID 必须全局唯一
+  let _stampClipSeq = 0;
 
   async function renderStamp(stamp, stampIdx) {
     const b = stamp.boundary;
@@ -3435,7 +3967,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         (clip.x > 0 || clip.y > 0 || clip.w < w || clip.h < h)
       ) {
         // 骑缝章裁剪
-        const clipId = "stampClip_" + stampIdx;
+        const clipId = "stampClip_" + (++_stampClipSeq);
         const clipSvgX = x + clip.x;
         const clipSvgY = y + clip.y;
         return (
@@ -3456,7 +3988,7 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
         clip.h > 0 &&
         (clip.x > 0 || clip.y > 0 || clip.w < w || clip.h < h)
       ) {
-        const clipId = "stampClip_" + stampIdx;
+        const clipId = "stampClip_" + (++_stampClipSeq);
         const clipSvgX = x + clip.x;
         const clipSvgY = y + clip.y;
         return (
@@ -3480,29 +4012,22 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     );
   }
 
-  function renderAnnot(annot) {
-    const b = annot.boundary;
+  async function renderAnnot(annot, res) {
+    const b = annot.boundary || { x: 0, y: 0, w: 0, h: 0 };
+    const rawBlend = String(annot.blendMode || "Normal").toLowerCase();
+    const blend = BLEND_MODES.has(rawBlend) ? rawBlend : "normal";
+    const style = blend === "normal" ? "" : ` style="mix-blend-mode:${blend}"`;
     const parts = [];
-    for (const p of annot.paths) {
-      const d = abbreviatedToSvgPath(p.abbr);
-      if (!d) continue;
-      const tx = b.x + p.boundary.x;
-      const ty = b.y + p.boundary.y;
-      let attrs = 'fill="none"';
-      if (p.fill && p.fillColor) attrs = `fill="${colorToCss(p.fillColor)}"`;
-      if (p.stroke) {
-        const sw = p.lineWidth != null ? p.lineWidth : 0.7;
-        attrs += ` stroke="${colorToCss(p.strokeColor || p.fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${sw}"`;
-      }
-      if (p.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
-      const blend = (p.blendMode || "Normal").toLowerCase();
-      const style =
-        blend === "normal" ? "" : ` style="mix-blend-mode:${blend}"`;
-      parts.push(
-        `<path d="${d}" ${attrs} transform="translate(${tx} ${ty})"${style}/>`,
-      );
+    for (const o of annot.objects || []) parts.push(await renderObject(o, res));
+    let out = parts.join("");
+    if (out) out = `<g transform="translate(${b.x} ${b.y})"${style}>${out}</g>`;
+    // Link 注释本身没有外观，只提供可点击区域；URL 仅允许 http(s)，避免 javascript: 注入
+    if (annot.linkUrl && b.w > 0 && b.h > 0 && /^https?:\/\//i.test(annot.linkUrl)) {
+      out +=
+        `<rect class="ofd-link" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"` +
+        ` fill="none" pointer-events="all" data-link-url="${escapeXml(annot.linkUrl)}"/>`;
     }
-    return parts.join("");
+    return out;
   }
 
   async function sealToSvgString(sealOfd, widthPx) {
@@ -3519,15 +4044,22 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
 
   // ==================== SVG 缓存 ====================
   const SVG_CACHE_MAX = 256;
-  function svgCacheKey(pageIndex, opts) {
-    return pageIndex + "|" + (opts && opts.width ? opts.width : "");
+  function svgCacheKey(pageIndex) {
+    return String(pageIndex);
+  }
+  function svgWidthAttr(opts) {
+    const width = Number(opts && opts.width);
+    return Number.isFinite(width) && width > 0 ? ` width="${width}"` : "";
   }
   async function renderPageToString(ofd, pageIndex, opts) {
     opts = opts || {};
     if (!ofd._svgCache) ofd._svgCache = new LRUCache(SVG_CACHE_MAX);
-    const cacheKey = svgCacheKey(pageIndex, opts);
+    const cacheKey = svgCacheKey(pageIndex);
+    const widthAttr = svgWidthAttr(opts);
     const cached = ofd._svgCache.get(cacheKey);
-    if (cached !== undefined) return cached;
+    // 缓存只存与宽度无关的 head/mid/body，各缩放级别共享同一份页面内容
+    if (cached !== undefined)
+      return cached.head + widthAttr + cached.mid + ">" + cached.body;
     const doc = ofd.document;
     const pgTag = _profiling ? "page-" + pageIndex : "";
     if (_profiling)
@@ -3563,12 +4095,19 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
     // 收集 **Font ID**（而不是字体名）：同名不同 ID 的内嵌字体必须各自预取，
     // 否则只有第一个注册成功，其余静默回退系统字体（第 13 页整页乱码的真凶）。
     const fontIds = new Set();
+    const seenComposite = new Set();
     for (const layer of layers) {
-      for (const obj of layer.objects) {
-        if (obj.type === "image") imgIds.add(obj.resourceId);
-        if (obj.type === "text" && obj.fontId != null) fontIds.add(obj.fontId);
-      }
+      for (const obj of layer.objects)
+        collectObjectResources(obj, doc.res, imgIds, fontIds, seenComposite);
     }
+    const pageId = doc.pages[pageIndex] ? doc.pages[pageIndex].id : null;
+    // 注解外观（水印/高亮/链接）里的图片与字体同样要参与整页预取
+    if (doc.stamps && pageId)
+      for (const stamp of doc.stamps) {
+        if (stamp.pageRef !== pageId) continue;
+        for (const obj of stamp.objects || [])
+          collectObjectResources(obj, doc.res, imgIds, fontIds, seenComposite);
+      }
 
     const prefetchTasks = [];
     for (const id of imgIds) {
@@ -3610,13 +4149,12 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       for (const obj of layer.objects)
         bodyParts.push(await renderObject(obj, doc.res));
     }
-    const pageId = doc.pages[pageIndex] ? doc.pages[pageIndex].id : null;
     if (doc.stamps && pageId) {
       let stampIdx = 0;
       for (const stamp of doc.stamps) {
         if (stamp.pageRef === pageId) {
           if (stamp.isAnnot) {
-            bodyParts.push(renderAnnot(stamp));
+            bodyParts.push(await renderAnnot(stamp, doc.res));
           } else {
             bodyParts.push(await renderStamp(stamp, stampIdx++));
           }
@@ -3624,9 +4162,11 @@ var SM_CRYPTO=(()=>{var _=(s,n)=>()=>{try{return n||s((n={exports:{}}).exports,n
       }
     }
     if (_profiling) mark("页面 " + (pageIndex + 1) + "：SVG 构建", pgTag);
-    const widthAttr = opts.width ? ` width="${opts.width}"` : "";
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pageW} ${pageH}"${widthAttr} preserveAspectRatio="xMidYMin meet" class="ofd-page-svg">${bodyParts.join("")}</svg>`;
-    ofd._svgCache.set(cacheKey, svg);
+    const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pageW} ${pageH}"`;
+    const mid = ` preserveAspectRatio="xMidYMin meet" class="ofd-page-svg"`;
+    const body = `${bodyParts.join("")}</svg>`;
+    const svg = head + widthAttr + mid + ">" + body;
+    ofd._svgCache.set(cacheKey, { head, mid, body });
     if (_profiling) mark("页面 " + (pageIndex + 1) + "：渲染完成", pgTag);
     if (_profiling) flushProfile("渲染 第 " + (pageIndex + 1) + " 页", pgTag);
     return svg;

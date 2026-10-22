@@ -303,7 +303,7 @@
         <div class="demo-panel">
           <h3>文件源</h3>
           <select id="fileSel">
-            <option value="ofdFile/999.ofd">999.ofd（发票）</option>
+            <option value="ofdFile/999.ofd">999.ofd</option>
             <option value="ofdFile/2.ofd">2.ofd</option>
             <option value="ofdFile/h.ofd">h.ofd</option>
             <option value="ofdFile/n.ofd">n.ofd</option>
@@ -381,7 +381,7 @@
       </div>
       <div class="mech-item">
         <h4>注释渲染</h4>
-        <p><code>parseAnnotations</code> 解析 <code>Annots/Annotations.xml</code>（印章 + 文本注释）；<code>renderAnnot</code> 将 PathObject 的 AbbreviatedData 经 <code>abbreviatedToSvgPath</code> 转 SVG path，<code>BlendMode=Darken</code> → <code>mix-blend-mode: darken</code>。</p>
+        <p><code>parseAnnotations</code> 解析 <code>Annots/Annotations.xml</code>（印章 / 高亮 / 路径 / 水印 / 链接）；Appearance 作为完整页块按 PathObject、TextObject、ImageObject、CompositeObject 通用渲染，<code>BlendMode=Darken</code> → <code>mix-blend-mode: darken</code>。Link 注释输出可点击热点，仅放行 http(s) 外链。</p>
       </div>
     </div>
   </div>
@@ -428,7 +428,7 @@ const apiData = [
     method: 'API', name: 'OFD.load(source)', brief: '加载 OFD 文件并解析',
     params: `<table class="param-table"><tr><th>参数</th><th>类型</th><th>说明</th></tr>
 <tr><td>source</td><td><code>string | Blob | File | ArrayBuffer | Uint8Array</code></td><td>字符串视为 URL（fetch 加载）；其余为二进制数据源</td></tr></table>`,
-    code: `// 从 URL 加载\nconst ofd = await OFD.load('999.ofd');\n\n// 从 <input type="file"> 加载\nconst file = document.getElementById('fileInput').files[0];\nconst ofd = await OFD.load(file);\n\n// 从 ArrayBuffer 加载\nconst buf = await fetch('999.ofd').then(r => r.arrayBuffer());\nconst ofd = await OFD.load(buf);`
+    code: `// 从 URL 加载\nconst ofd = await OFD.load('sample.ofd');\n\n// 从 <input type="file"> 加载\nconst file = document.getElementById('fileInput').files[0];\nconst ofd = await OFD.load(file);\n\n// 从 ArrayBuffer 加载\nconst buf = await fetch('sample.ofd').then(r => r.arrayBuffer());\nconst ofd = await OFD.load(buf);`
   },
   {
     method: 'API', name: 'OFD.renderPageToString(ofd, pageIndex, opts)', brief: '渲染指定页面为 SVG 字符串',
@@ -487,12 +487,12 @@ const apiData = [
   {
     method: 'API', name: 'OFD.setProfiling(on) / getLastProfile()', brief: '性能打点控制',
     params: '',
-    code: `OFD.setProfiling(true);\nconst ofd = await OFD.load('999.ofd');\nawait OFD.renderPage(ofd, 0);\nconst profile = OFD.getLastProfile();\nOFD.setProfiling(false);`
+    code: `OFD.setProfiling(true);\nconst ofd = await OFD.load('sample.ofd');\nawait OFD.renderPage(ofd, 0);\nconst profile = OFD.getLastProfile();\nOFD.setProfiling(false);`
   },
   {
     method: 'API', name: 'OFD.setFontBase(base)', brief: '覆盖字体目录 URL 前缀',
     params: '',
-    code: `OFD.setFontBase('../assets/font/');\nconst ofd = await OFD.load('999.ofd');`
+    code: `OFD.setFontBase('../assets/font/');\nconst ofd = await OFD.load('sample.ofd');`
   },
   {
     method: 'INT', name: 'OFD._internals', brief: '暴露内部函数，便于扩展/调试',

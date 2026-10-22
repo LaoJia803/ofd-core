@@ -1,5 +1,8 @@
   // ==================== 图像解码 ====================
   const TIFF_TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+  // TIFF 宽高来自文件标签，必须先限制再分配内存；32MP 可覆盖约 400dpi 的 A4 扫描件
+  const TIFF_MAX_PIXELS = 32 * 1000 * 1000;
+  const TIFF_MAX_BMP_BYTES = 160 * 1024 * 1024;
   function parseTiffTags(bytes) {
     const le = bytes[0] === 0x49 && bytes[1] === 0x49;
     const u16 = (o) =>
@@ -43,7 +46,7 @@
     return tags;
   }
 
-  function tiffLzwDecode(data) {
+  function tiffLzwDecode(data, maxOut) {
     const out = [];
     const dict = new Array(4096);
     let bitPos = 0,
@@ -71,7 +74,10 @@
       else if (code < next) entry = dict[code];
       else if (code === next && prev) entry = prev.concat(prev[0]);
       else break;
-      for (let j = 0; j < entry.length; j++) out.push(entry[j]);
+      for (let j = 0; j < entry.length; j++) {
+        if (maxOut && out.length >= maxOut) return null;
+        out.push(entry[j]);
+      }
       if (prev) {
         dict[next++] = prev.concat(entry[0]);
         if (codeWidth === 9 && next >= 511) codeWidth = 10;
@@ -85,18 +91,30 @@
   function tiffToBmpDataUrl(bytes) {
     const tags = parseTiffTags(bytes);
     if (!tags) return null;
-    const w = tags[256] ? tags[256].vals[0] : 0;
-    const h = tags[257] ? tags[257].vals[0] : 0;
-    if (!w || !h) return null;
+    const w = Math.floor(tags[256] ? tags[256].vals[0] : 0);
+    const h = Math.floor(tags[257] ? tags[257].vals[0] : 0);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0)
+      return null;
+    if (w * h > TIFF_MAX_PIXELS) {
+      console.warn(
+        "[OFD] TIFF 尺寸过大，已跳过解码：" + w + "x" + h + " 像素",
+      );
+      return null;
+    }
     const bps = tags[258] ? tags[258].vals : [8];
     if (bps.some((b) => b !== 8)) return null;
-    const spp = tags[277] ? tags[277].vals[0] : bps.length;
+    const spp = Math.floor(tags[277] ? tags[277].vals[0] : bps.length);
+    if (!Number.isInteger(spp) || spp < 1 || spp > 4) return null;
     const comp = tags[259] ? tags[259].vals[0] : 1;
     if (comp !== 1 && comp !== 5) return null;
     const photo = tags[262] ? tags[262].vals[0] : 1;
     const planar = tags[284] ? tags[284].vals[0] : 1;
     if (planar !== 1) return null;
-    const rowsPerStrip = tags[278] ? tags[278].vals[0] : h;
+    let rowsPerStrip = Math.floor(
+      tags[278] ? tags[278].vals[0] : h,
+    );
+    if (!Number.isInteger(rowsPerStrip) || rowsPerStrip <= 0)
+      rowsPerStrip = h;
     const offsets = tags[273] ? tags[273].vals : [];
     const counts = tags[279] ? tags[279].vals : [];
     if (!offsets.length || !counts.length) return null;
@@ -105,16 +123,32 @@
       photo === 3 && tags[320] && tags[320].vals.length >= 768
         ? tags[320].vals
         : null;
-    const rgb = new Uint8Array(w * h * 3);
     const rowBytes = w * spp;
-    for (let s = 0; s < offsets.length; s++) {
-      if (offsets[s] + counts[s] > bytes.length) continue;
-      const raw = bytes.subarray(offsets[s], offsets[s] + counts[s]);
+    const rowSize = Math.floor((w * 24 + 31) / 32) * 4;
+    const dataSize = rowSize * h;
+    if (54 + dataSize > TIFF_MAX_BMP_BYTES) {
+      console.warn(
+        "[OFD] TIFF 解码后体积过大，已跳过：" + (54 + dataSize) + " 字节",
+      );
+      return null;
+    }
+    const rgb = new Uint8Array(w * h * 3);
+    const stripCount = Math.min(offsets.length, counts.length);
+    for (let s = 0; s < stripCount; s++) {
+      const rowsThis = Math.min(rowsPerStrip, h - s * rowsPerStrip);
+      if (rowsThis <= 0) break;
+      const off = offsets[s];
+      const cnt = counts[s];
+      if (off < 0 || cnt <= 0 || off + cnt > bytes.length) continue;
+      const raw = bytes.subarray(off, off + cnt);
+      const maxOut = rowBytes * rowsThis;
       const px =
-        comp === 5 ? tiffLzwDecode(raw) : Array.prototype.slice.call(raw);
+        comp === 5
+          ? tiffLzwDecode(raw, maxOut)
+          : Array.prototype.slice.call(raw);
+      if (!px || px.length < maxOut) continue;
       if (predictor === 2) {
-        const rowsThis0 = Math.min(rowsPerStrip, h - s * rowsPerStrip);
-        for (let r = 0; r < rowsThis0; r++) {
+        for (let r = 0; r < rowsThis; r++) {
           const base = r * rowBytes;
           for (let x = 1; x < w; x++) {
             const cur = base + x * spp,
@@ -124,7 +158,6 @@
           }
         }
       }
-      const rowsThis = Math.min(rowsPerStrip, h - s * rowsPerStrip);
       for (let r = 0; r < rowsThis; r++) {
         const y = s * rowsPerStrip + r;
         const srcOff = r * rowBytes,
@@ -158,8 +191,6 @@
         }
       }
     }
-    const rowSize = Math.floor((w * 24 + 31) / 32) * 4;
-    const dataSize = rowSize * h;
     const buf = new Uint8Array(54 + dataSize);
     buf[0] = 0x42;
     buf[1] = 0x4d;

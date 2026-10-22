@@ -14,6 +14,7 @@
     rotation: 0,
     pageContainers: [],
     pageSvgs: [],
+    renderedPages: new Set(),
     pageDimensions: [],
     loadToken: 0,
     fileName: '999.ofd',
@@ -150,6 +151,10 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function verifyStatusLabel(st) {
+    return st === 'valid' ? '验证通过' : st === 'partial' ? '部分验证' : st === 'invalid' ? '验证失败' : '无法验证';
+  }
+
   async function openSource(source, fileName) {
     const token = ++state.loadToken; // 本次加载序号；之后若序号变化，说明已切换文件，旧流程立即退出
     if (fileName) state.fileName = fileName;
@@ -158,6 +163,7 @@
     setProgress(5);
     state.pageContainers = [];
     state.pageSvgs = [];
+    state.renderedPages.clear();
     state.pageDimensions = [];
     state.signatures = null;   // 重置签名数据，避免旧文件的签名残留到新文件页面
     state.sigHighlight = null;
@@ -173,7 +179,7 @@
       showStatus('正在解析 OFD…');
       setProgress(20);
       const ofd = await OFD.load(source);
-      if (token !== state.loadToken) return; // 已切换文件，放弃本次加载
+      if (token !== state.loadToken) return false; // 已切换文件，放弃本次加载
       state.ofd = ofd;
       state.pageCount = OFD.getPageCount(ofd);
       els.numPages.textContent = '/ ' + state.pageCount;
@@ -181,18 +187,18 @@
       // 获取每页尺寸（图像已懒加载，此处只解析页面 XML，很快）
       for (let i = 0; i < state.pageCount; i++) {
         const dim = await OFD.getPageDimensions(ofd, i);
-        if (token !== state.loadToken) return; // 加载期间切走了文件，立即停止
+        if (token !== state.loadToken) return false; // 加载期间切走了文件，立即停止
         state.pageDimensions.push(dim);
       }
 
       setProgress(50);
       showStatus('共 ' + state.pageCount + ' 页，正在渲染…');
       await buildPageSlots();
-      if (token !== state.loadToken) return;
+      if (token !== state.loadToken) return false;
       applyScaleMode(); // 渲染前确定缩放比例，避免渲染后再调整导致页面跳变
       // 懒渲染：仅渲染可视区 + 缓冲页；滚动时增量渲染 / 卸载离屏页
       await syncVisiblePages();
-      if (token !== state.loadToken) return;
+      if (token !== state.loadToken) return false;
 
       els.numPages.textContent = '/ ' + state.pageCount;
       els.pageNumber.value = '1';
@@ -205,11 +211,13 @@
       renderThumbnails();
       renderOutline();
       renderSignatures().catch(e => console.error('签名列表渲染失败', e));
+      return true;
     } catch (err) {
-      if (token !== state.loadToken) return; // 旧加载的报错不影响新加载的文档
+      if (token !== state.loadToken) return false; // 旧加载的报错不影响新加载的文档
       console.error(err);
       setProgress(100, false, true);
       showError(err && err.message ? err.message : String(err), 'OFD 加载错误');
+      return false;
     }
   }
 
@@ -227,6 +235,16 @@
       slot.innerHTML =
         '<div class="ofd-page-placeholder">第 ' + (i + 1) + ' 页</div>';
       slot.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('.ofd-link');
+        if (link) {
+          e.preventDefault();
+          e.stopPropagation();
+          const url = link.getAttribute('data-link-url') || '';
+          if (/^https?:\/\//i.test(url)) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+          return;
+        }
         if (state.stampMode) {
           onPageStampClick(i, e);
         } else {
@@ -619,7 +637,7 @@
         res = { valid: false, status: 'unknown', message: '验证异常：' + (e && e.message ? e.message : String(e)) };
       }
       const st = res.status || (res.valid ? 'valid' : 'invalid');
-      els.sigModalStatus.textContent = st === 'valid' ? '验证通过' : (st === 'invalid' ? '验证失败' : '无法验证');
+      els.sigModalStatus.textContent = verifyStatusLabel(st);
       els.sigModalStatus.classList.remove('ok', 'bad', 'unknown');
       els.sigModalStatus.classList.add(st === 'valid' ? 'ok' : (st === 'invalid' ? 'bad' : 'unknown'));
       els.sigModalVerify.disabled = false;
@@ -949,7 +967,7 @@
           res = { valid: false, status: 'unknown', message: '验证异常：' + (e && e.message ? e.message : String(e)) };
         }
         const st = res.status || (res.valid ? 'valid' : 'invalid');
-        status.textContent = st === 'valid' ? '验证通过' : (st === 'invalid' ? '验证失败' : '无法验证');
+        status.textContent = verifyStatusLabel(st);
         status.classList.remove('ok', 'bad', 'unknown');
         status.classList.add(st === 'valid' ? 'ok' : (st === 'invalid' ? 'bad' : 'unknown'));
         btn.disabled = false;
@@ -997,6 +1015,7 @@
     slot.innerHTML = '';
     slot.appendChild(svg);
     state.pageSvgs[i] = svg;
+    state.renderedPages.add(i);
     applyPageStyle(i, state.scale);
     // 叠加层重建（均幂等）：签名热区 / 已放置印章 / 签名定位框 / 搜索高亮
     addSignatureHitAreas(i);
@@ -1007,6 +1026,7 @@
 
   // 卸载离屏页：清空 slot 释放 SVG DOM 与内存，恢复占位；印章数据仍保留，重渲染时重放
   function releasePage(i) {
+    state.renderedPages.delete(i);
     if (!state.pageSvgs[i]) return;
     state.renderTokens[i] = (state.renderTokens[i] || 0) + 1; // 使在途渲染结果作废
     const slot = state.pageContainers[i];
@@ -1016,6 +1036,30 @@
     state.pageSvgs[i] = null;
   }
 
+  // 页槽按 offsetTop 单调排列，用二分查找代替每次滚动全量扫描
+  function findFirstPageBelow(top) {
+    let lo = 0, hi = state.pageCount - 1, ans = state.pageCount;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const s = state.pageContainers[mid];
+      if (!s) { lo = mid + 1; continue; }
+      if (s.offsetTop + s.offsetHeight > top) { ans = mid; hi = mid - 1; }
+      else lo = mid + 1;
+    }
+    return ans;
+  }
+  function findLastPageAtOrBefore(bottom) {
+    let lo = 0, hi = state.pageCount - 1, ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const s = state.pageContainers[mid];
+      if (!s) { lo = mid + 1; continue; }
+      if (s.offsetTop <= bottom) { ans = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return ans;
+  }
+
   // 当前可视页范围（含上下缓冲），基于 slot 布局尺寸计算
   function visibleRange() {
     if (!state.pageCount || !state.pageContainers.length) return null;
@@ -1023,16 +1067,14 @@
     const top = container.scrollTop;
     const bottom = top + container.clientHeight;
     const B = state.lazyBuffer;
-    let first = 0, last = state.pageCount - 1;
-    for (let i = 0; i < state.pageCount; i++) {
-      const s = state.pageContainers[i];
-      if (s && s.offsetTop + s.offsetHeight > top) { first = i; break; }
-    }
-    for (let i = state.pageCount - 1; i >= 0; i--) {
-      const s = state.pageContainers[i];
-      if (s && s.offsetTop <= bottom) { last = i; break; }
-    }
-    return { first: Math.max(0, first - B), last: Math.min(state.pageCount - 1, last + B) };
+    const firstIdx = findFirstPageBelow(top);
+    const lastIdx = findLastPageAtOrBefore(bottom);
+    const first = firstIdx < state.pageCount ? firstIdx : state.pageCount - 1;
+    const last = lastIdx >= 0 ? lastIdx : 0;
+    return {
+      first: Math.max(0, first - B),
+      last: Math.min(state.pageCount - 1, Math.max(first, last) + B),
+    };
   }
 
   let lazyRaf = 0;
@@ -1051,9 +1093,9 @@
         tasks.push(renderPage(i).catch(e => console.error('页面渲染失败: 第 ' + (i + 1) + ' 页', e)));
       }
     }
-    // 卸载缓冲带之外的页（各留 1 页余量，避免来回滚动反复渲染）
-    for (let i = 0; i < state.pageCount; i++) {
-      if (state.pageSvgs[i] && (i < range.first - 1 || i > range.last + 1)) releasePage(i);
+    // 卸载缓冲带之外的页（只遍历已渲染页，避免千页文档每次滚动全量扫描）
+    for (const i of state.renderedPages) {
+      if (i < range.first - 1 || i > range.last + 1) releasePage(i);
     }
     if (tasks.length) await Promise.all(tasks);
   }
@@ -1145,6 +1187,201 @@
     state.pageChangeCb = typeof cb === 'function' ? cb : null;
   }
   OFD.onPageChange = onPageChange;
+
+  // ==================== 工具栏操作开放接口 ====================
+  function chooseFile() {
+    els.fileInput.click();
+    return true;
+  }
+
+  async function openFile(source, fileName) {
+    if (!source) return false;
+    let name = fileName;
+    if (!name && source && source.name) name = source.name;
+    if (!name && typeof source === 'string') {
+      try {
+        const u = new URL(source, location.href);
+        name = decodeURIComponent(u.pathname.split('/').pop() || '') || 'document.ofd';
+      } catch (e) {
+        name = 'document.ofd';
+      }
+    }
+    return await openSource(source, name || 'document.ofd');
+  }
+
+  function firstPage() {
+    if (!state.pageCount) return false;
+    setCurrentPage(0, true);
+    return true;
+  }
+  function lastPage() {
+    if (!state.pageCount) return false;
+    setCurrentPage(state.pageCount - 1, true);
+    return true;
+  }
+  function prevPage() {
+    if (!state.pageCount || state.currentPage <= 0) return false;
+    setCurrentPage(state.currentPage - 1, true);
+    return true;
+  }
+  function nextPage() {
+    if (!state.pageCount || state.currentPage >= state.pageCount - 1) return false;
+    setCurrentPage(state.currentPage + 1, true);
+    return true;
+  }
+
+  function zoomIn() {
+    state.scaleMode = 'custom';
+    applyScale(Math.min(state.scale * 1.2, 5));
+    return state.scale;
+  }
+  function zoomOut() {
+    state.scaleMode = 'custom';
+    applyScale(Math.max(state.scale / 1.2, 0.2));
+    return state.scale;
+  }
+  function setScale(value) {
+    const modes = ['auto', 'page-actual', 'page-fit', 'page-width'];
+    if (typeof value === 'string' && modes.indexOf(value) >= 0) {
+      state.scaleMode = value;
+      applyScaleMode();
+      return state.scale;
+    }
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return state.scale;
+    state.scaleMode = 'custom';
+    applyScale(Math.min(5, Math.max(0.2, n)));
+    return state.scale;
+  }
+
+  function rotate(delta) {
+    const d = Number(delta);
+    if (!Number.isFinite(d) || d % 90 !== 0) return state.rotation;
+    applyRotation(d);
+    return state.rotation;
+  }
+  function setRotation(deg) {
+    const d = Number(deg);
+    if (!Number.isFinite(d) || d % 90 !== 0) return state.rotation;
+    const target = ((d % 360) + 360) % 360;
+    applyRotation(target - state.rotation);
+    return state.rotation;
+  }
+
+  function closeSidebar() {
+    els.outer.classList.remove('sidebarOpen');
+    syncSidebarUI();
+    setTimeout(() => applyScaleMode(), 250);
+    return true;
+  }
+  function setSidebar(view) {
+    if (view !== 'thumb' && view !== 'outline' && view !== 'sign') return false;
+    setSidebarView(view);
+    els.outer.classList.add('sidebarOpen');
+    syncSidebarUI();
+    setTimeout(() => applyScaleMode(), 250);
+    return true;
+  }
+  function toggleSidebar(view) {
+    if (view !== 'thumb' && view !== 'outline' && view !== 'sign') return false;
+    const open = els.outer.classList.contains('sidebarOpen');
+    if (open && state.sidebarView === view) {
+      closeSidebar();
+      return false;
+    }
+    setSidebar(view);
+    return true;
+  }
+
+  async function search(query) {
+    const q = query == null ? '' : String(query).trim();
+    openFindbar(true);
+    els.findInput.value = q;
+    if (!q) {
+      clearSearch();
+      return 0;
+    }
+    return await doSearch();
+  }
+  function openSearch() {
+    openFindbar();
+    return true;
+  }
+  function findNext() {
+    if (!state.searchMatches.length) return 0;
+    goNextMatch();
+    return state.searchMatches.length;
+  }
+  function findPrev() {
+    if (!state.searchMatches.length) return 0;
+    goPrevMatch();
+    return state.searchMatches.length;
+  }
+  function closeSearch() {
+    closeFindbar();
+    return true;
+  }
+
+  function stamp() {
+    if (!state.ofd) return false;
+    if (state.stampMode) return true;
+    toggleStampMode();
+    return state.stampMode || !!state.sealGetCb;
+  }
+  function exitStamp() {
+    exitStampMode();
+    return true;
+  }
+
+  function toggleTools(show) {
+    if (show === undefined) toggleSecondaryToolbar();
+    else closeSecondaryToolbar(!show);
+    return !els.secondaryToolbar.classList.contains('hidden');
+  }
+
+  function getViewerState() {
+    return {
+      fileName: state.fileName,
+      page: state.currentPage + 1,
+      pageCount: state.pageCount,
+      scale: state.scale,
+      scaleMode: state.scaleMode,
+      rotation: state.rotation,
+      sidebarOpen: els.outer.classList.contains('sidebarOpen'),
+      sidebarView: state.sidebarView,
+      searchQuery: state.searchQuery,
+      searchCount: state.searchMatches.length,
+      stampMode: state.stampMode,
+    };
+  }
+
+  OFD.chooseFile = chooseFile;
+  OFD.openFile = openFile;
+  OFD.firstPage = firstPage;
+  OFD.lastPage = lastPage;
+  OFD.prevPage = prevPage;
+  OFD.nextPage = nextPage;
+  OFD.zoomIn = zoomIn;
+  OFD.zoomOut = zoomOut;
+  OFD.setScale = setScale;
+  OFD.rotate = rotate;
+  OFD.setRotation = setRotation;
+  OFD.closeSidebar = closeSidebar;
+  OFD.setSidebar = setSidebar;
+  OFD.toggleSidebar = toggleSidebar;
+  OFD.search = search;
+  OFD.openSearch = openSearch;
+  OFD.findNext = findNext;
+  OFD.findPrev = findPrev;
+  OFD.closeSearch = closeSearch;
+  OFD.stamp = stamp;
+  OFD.exitStamp = exitStamp;
+  OFD.toggleTools = toggleTools;
+  OFD.download = downloadDocument;
+  OFD.print = printDocument;
+  OFD.convertToPdf = convertToPdf;
+  OFD.showDocumentInfo = showDocumentInfo;
+  OFD.getViewerState = getViewerState;
 
   // 计算元素相对于指定容器的偏移 top（用于手动滚动定位）
   function getOffsetTopWithin(el, container) {
@@ -1286,7 +1523,22 @@
     applyScale(state.scale);
   }
 
-  function openFindbar() {
+  // Ctrl+F 时优先使用正文选区；必须在 openFindbar() 聚焦输入框之前读取，
+  // 否则浏览器会清掉文档选区。
+  function getSelectedDocText() {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return "";
+      const node = sel.getRangeAt(0).commonAncestorContainer;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      if (!el || !el.closest || !el.closest('.ofd-page')) return "";
+      return sel.toString().trim();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function openFindbar(skipSearch) {
     // 用 position:fixed 定位，与 #secondaryToolbar 弹出框一致，避免父级 overflow 裁剪
     const btnRect = els.findButton.getBoundingClientRect();
     const bar = els.findbar;
@@ -1302,7 +1554,7 @@
     els.findButton.setAttribute('aria-expanded', 'true');
     els.findInput.focus();
     els.findInput.select();
-    if (els.findInput.value.trim()) doSearch();
+    if (!skipSearch && els.findInput.value.trim()) doSearch();
   }
 
   function closeFindbar() {
@@ -1324,6 +1576,22 @@
     document.querySelectorAll('.search-highlight').forEach(el => el.remove());
   }
 
+  // 高亮矩形坐标是页面坐标，必须插在 SVG 根层。
+  // 文字现在包在 <g transform>（Boundary/CTM）里，插到 text 旁边会被二次变换。
+  function insertHighlightRect(textEl, rect) {
+    const svg = textEl.ownerSVGElement;
+    if (!svg) return false;
+    let host = textEl;
+    while (host.parentNode && host.parentNode !== svg) host = host.parentNode;
+    if (host.parentNode !== svg) {
+      svg.appendChild(rect);
+      return true;
+    }
+    // 放在该图元组之前：位于页面白底之后、文字之下
+    svg.insertBefore(rect, host);
+    return true;
+  }
+
   // 在指定页（重渲染后）重建搜索高亮：按 textIdx 重新定位文本元素并生成矩形
   function applySearchHighlights(i) {
     const svg = state.pageSvgs[i];
@@ -1334,8 +1602,7 @@
       if (m.rect) { m.rect.remove(); m.rect = null; }
       const tEl = m.textIdx < textEls.length ? textEls[m.textIdx] : null;
       const rect = tEl ? makeHighlightRect(tEl, m.start, m.end) : null;
-      if (rect) {
-        tEl.parentNode.insertBefore(rect, tEl);
+      if (rect && insertHighlightRect(tEl, rect)) {
         m.rect = rect;
         rect.classList.toggle('active', m === state.searchMatches[state.searchIndex]);
       }
@@ -1356,7 +1623,7 @@
     const query = els.findInput.value.trim();
     if (!query) {
       clearSearch();
-      return;
+      return 0;
     }
     state.searchQuery = query.toLowerCase();
     await renderAllPages();
@@ -1386,10 +1653,8 @@
       if (!svg) continue;
       const tEl = svg.querySelectorAll('text')[m.textIdx];
       const rect = tEl ? makeHighlightRect(tEl, m.start, m.end) : null;
-      if (rect) {
+      if (rect && insertHighlightRect(tEl, rect)) {
         m.rect = rect;
-        // 插到文本元素之前作为背景，避免遮挡文字
-        tEl.parentNode.insertBefore(rect, tEl);
       }
     }
 
@@ -1400,6 +1665,7 @@
       els.findResultsCount.classList.remove('hidden');
       els.findResultsCount.textContent = '无匹配';
     }
+    return matches.length;
   }
 
   // 根据文本元素内容与匹配字符范围，构造 SVG 高亮矩形
@@ -1781,24 +2047,6 @@
     els.findPrevious.addEventListener('click', goPrevMatch);
 
     // 下载（原样保存为 ofd）
-    const downloadDocument = async () => {
-      if (!state.ofd) return;
-      try {
-        const bytes = await downloadCurrentOfd();
-        if (!bytes) return;
-        const blob = new Blob([bytes], { type: 'application/ofd' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = state.fileName || 'document.ofd';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch (e) {
-        showError(e.message, '下载失败');
-      }
-    };
     els.download.addEventListener('click', downloadDocument);
     els.secondaryDownload.addEventListener('click', () => {
       downloadDocument();
@@ -1905,6 +2153,11 @@
       // 查找快捷键（焦点在输入框时也响应）
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
+        const selected = getSelectedDocText();
+        if (selected) {
+          clearTimeout(findTimer);
+          els.findInput.value = selected;
+        }
         openFindbar();
         return;
       }
@@ -1972,13 +2225,7 @@
   function detectCurrentPageOnScroll() {
     const container = els.viewerContainer;
     const cTop = container.scrollTop + 80;
-    let cur = 0;
-    for (let i = 0; i < state.pageCount; i++) {
-      const slot = state.pageContainers[i];
-      if (!slot) continue;
-      if (slot.offsetTop <= cTop) cur = i;
-      else break;
-    }
+    const cur = Math.max(0, findLastPageAtOrBefore(cTop));
     if (cur !== state.currentPage) {
       state.currentPage = cur;
       els.pageNumber.value = String(cur + 1);
@@ -1996,12 +2243,34 @@
     return null;
   }
 
+  // 下载（原样保存为 ofd）；工具栏按钮与 OFD.download() 共用
+  async function downloadDocument() {
+    if (!state.ofd) return false;
+    try {
+      const bytes = await downloadCurrentOfd();
+      if (!bytes) return false;
+      const blob = new Blob([bytes], { type: 'application/ofd' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = state.fileName || 'document.ofd';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (e) {
+      showError(e.message, '下载失败');
+      return false;
+    }
+  }
+
   // 转换为 PDF：模态框显示进度，完成后自动下载
   async function convertToPdf() {
-    if (!state.ofd || state.pdfConverting) return;
+    if (!state.ofd || state.pdfConverting) return false;
     if (!window.TOPDF || typeof TOPDF.ofdToPdf !== 'function') {
       showError('未加载 toPdf.js，无法转换', '转换失败');
-      return;
+      return false;
     }
     state.pdfConverting = true;
     els.pdfModalMsg.classList.remove('error');
@@ -2037,16 +2306,18 @@
         state.pdfConverting = false;
         els.pdfModalOverlay.classList.add('hidden');
       }, 1500);
+      return true;
     } catch (e) {
       state.pdfConverting = false;
       els.pdfModalMsg.textContent = '转换失败：' + (e && e.message ? e.message : e);
       els.pdfModalMsg.classList.add('error');
+      return false;
     }
   }
 
   // 打印：通过隐藏 iframe 静默打开打印对话框，不打开新窗口
   function printDocument() {
-    if (!state.ofd) return;
+    if (!state.ofd) return false;
 
     // 移除之前的打印 iframe（如果有）
     const oldFrame = document.getElementById('ofd-print-frame');
@@ -2075,7 +2346,7 @@
     let pending = state.pageCount;
     if (pending === 0) {
       iframe.remove();
-      return;
+      return false;
     }
 
     for (let i = 0; i < state.pageCount; i++) {
@@ -2104,11 +2375,12 @@
         }
       });
     }
+    return true;
   }
 
   // 文档属性
   function showDocumentInfo() {
-    if (!state.ofd) return;
+    if (!state.ofd) return false;
     const info = OFD.getDocumentInfo(state.ofd);
     $('info-docId').textContent = info.docId || '-';
     $('info-title').textContent = info.title || '-';
@@ -2119,6 +2391,7 @@
     $('info-modDate').textContent = formatDate(info.modDate) || '-';
     $('info-pageCount').textContent = String(state.pageCount);
     els.infoDialog.classList.add('visible');
+    return true;
   }
 
   function formatDate(s) {

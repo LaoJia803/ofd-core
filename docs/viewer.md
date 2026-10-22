@@ -44,7 +44,7 @@ Opening files back to back, or starting a new load while one is in flight, must 
 DOMContentLoaded
   ├─ cache DOM elements (els.*)
   ├─ bind toolbar / sidebar / findbar events
-  ├─ read URL param ?file= (default ../test/ofdFile/999.ofd)
+  ├─ read URL param ?file= (default: a bundled test sample under ../test/ofdFile/)
   └─ openFile(url)
 ```
 
@@ -107,8 +107,8 @@ scroll / prev-next / page input / thumbnail click / goToPage
 web/
 ├─ viewer.html   page skeleton (toolbar / sidebar / findbar / main container)
 ├─ viewer.js     application logic (this file)
-├─ viewer.css    styles (toolbar icons inlined as data URIs, so no external image requests)
-└─ images/       standalone SVG icons (kept for reference; not referenced by viewer.css)
+├─ viewer.css    styles (toolbar icons reference images/*.svg; no base64)
+└─ images/       standalone SVG icons (referenced directly by viewer.css)
 
 Dependencies:
 ├─ ../build/ofd.min.js  parsing and rendering (required; viewer.html loads the minified engine)
@@ -118,17 +118,17 @@ Dependencies:
 
 ## Startup and URL Parameters
 
-The UI opens fine from `file://` (icons are inlined), but loading an OFD **by URL** needs HTTP (`fetch` is blocked on `file://`) — from `file://`, use the toolbar **Open File** button to pick a local `.ofd`.
+The UI opens fine from `file://` (icons are external `images/*.svg` files), but loading an OFD **by URL** needs HTTP (`fetch` is blocked on `file://`) — from `file://`, use the toolbar **Open File** button to pick a local `.ofd`.
 
 ```bash
 npx http-server .     # repo root
 ```
 
-Open `http://localhost:8080/web/viewer.html?file=../test/ofdFile/999.ofd`.
+Open `http://localhost:8080/web/viewer.html?file=<path to your .ofd>` (a path relative to the repo root works, e.g. `../test/ofdFile/<your-sample>.ofd`).
 
 | Param | Description |
 | --- | --- |
-| `file` | OFD path or URL to open; default `../test/ofdFile/999.ofd` in the repo. The `dist` package strips the test-file selector and this default (no auto-load without `?file=`). |
+| `file` | OFD path or URL to open. In the repo build the default points at a sample bundled under `../test/ofdFile/`; the `dist` package strips the test-file selector and this default (no auto-load without `?file=`). |
 | `page` | Initial page to jump to (1-based). |
 | `rotate` | Initial rotation angle in degrees. |
 | `search` | Text to search for and highlight once the document is open. |
@@ -145,7 +145,7 @@ Page input (1-based), previous / next, scroll-driven paging; all page changes go
 
 ### Zoom
 
-Zoom − / + and an "auto" mode (`scaleMode: 'auto'` fits container width). Zoom only changes container size and SVG width — vectors stay sharp.
+Zoom − / + plus the scale dropdown modes: `auto` (default — fits page height first, and when the whole page already fits it grows to page width, capped at 1.5×), `page-actual` (100%), `page-fit` (whole page in the container), `page-width`, fixed percentages, and `custom` after manual zooming. Zoom only changes container size and SVG width — vectors stay sharp.
 
 ### Rotate
 
@@ -153,7 +153,7 @@ Zoom − / + and an "auto" mode (`scaleMode: 'auto'` fits container width). Zoom
 
 ### Search
 
-Search-as-you-type findbar with prev / next and a hit counter. Matches are located by character range within text nodes and scrolled into view.
+Search-as-you-type findbar with prev / next and a hit counter. Matches are located by character range within text nodes and scrolled into view. `Ctrl+F` / `Cmd+F` opens the findbar; if text is selected in the document, the selection is filled into the search box and searched immediately (selections inside the findbar or sidebar do not overwrite the current query).
 
 ### Sidebar
 
@@ -192,13 +192,14 @@ const state = {
   pageCount: 0,
   currentPage: 0,        // 0-based
   scale: 1.0,
-  scaleMode: 'auto',     // 'auto' | manual factor
+  scaleMode: 'auto',     // 'auto' | 'page-actual' | 'page-fit' | 'page-width' | 'custom'
   rotation: 0,
   pageContainers: [],    // per-page container DOM
   pageSvgs: [],          // per-page SVG (lazy; null when unmounted)
+  renderedPages: new Set(), // indices currently rendered; used by the unmount scan
   pageDimensions: [],    // per-page { width, height } in mm
   loadToken: 0,          // load race generation
-  fileName: '999.ofd',
+  fileName: 'sample.ofd', // displayed file name (last URL/path segment; repo builds seed it with a test sample)
   searchMatches: [],
   searchIndex: -1,
   searchQuery: '',
@@ -220,7 +221,7 @@ const state = {
 
 ## Public Interfaces
 
-viewer adds five interfaces to the global `OFD` object for third-party seal integration and paging hooks.
+The viewer adds seal, paging and toolbar-operation interfaces to the global `OFD` object. The five seal/paging interfaces are detailed below; the remaining toolbar operations are listed under "Toolbar operation APIs".
 
 ### OFD.setSeal(opts)
 
@@ -280,6 +281,34 @@ OFD.onPageChange((page, total) => {
 });
 ```
 
+### Toolbar operation APIs
+
+| API | Description |
+| --- | --- |
+| `OFD.openFile(source, fileName?)` | Open a document from URL / Blob / ArrayBuffer / Uint8Array; returns `Promise<boolean>` |
+| `OFD.chooseFile()` | Open the browser file picker (same as the toolbar Open button) |
+| `OFD.download()` | Download the original OFD; returns `Promise<boolean>` |
+| `OFD.print()` | Open the print dialog; returns whether it started |
+| `OFD.convertToPdf()` | Convert to PDF and download; returns `Promise<boolean>` |
+| `OFD.showDocumentInfo()` | Open the document-properties dialog |
+| `OFD.firstPage()` / `OFD.lastPage()` | Jump to the first / last page |
+| `OFD.prevPage()` / `OFD.nextPage()` | Previous / next page; `false` at the boundary |
+| `OFD.setScale(value)` | `auto` / `page-actual` / `page-fit` / `page-width`, or a number 0.2–5; returns the actual scale |
+| `OFD.zoomIn()` / `OFD.zoomOut()` | Zoom one step; returns the actual scale |
+| `OFD.rotate(delta)` | Relative rotation; `delta` must be a multiple of 90; returns the current angle |
+| `OFD.setRotation(deg)` | Absolute rotation; `deg` must be a multiple of 90; returns the current angle |
+| `OFD.setSidebar(view)` | Open and switch to `thumb` / `outline` / `sign` |
+| `OFD.toggleSidebar(view)` | Toggle a sidebar; `true` when opened, `false` when closed/invalid |
+| `OFD.closeSidebar()` | Close the sidebar |
+| `OFD.openSearch()` | Open the findbar, keeping the current query |
+| `OFD.search(query)` | Open the findbar, fill the query and search; returns `Promise<number>` match count |
+| `OFD.findNext()` / `OFD.findPrev()` | Next / previous match; returns the match count (0 when none) |
+| `OFD.closeSearch()` | Close the findbar and clear highlights |
+| `OFD.stamp()` | Enter stamp mode (same as the toolbar Stamp button); `false` without a document/seal |
+| `OFD.exitStamp()` | Leave stamp mode |
+| `OFD.toggleTools(show?)` | Open/close the secondary toolbar; omit `show` to toggle; returns visibility |
+| `OFD.getViewerState()` | Returns `{ fileName, page, pageCount, scale, scaleMode, rotation, sidebarOpen, sidebarView, searchQuery, searchCount, stampMode }` |
+
 ## Full Integration Example
 
 ```html
@@ -312,7 +341,7 @@ OFD.onPageChange((page, total) => {
 
 ### Embedding in an iframe
 
-The viewer is a self-contained page, so a host page can drop it into an `<iframe>` and drive the **same five interfaces** on the iframe's own window. The following is a complete host page: it opens a document by URL, waits until the document is actually ready, then wires all five interfaces and drives them from controls.
+The viewer is a self-contained page, so a host page can drop it into an `<iframe>` and drive the **same `OFD` interfaces** on the iframe's own window. The following is a complete host page: it opens a document by URL, waits until the document is actually ready, then wires the interfaces and drives them from controls.
 
 > Serve the host page and the viewer over **HTTP(S) from the same origin** (e.g. `npx http-server .` at the repo root) — `contentWindow.OFD` is blocked cross-origin, and `?file=` needs `fetch` (unavailable on `file://`).
 
@@ -374,7 +403,7 @@ The viewer is a self-contained page, so a host page can drop it into an `<iframe
   frame.addEventListener('load', wireIframe);
 
   document.getElementById('open').onclick = () => {
-    const file = prompt('OFD path/URL (relative to repo root)', '../test/ofdFile/999.ofd');
+    const file = prompt('OFD path/URL (relative to repo root)', '../test/ofdFile/<your-sample>.ofd');
     if (file) frame.src = 'web/viewer.html?file=' + encodeURIComponent(file);
   };
 
@@ -397,7 +426,7 @@ The viewer is a self-contained page, so a host page can drop it into an `<iframe
 If the host only needs to open and position a document, no JS is required — just point the iframe at the viewer:
 
 ```html
-<iframe src="web/viewer.html?file=../test/ofdFile/999.ofd&page=3&search=合同" width="100%" height="800"></iframe>
+<iframe src="web/viewer.html?file=../test/ofdFile/<your-sample>.ofd&page=3&search=合同" width="100%" height="800"></iframe>
 ```
 
 - **Open / position via URL params first**: `?file=` (plus `page` / `rotate` / `search`) need no JS at all — the recommended way to hand a viewer to a host page.
@@ -447,9 +476,10 @@ No exploitable injection point was found in the render layer. But this relies on
 
 ## Notes
 
-1. The UI opens from `file://` (icons inlined), but loading an OFD by URL needs HTTP; on `file://` use the **Open File** button
+1. The UI opens from `file://` (icons are external `images/*.svg`), but loading an OFD by URL needs HTTP; on `file://` use the **Open File** button
 2. PDF export is demo-grade; complex layouts should be checked visually. Missing `build/toPdf.js` reports "未加载 toPdf.js，无法转换"
 3. External fonts are optional. `npm run build` creates `<root>/font/`, which the engine auto-detects (from `ofd.min.js`); drop `name.ttf|.otf|.woff2` there with no `setFontBase` call. The folder must be served with a **directory listing** (nginx autoindex, `serve`/`http-server`) or `fetchFontIndex()` returns `null` and external fonts won't load — in that case rendering still falls back to embedded / system-stack fonts (a declared-but-unloadable embedded font also falls back to the system stack). Use `OFD.setFontBase('your/path/')` only to point elsewhere
 4. Printing renders every page — watch memory and time on very large documents
-5. Seal callbacks record **positions only**; writing seals back into the OFD file is up to the integrating system
-6. With no `file` parameter **nothing loads automatically** (the release package strips the repo's test files); the user must pick one via the toolbar
+5. Searching does the same: `doSearch()` calls `renderAllPages()` first, so one query on a thousand-page document renders the whole thing
+6. Seal callbacks record **positions only**; writing seals back into the OFD file is up to the integrating system
+7. With no `file` parameter **nothing loads automatically** (the release package strips the repo's test files); the user must pick one via the toolbar

@@ -4,6 +4,7 @@
     const ofdXmlText = await readEntryText(zip, "OFD.xml");
     if (!ofdXmlText) throw new Error("OFD.xml 不存在");
     const ofdRoot = parseXml(ofdXmlText).documentElement;
+    const version = attr(ofdRoot, "Version") || "";
     const docBody = child(ofdRoot, "DocBody");
     const docInfo = child(docBody, "DocInfo");
     const info = {
@@ -44,6 +45,7 @@
     const pageArea = child(common, "PageArea");
     const physBox = child(pageArea, "PhysicalBox");
     const pageBox = parseBox(text(physBox));
+    const defaultCs = common ? text(child(common, "DefaultCS")) : "";
 
     const templates = children(common, "TemplatePage").map((tp) => ({
       id: attr(tp, "ID"),
@@ -61,18 +63,32 @@
     };
     const publicRes = child(common, "PublicRes");
     const documentRes = child(common, "DocumentRes");
-    if (publicRes)
-      mergeRes(res, await parseRes(resolvePath(docPath, text(publicRes)), zip));
-    if (documentRes) {
-      const docResPath = resolvePath(docPath, text(documentRes));
-      mergeRes(res, await parseRes(docResPath, zip));
-      // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
-      // 故单独解析后挂到 res 上，供渲染 CompositeObject 时展开。
-      res.compositeUnits = await parseCompositeUnits(docResPath, zip);
+    let pubResPath = null;
+    let docResPath = null;
+    if (publicRes) {
+      pubResPath = resolvePath(docPath, text(publicRes));
+      mergeRes(res, await parseRes(pubResPath, zip, defaultCs));
     }
-    embeddedFontMap.clear();
-    fontLoadCache.clear();
-    fontIndexCache = null;
+    if (documentRes) {
+      docResPath = resolvePath(docPath, text(documentRes));
+      mergeRes(res, await parseRes(docResPath, zip, defaultCs));
+    }
+    // CompositeGraphicUnit 里的图元要复用 page.js 的解析函数（拼接顺序在 res.js 之后），
+    // 且颜色空间以两份 Res 合并后的结果为准，故等两份 Res 都解析完再收集复合图元。
+    const allCompositeUnits = {};
+    const parseCtx = { version, res, defaultCs };
+    if (pubResPath)
+      Object.assign(
+        allCompositeUnits,
+        await parseCompositeUnits(pubResPath, zip, parseCtx),
+      );
+    if (docResPath)
+      Object.assign(
+        allCompositeUnits,
+        await parseCompositeUnits(docResPath, zip, parseCtx),
+      );
+    res.compositeUnits = allCompositeUnits;
+    resetFontCaches();
     for (const id in res.fonts) {
       const f = res.fonts[id];
       if (f.fontFile && f.fontName && !embeddedFontMap.has(f.fontName)) {
@@ -111,7 +127,13 @@
     if (annotationsEl) {
       const annotationsPath = resolvePath(docPath, text(annotationsEl));
       try {
-        stamps.push(...(await parseAnnotations(annotationsPath, zip)));
+        stamps.push(
+          ...(await parseAnnotations(annotationsPath, zip, {
+            version,
+            res,
+            defaultCs,
+          })),
+        );
       } catch (e) {
         console.warn("[OFD] 解析批注文件失败：" + annotationsPath, e);
       }
@@ -137,6 +159,8 @@
       info,
       document: {
         docPath,
+        version,
+        defaultCs,
         pageBox,
         templates,
         templateById,

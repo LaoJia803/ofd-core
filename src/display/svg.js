@@ -41,10 +41,20 @@
     return d;
   }
 
+  // DashPattern 只允许数字序列（空格或逗号分隔），防止属性值逃逸
+  const DASH_TOKEN_RE = /^[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?$/;
+  function safeDashPattern(value) {
+    const tokens = String(value || "").trim().split(/[\s,]+/);
+    if (!tokens.length || !tokens[0]) return "";
+    for (const t of tokens) if (!DASH_TOKEN_RE.test(t)) return "";
+    return tokens.join(" ");
+  }
+
   let _gradSeq = 0;
-  function buildGradient(gradient, ownerId) {
+  function buildGradient(gradient) {
     if (!gradient || !gradient.stops || !gradient.stops.length) return null;
-    const id = `ofd-grad-${ownerId != null ? ownerId : "x"}-${_gradSeq++}`;
+    // ID 只由引擎生成，绝不拼接文档里的 ID（后者可用于属性注入）
+    const id = "ofd-grad-" + (++_gradSeq);
     const clamp01 = (v) => (v == null || isNaN(v) ? 0 : Math.max(0, Math.min(1, v)));
     const stops = gradient.stops
       .map((s) => {
@@ -68,53 +78,153 @@
     return { id, def };
   }
 
-  function renderPathObject(obj, res) {
+  // ==================== 对象级裁剪 ====================
+  // Clips 采用对象空间坐标系；多个 Clip 取交集，一个 Clip 内的多个 Area 取并集。
+  // TransFlag=true 时裁剪区受图元自身 CTM 影响（在 placement 组内引用）；
+  // false 时只受 Boundary 平移影响（在 placement 组外引用，祖先 CTM 仍自然生效）。
+  let _clipSeq = 0;
+  function areaToClipSvg(area, outerTransform, res) {
+    const parts = [];
+    const areaTf = area.ctm ? `matrix(${area.ctm.join(" ")}) ` : "";
+    for (const p of area.paths || []) {
+      const d = abbreviatedToSvgPath(p.abbr);
+      if (!d) continue;
+      let tf = outerTransform + areaTf;
+      if (p.boundary && (p.boundary.x || p.boundary.y))
+        tf += `translate(${p.boundary.x} ${p.boundary.y}) `;
+      if (p.ctm) tf += `matrix(${p.ctm.join(" ")}) `;
+      const rule = p.rule === "Even-Odd" ? ' clip-rule="evenodd"' : "";
+      parts.push(
+        `<path d="${d}"${rule}${tf.trim() ? ` transform="${tf.trim()}"` : ""}/>`,
+      );
+    }
+    for (const t of area.texts || []) {
+      const built = buildTextObject(t, res);
+      if (!built) continue;
+      parts.push(
+        `<g transform="${outerTransform}${areaTf}"><g transform="${built.transform}">${built.inner}</g></g>`,
+      );
+    }
+    return parts.join("");
+  }
+  function applyClips(inner, transform, clips, boundary, res) {
+    const placed = `<g transform="${transform}">${inner}</g>`;
+    if (!clips || !clips.length) return placed;
+    const defs = [];
+    const inside = [];
+    const outside = [];
+    for (const clip of clips) {
+      const id = "ofd-clip-" + (++_clipSeq);
+      const outer = clip.transFlag
+        ? ""
+        : `translate(${boundary.x} ${boundary.y}) `;
+      const paths = clip.areas
+        .map((a) => areaToClipSvg(a, outer, res))
+        .join("");
+      if (!paths) continue;
+      defs.push(
+        `<clipPath id="${id}" clipPathUnits="userSpaceOnUse">${paths}</clipPath>`,
+      );
+      (clip.transFlag ? inside : outside).push(id);
+    }
+    if (!defs.length) return placed;
+    let local = inner;
+    for (const id of inside) local = `<g clip-path="url(#${id})">${local}</g>`;
+    let out = `<g transform="${transform}">${local}</g>`;
+    for (const id of outside) out = `<g clip-path="url(#${id})">${out}</g>`;
+    return `<defs>${defs.join("")}</defs>${out}`;
+  }
+
+  const LINE_CAPS = ["butt", "round", "square"];
+  const LINE_JOINS = ["miter", "round", "bevel"];
+
+  function buildPathObject(obj, res) {
     const d = abbreviatedToSvgPath(obj.abbreviatedData);
-    if (!d) return "";
+    if (!d) return null;
     const b = obj.boundary;
-    const bx = b.x,
-      by = b.y;
-    let transform = `translate(${bx} ${by})`;
+    let transform = `translate(${b.x} ${b.y})`;
     if (obj.ctm) transform += ` matrix(${obj.ctm.join(" ")})`;
     const dp = obj.drawParam ? res.drawParams[obj.drawParam] : null;
-    const lineWidth =
+    let lineWidth =
       obj.lineWidth != null
         ? obj.lineWidth
         : dp && dp.lineWidth != null
           ? dp.lineWidth
           : 0.7;
+    if (!isFinite(lineWidth) || lineWidth < 0) lineWidth = 0.7;
     const strokeColor = obj.strokeColor || (dp && dp.strokeColor) || null;
     const fillColor = obj.fillColor || (dp && dp.fillColor) || null;
     const fillGrad = obj.fillGradient || (dp && dp.fillGradient) || null;
+    const strokeGrad = obj.strokeGradient || (dp && dp.strokeGradient) || null;
 
-    let defs = "";
+    const defs = [];
     let attrs = "";
     if (obj.fill) {
       if (fillGrad) {
-        const g = buildGradient(fillGrad, obj.id);
-        if (g) { attrs += ` fill="url(#${g.id})"`; defs = `<defs>${g.def}</defs>`; }
-        else attrs += ' fill="none"';
+        const g = buildGradient(fillGrad);
+        if (g) {
+          attrs += ` fill="url(#${g.id})"`;
+          defs.push(g.def);
+        } else attrs += ' fill="none"';
       } else if (fillColor) attrs += ` fill="${colorToCss(fillColor)}"`;
       else attrs += ' fill="none"';
     } else attrs += ' fill="none"';
     if (obj.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
     if (obj.stroke) {
-      attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${lineWidth}"`;
-      if (obj.dash) attrs += ` stroke-dasharray="${obj.dash}"`;
+      if (strokeGrad) {
+        const g = buildGradient(strokeGrad);
+        if (g) {
+          attrs += ` stroke="url(#${g.id})"`;
+          defs.push(g.def);
+        } else {
+          attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}"`;
+        }
+      } else {
+        attrs += ` stroke="${colorToCss(strokeColor || fillColor || { r: 0, g: 0, b: 0, a: 1 })}"`;
+      }
+      attrs += ` stroke-width="${lineWidth}"`;
+      const dash = safeDashPattern(
+        obj.dash != null && obj.dash !== ""
+          ? obj.dash
+          : dp && dp.dashPattern,
+      );
+      if (dash) attrs += ` stroke-dasharray="${dash}"`;
+      if (dp) {
+        const cap = LINE_CAPS[+dp.cap];
+        if (cap) attrs += ` stroke-linecap="${cap}"`;
+        const join = LINE_JOINS[+dp.join];
+        if (join) attrs += ` stroke-linejoin="${join}"`;
+        if (dp.dashOffset != null && isFinite(dp.dashOffset))
+          attrs += ` stroke-dashoffset="${dp.dashOffset}"`;
+      }
+      // OFD 的 MiterLimit 默认值是 3.528，SVG 是 4；未声明时也要显式对齐
+      const miter =
+        dp && dp.miterLimit != null && isFinite(dp.miterLimit)
+          ? dp.miterLimit
+          : !dp || dp.join == null || +dp.join === 0
+            ? 3.528
+            : null;
+      if (miter != null) attrs += ` stroke-miterlimit="${miter}"`;
     }
-    return `<g transform="${transform}">${defs}<path d="${d}"${attrs}/></g>`;
+    return {
+      transform,
+      inner: `${defs.length ? `<defs>${defs.join("")}</defs>` : ""}<path d="${d}"${attrs}/>`,
+    };
   }
 
-  function renderTextObject(obj, res) {
+  function buildTextObject(obj, res) {
     const font = res.fonts[obj.fontId] || {};
     const fv = mapFontFamily(font.fontName, obj.fontId);
-    const hScale = obj.hScale != null ? obj.hScale : 1;
-    const ctm = obj.ctm;
+    let hScale = obj.hScale != null ? obj.hScale : 1;
+    if (!isFinite(hScale) || hScale === 0) hScale = 1;
     const bx = obj.boundary.x,
       by = obj.boundary.y;
-    const fill = obj.fill ? colorToCss(obj.fillColor) : "none";
+    const fill = obj.fill
+      ? colorToCss(obj.fillColor || { r: 0, g: 0, b: 0, a: 1 })
+      : "none";
     const weight = fv.weight || (obj.weight >= 700 ? "bold" : "normal");
     const fontStyle = fv.style || (obj.italic ? "italic" : "normal");
+    const dp = obj.drawParam ? res.drawParams[obj.drawParam] : null;
 
     // 渲染单个 TextCode 的 tspan 片段。
     //
@@ -138,128 +248,225 @@
     //
     // 跳过后**保留 DeltaX 占位**，后续字符绝对坐标不受影响，
     // 与 WPS/Acrobat 打开原 PDF 的表现一致（原 PDF 那格也是空白）。
-    function buildTextCodeParts(tc, ox0, oy0, hScale, readDirection, fontName, glyphs) {
+    function buildTextCodeParts(
+      tc,
+      ox0,
+      oy0,
+      hScale,
+      readDirection,
+      charDirection,
+      fontName,
+      glyphMap,
+    ) {
       const txt = tc.text;
       if (!txt) return "";
+      const chars = Array.from(txt); // 按码点，避免代理对被拆成两个字符
       const dxArr = expandDelta(tc.deltaX);
       const dyArr = expandDelta(tc.deltaY);
-      // 预先算出每个字符是否可绘制
+      const codeStart = tc.codeStart || 0;
       const draw = [];
       let anySkip = false;
-      for (let i = 0; i < txt.length; i++) {
-        const cp = txt.codePointAt(i);
+      for (let i = 0; i < chars.length; i++) {
+        const cp = chars[i].codePointAt(0);
         let ok = true;
         if (!hasGlyphFor(fontName, cp)) {
           // cmap 无此码位 —— 再看 Glyphs 是否为占位
-          const gid = glyphs ? glyphs[i] : undefined;
+          const gid = glyphMap ? glyphMap[codeStart + i] : undefined;
           const isPlaceholder = gid === undefined || gid === 1;
           ok = !isPlaceholder; // 有真字形（私有区假码）-> 仍要画
         }
         draw.push(ok);
         if (!ok) anySkip = true;
       }
-      let ox = ox0,
-        oy = oy0;
-      if (readDirection === 90 || readDirection === 270) {
-        const ang = readDirection;
+      const step = (i) => (i < dxArr.length ? dxArr[i] : 0);
+      const stepY = (i) => (i < dyArr.length ? dyArr[i] : 0);
+      const adj = (x) => (hScale !== 1 ? x / hScale : x);
+      const vertical = readDirection === 90 || readDirection === 270;
+      // CharDirection 是单字符旋转；未指定时竖排沿用阅读方向
+      const rot =
+        charDirection && charDirection % 360
+          ? charDirection
+          : vertical
+            ? readDirection
+            : 0;
+
+      if (vertical) {
+        let ox = ox0,
+          oy = oy0;
         let s = "";
-        for (let i = 0; i < txt.length; i++) {
-          const adjX = hScale !== 1 ? ox / hScale : ox;
+        for (let i = 0; i < chars.length; i++) {
+          const x = adj(ox);
           if (draw[i])
-            s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}" transform="rotate(${ang} ${adjX.toFixed(4)} ${oy.toFixed(4)})">${escapeXml(txt[i])}</tspan>`;
-          ox += i < dxArr.length ? dxArr[i] : 0;
-          oy += i < dyArr.length ? dyArr[i] : 0;
+            s += `<tspan x="${x.toFixed(4)}" y="${oy.toFixed(4)}"${rot ? ` transform="rotate(${rot} ${x.toFixed(4)} ${oy.toFixed(4)})"` : ""}>${escapeXml(chars[i])}</tspan>`;
+          ox += step(i);
+          oy += stepY(i);
         }
         return s;
       }
-      // 常规方向：可合并为一个 tspan；但若需要跳过部分字符，则逐字符输出，
-      // 跳过字符用空 tspan 占位（保留坐标推进，不绘制任何东西）。
-      if (!anySkip) {
+
+      // 180：字形保持直立，但字符顺序从右向左排
+      let rtlPos = null;
+      if (readDirection === 180) {
+        let total = 0;
+        for (let i = 0; i < chars.length; i++) total += step(i);
+        rtlPos = [];
+        let prefix = 0;
+        for (let i = 0; i < chars.length; i++) {
+          prefix += step(i);
+          rtlPos.push(ox0 + total - prefix);
+        }
+      }
+
+      // 常规方向：可合并为一个 tspan；但若需要跳过字符或逐字旋转，则逐字符输出
+      if (!anySkip && !rot) {
         let xs = "",
-          ys = "";
-        for (let i = 0; i < txt.length; i++) {
-          const adjX = hScale !== 1 ? ox / hScale : ox;
-          xs += (i ? " " : "") + adjX.toFixed(4);
+          ys = "",
+          ox = ox0,
+          oy = oy0;
+        for (let i = 0; i < chars.length; i++) {
+          const x = rtlPos ? rtlPos[i] : ox;
+          xs += (i ? " " : "") + adj(x).toFixed(4);
           ys += (i ? " " : "") + oy.toFixed(4);
-          ox += i < dxArr.length ? dxArr[i] : 0;
-          oy += i < dyArr.length ? dyArr[i] : 0;
+          ox += step(i);
+          oy += stepY(i);
         }
         return `<tspan x="${xs}" y="${ys}">${escapeXml(txt)}</tspan>`;
       }
 
       let s = "";
-      for (let i = 0; i < txt.length; i++) {
-        const adjX = hScale !== 1 ? ox / hScale : ox;
+      let ox = ox0,
+        oy = oy0;
+      for (let i = 0; i < chars.length; i++) {
+        const x = rtlPos ? rtlPos[i] : ox;
+        const adjX = adj(x);
         // 无轮廓字符 -> 输出空 tspan 只推进坐标，不绘制
-        const body = draw[i] ? escapeXml(txt[i]) : "";
-        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}">${body}</tspan>`;
-        ox += i < dxArr.length ? dxArr[i] : 0;
-        oy += i < dyArr.length ? dyArr[i] : 0;
+        const body = draw[i] ? escapeXml(chars[i]) : "";
+        const tr = rot
+          ? ` transform="rotate(${rot} ${adjX.toFixed(4)} ${oy.toFixed(4)})"`
+          : "";
+        s += `<tspan x="${adjX.toFixed(4)}" y="${oy.toFixed(4)}"${tr}>${body}</tspan>`;
+        ox += step(i);
+        oy += stepY(i);
       }
       return s;
     }
 
-    // CTM 分支：使用 SVG matrix 变换（含旋转），文字坐标为局部坐标
-    // OFD CTM = [a, b, c, d, e, f]，变换：x' = a*x + c*y + e, y' = b*x + d*y + f
-    // SVG matrix(a, b, c, d, e, f) 同理
-    if (ctm) {
-      const fontSize = obj.size != null ? obj.size : 3;
-      const parts = [];
-      for (const tc of obj.textCodes) {
-        parts.push(buildTextCodeParts(tc, tc.x, tc.y, 1, 0, fv.key || font.fontName, obj.glyphs));
-      }
-      const transform = `translate(${bx} ${by}) matrix(${ctm[0]} ${ctm[1]} ${ctm[2]} ${ctm[3]} ${ctm[4]} ${ctm[5]})`;
-      return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}" transform="${transform}" xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
-    }
-
-    // 无 CTM：简单定位
-    const fontSize = obj.size != null ? obj.size : 3;
+    const fontSize =
+      obj.size != null && isFinite(obj.size) && obj.size > 0 ? obj.size : 3;
     const parts = [];
     for (const tc of obj.textCodes) {
       parts.push(
-        buildTextCodeParts(tc, bx + tc.x, by + tc.y, hScale, obj.readDirection, fv.key || font.fontName, obj.glyphs),
+        buildTextCodeParts(
+          tc,
+          tc.x,
+          tc.y,
+          hScale,
+          obj.readDirection,
+          obj.charDirection,
+          fv.key || font.fontName,
+          obj.glyphMap,
+        ),
       );
     }
-    let transform = "";
-    if (hScale !== 1) transform = ` transform="scale(${hScale} 1)"`;
-    return `<text font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}"${transform} xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`;
-  }
 
-  async function renderImageObject(obj, res) {
-    const mm = res.multiMedias[obj.resourceId];
-    if (!mm) return "";
-    if (!mm.dataUrl) await ensureImageDataUrl(mm); // 渲染到该页时才懒加载图像
-    if (!mm.dataUrl) return "";
-    const b = obj.boundary;
-    let x, y, w, h;
-    if (obj.ctm) {
-      const a = obj.ctm;
-      // CTM 将单位图像 (0..1) 映射到 boundary 局部坐标（Y 向下）
-      w = a[0];
-      h = a[3];
-      x = b.x + a[4];
-      y = b.y + a[5];
-    } else {
-      x = b.x;
-      y = b.y;
-      w = b.w;
-      h = b.h;
+    let attrs = ` font-family="${escapeXml(fv.family)}" font-size="${fontSize}" font-weight="${weight}" font-style="${fontStyle}" fill="${fill}"`;
+    // 文字描边（Stroke/StrokeColor/LineWidth），缺省宽度沿用 DrawParam
+    if (obj.stroke) {
+      let sw =
+        obj.lineWidth != null
+          ? obj.lineWidth
+          : dp && dp.lineWidth != null
+            ? dp.lineWidth
+            : 0.7;
+      if (!isFinite(sw) || sw < 0) sw = 0.7;
+      const sc =
+        obj.strokeColor ||
+        (dp && dp.strokeColor) || { r: 0, g: 0, b: 0, a: 1 };
+      attrs += ` stroke="${colorToCss(sc)}" stroke-width="${sw}"`;
     }
-    return `<image x="${x}" y="${y}" width="${w}" height="${h}" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`;
+    if (hScale !== 1) attrs += ` transform="scale(${hScale} 1)"`;
+
+    // OFD CTM = [a,b,c,d,e,f]：x' = a*x + c*y + e, y' = b*x + d*y + f
+    let transform = `translate(${bx} ${by})`;
+    if (obj.ctm)
+      transform += ` matrix(${obj.ctm[0]} ${obj.ctm[1]} ${obj.ctm[2]} ${obj.ctm[3]} ${obj.ctm[4]} ${obj.ctm[5]})`;
+
+    return {
+      transform,
+      inner: `<text${attrs} xml:space="preserve" text-rendering="geometricPrecision">${parts.join("")}</text>`,
+    };
   }
 
-  async function renderObject(obj, res) {
+  async function buildImageObject(obj, res) {
+    const mm = res.multiMedias[obj.resourceId];
+    if (!mm) return null;
+    if (!mm.dataUrl) await ensureImageDataUrl(mm); // 渲染到该页时才懒加载图像
+    if (!mm.dataUrl) return null;
+    const b = obj.boundary;
+    if (obj.ctm) {
+      // 完整 CTM：单位图像 (0..1) 经 matrix 映射到页面，支持旋转/镜像/斜切
+      return {
+        transform: `translate(${b.x} ${b.y}) matrix(${obj.ctm.join(" ")})`,
+        inner: `<image x="0" y="0" width="1" height="1" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`,
+      };
+    }
+    return {
+      transform: `translate(${b.x} ${b.y})`,
+      inner: `<image x="0" y="0" width="${b.w}" height="${b.h}" href="${escapeXml(mm.dataUrl)}" preserveAspectRatio="none"/>`,
+    };
+  }
+
+  async function buildObjectSvg(obj, res, depth) {
     switch (obj.type) {
       case "path":
-        return renderPathObject(obj, res);
+        return buildPathObject(obj, res);
       case "text":
-        return renderTextObject(obj, res);
+        return buildTextObject(obj, res);
       case "image":
-        return await renderImageObject(obj, res);
+        return await buildImageObject(obj, res);
       case "composite":
-        return renderCompositeObject(obj, res);
+        return await buildCompositeObject(obj, res, depth);
     }
-    return "";
+    return null;
+  }
+
+  async function renderObject(obj, res, depth = 0) {
+    const built = await buildObjectSvg(obj, res, depth);
+    if (!built || !built.inner) return "";
+    return applyClips(
+      built.inner,
+      built.transform,
+      obj.clips,
+      obj.boundary || { x: 0, y: 0, w: 0, h: 0 },
+      res,
+    );
+  }
+
+  // 收集图元及其引用的 CompositeGraphicUnit 内的图像/字体，供整页预取
+  function collectObjectResources(obj, res, imgIds, fontIds, seenUnits) {
+    if (!obj) return;
+    // 文字裁剪区里的 CT_Text 也要预取字体
+    if (obj.clips)
+      for (const clip of obj.clips)
+        for (const area of clip.areas)
+          for (const t of area.texts || [])
+            if (t.fontId != null) fontIds.add(t.fontId);
+    if (obj.type === "image") {
+      imgIds.add(obj.resourceId);
+      return;
+    }
+    if (obj.type === "text" && obj.fontId != null) {
+      fontIds.add(obj.fontId);
+      return;
+    }
+    if (obj.type !== "composite") return;
+    const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
+    if (!unit || !unit.layers || seenUnits.has(obj.resourceId)) return;
+    seenUnits.add(obj.resourceId);
+    for (const layer of unit.layers) {
+      for (const child of layer.objects || [])
+        collectObjectResources(child, res, imgIds, fontIds, seenUnits);
+    }
   }
 
   // 展开 <ofd:CompositeObject>：把 DocumentRes 里对应 CompositeGraphicUnit 的
@@ -268,9 +475,11 @@
   // OFD 渲染语义与 PathObject 一致：图元实际位置 = Boundary原点 + CTM·(内部路径点)，
   // Unit 内部的图元用 Unit 自己的 Boundary 作为局部原点，因此合成矩阵为
   //   页面变换 = translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
-  function renderCompositeObject(obj, res) {
+  async function buildCompositeObject(obj, res, depth = 0) {
+    // 防自引用/互相引用造成无限递归（正常文档不会超过几层）
+    if (depth > 64) return null;
     const unit = res.compositeUnits && res.compositeUnits[obj.resourceId];
-    if (!unit || !unit.layers) return "";
+    if (!unit || !unit.layers) return null;
     const b = obj.boundary;
     const ub = unit.boundary;
     const m = obj.ctm;
@@ -278,15 +487,28 @@
     let tf = `translate(${b.x} ${b.y})`;
     if (m) tf += ` matrix(${m.join(" ")})`;
     if (ub && (ub.x !== 0 || ub.y !== 0)) tf += ` translate(${-ub.x} ${-ub.y})`;
-    const inner = unit.layers
-      .map((layer) => (layer.objects || []).map((o) => renderObject(o, res)).join(""))
-      .join("");
-    if (!inner) return "";
-    return `<g transform="${tf}">${inner}</g>`;
+    const parts = [];
+    for (const layer of unit.layers) {
+      for (const o of layer.objects || [])
+        parts.push(await renderObject(o, res, depth + 1));
+    }
+    const inner = parts.join("");
+    if (!inner) return null;
+    return { transform: tf, inner };
+  }
+
+  function parseCtxOf(ofd) {
+    const doc = ofd.document;
+    return {
+      version: doc.version || "",
+      res: doc.res,
+      defaultCs: doc.defaultCs || "",
+    };
   }
 
   async function getTemplateLayers(tpl, ofd) {
-    if (!tpl._parsed) tpl._parsed = await parsePage(tpl.baseLoc, ofd.zip);
+    if (!tpl._parsed)
+      tpl._parsed = await parsePage(tpl.baseLoc, ofd.zip, parseCtxOf(ofd));
     return tpl._parsed.layers;
   }
 
@@ -294,7 +516,8 @@
     const doc = ofd.document;
     const p = doc.pages[pageIndex];
     if (!p) throw new Error("页码越界: " + pageIndex);
-    if (!p._parsed) p._parsed = await parsePage(p.baseLoc, ofd.zip);
+    if (!p._parsed)
+      p._parsed = await parsePage(p.baseLoc, ofd.zip, parseCtxOf(ofd));
     return p._parsed;
   }
 
@@ -303,6 +526,14 @@
   // Clip 定义可见区域（Boundary 局部坐标，Y 向下）；骑缝章时 Clip 只占完整印章的一部分
   // 页面印章（签章）渲染透明度，1 为完全不透明。文本下方的印章需半透明以便透出字迹。
   const SEAL_OPACITY = 0.8;
+  // 只接受 CSS mix-blend-mode 的标准取值，避免把文档里的字符串直接拼进 style
+  const BLEND_MODES = new Set([
+    "normal", "multiply", "screen", "overlay", "darken", "lighten",
+    "color-dodge", "color-burn", "hard-light", "soft-light", "difference",
+    "exclusion", "hue", "saturation", "color", "luminosity",
+  ]);
+  // 多页同时内联时，印章裁剪 ID 必须全局唯一
+  let _stampClipSeq = 0;
 
   async function renderStamp(stamp, stampIdx) {
     const b = stamp.boundary;
@@ -347,7 +578,7 @@
         (clip.x > 0 || clip.y > 0 || clip.w < w || clip.h < h)
       ) {
         // 骑缝章裁剪
-        const clipId = "stampClip_" + stampIdx;
+        const clipId = "stampClip_" + (++_stampClipSeq);
         const clipSvgX = x + clip.x;
         const clipSvgY = y + clip.y;
         return (
@@ -368,7 +599,7 @@
         clip.h > 0 &&
         (clip.x > 0 || clip.y > 0 || clip.w < w || clip.h < h)
       ) {
-        const clipId = "stampClip_" + stampIdx;
+        const clipId = "stampClip_" + (++_stampClipSeq);
         const clipSvgX = x + clip.x;
         const clipSvgY = y + clip.y;
         return (
@@ -392,29 +623,22 @@
     );
   }
 
-  function renderAnnot(annot) {
-    const b = annot.boundary;
+  async function renderAnnot(annot, res) {
+    const b = annot.boundary || { x: 0, y: 0, w: 0, h: 0 };
+    const rawBlend = String(annot.blendMode || "Normal").toLowerCase();
+    const blend = BLEND_MODES.has(rawBlend) ? rawBlend : "normal";
+    const style = blend === "normal" ? "" : ` style="mix-blend-mode:${blend}"`;
     const parts = [];
-    for (const p of annot.paths) {
-      const d = abbreviatedToSvgPath(p.abbr);
-      if (!d) continue;
-      const tx = b.x + p.boundary.x;
-      const ty = b.y + p.boundary.y;
-      let attrs = 'fill="none"';
-      if (p.fill && p.fillColor) attrs = `fill="${colorToCss(p.fillColor)}"`;
-      if (p.stroke) {
-        const sw = p.lineWidth != null ? p.lineWidth : 0.7;
-        attrs += ` stroke="${colorToCss(p.strokeColor || p.fillColor || { r: 0, g: 0, b: 0, a: 1 })}" stroke-width="${sw}"`;
-      }
-      if (p.rule === "Even-Odd") attrs += ' fill-rule="evenodd"';
-      const blend = (p.blendMode || "Normal").toLowerCase();
-      const style =
-        blend === "normal" ? "" : ` style="mix-blend-mode:${blend}"`;
-      parts.push(
-        `<path d="${d}" ${attrs} transform="translate(${tx} ${ty})"${style}/>`,
-      );
+    for (const o of annot.objects || []) parts.push(await renderObject(o, res));
+    let out = parts.join("");
+    if (out) out = `<g transform="translate(${b.x} ${b.y})"${style}>${out}</g>`;
+    // Link 注释本身没有外观，只提供可点击区域；URL 仅允许 http(s)，避免 javascript: 注入
+    if (annot.linkUrl && b.w > 0 && b.h > 0 && /^https?:\/\//i.test(annot.linkUrl)) {
+      out +=
+        `<rect class="ofd-link" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"` +
+        ` fill="none" pointer-events="all" data-link-url="${escapeXml(annot.linkUrl)}"/>`;
     }
-    return parts.join("");
+    return out;
   }
 
   async function sealToSvgString(sealOfd, widthPx) {

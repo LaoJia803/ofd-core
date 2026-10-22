@@ -1,31 +1,81 @@
   // ==================== OFD 页面解析 ====================
-  function parseLayer(layerEl, layerDp) {
+  // 解析上下文：文档版本（决定 Clips 的 TransFlag 默认值）、资源表（颜色空间）、默认颜色空间
+  function normalizeCtx(ctx) {
+    return ctx || {};
+  }
+
+  // Clips 采用对象空间坐标系：
+  //   - 多个 Clip 取交集；
+  //   - 一个 Clip 内的多个 Area（Path）取并集。
+  // TransFlag 控制裁剪区是否受“图元自身 CTM”影响。OFD 1.2 起缺省为 false；
+  // 1.1 文档（如 Foxit 产物）实测缺省为 true，否则裁剪区会被缩到左上角。
+  function parseClips(el, ctx) {
+    const clipsEl = child(el, "Clips");
+    if (!clipsEl) return null;
+    const tfAttr = attr(clipsEl, "TransFlag");
+    let transFlag;
+    if (tfAttr !== null && tfAttr !== "") {
+      transFlag = /^(true|1)$/i.test(tfAttr);
+    } else {
+      const ver = parseFloat(ctx && ctx.version);
+      transFlag = isFinite(ver) ? ver < 1.2 : true;
+    }
+    const clips = [];
+    for (const clipEl of children(clipsEl, "Clip")) {
+      const areas = [];
+      for (const areaEl of children(clipEl, "Area")) {
+        const ctm = parseMatrix(attr(areaEl, "CTM"));
+        const paths = children(areaEl, "Path").map((p) => ({
+          boundary: parseBox(attr(p, "Boundary")),
+          ctm: parseMatrix(attr(p, "CTM")),
+          abbr: text(child(p, "AbbreviatedData")),
+          rule: attr(p, "Rule"),
+        }));
+        // Area 的裁剪对象也可以是文字（CT_Text），其结构与 TextObject 相同
+        const texts = children(areaEl, "Text").map((t) =>
+          parseTextObject(t, undefined, ctx),
+        );
+        if (paths.length || texts.length) areas.push({ ctm, paths, texts });
+      }
+      if (areas.length) clips.push({ transFlag, areas });
+    }
+    return clips.length ? clips : null;
+  }
+
+  function parseObjectEl(c, layerDp, ctx) {
+    const name = stripNs(c.tag);
+    if (name === "PathObject") return parsePathObject(c, layerDp, ctx);
+    if (name === "TextObject") return parseTextObject(c, layerDp, ctx);
+    if (name === "ImageObject") return parseImageObject(c, ctx);
+    if (name === "CompositeObject")
+      // 复合图元：只记引用，真正的图元在 DocumentRes 的 CompositeGraphicUnit 里。
+      // 渲染时由 renderObject 展开（见 display/svg.js）。
+      return {
+        type: "composite",
+        resourceId: attr(c, "ResourceID"),
+        ctm: parseMatrix(attr(c, "CTM")),
+        boundary: parseBox(attr(c, "Boundary")),
+        drawParam: attr(c, "DrawParam") || layerDp,
+        clips: parseClips(c, ctx),
+      };
+    return null;
+  }
+
+  function parseLayer(layerEl, layerDp, ctx) {
     const drawParam = attr(layerEl, "DrawParam") || layerDp;
     const objects = [];
     for (const c of layerEl.children) {
-      const name = stripNs(c.tag);
-      if (name === "PathObject") objects.push(parsePathObject(c, drawParam));
-      else if (name === "TextObject")
-        objects.push(parseTextObject(c, drawParam));
-      else if (name === "ImageObject") objects.push(parseImageObject(c));
-      else if (name === "CompositeObject")
-        // 复合图元：只记引用，真正的图元在 DocumentRes 的 CompositeGraphicUnit 里。
-        // 渲染时由 renderObject 展开（见 display/svg.js）。
-        objects.push({
-          type: "composite",
-          resourceId: attr(c, "ResourceID"),
-          ctm: parseMatrix(attr(c, "CTM")),
-          boundary: parseBox(attr(c, "Boundary")),
-          drawParam: attr(c, "DrawParam") || layerDp,
-        });
+      const obj = parseObjectEl(c, drawParam, ctx);
+      if (obj) objects.push(obj);
     }
     return { drawParam, objects };
   }
 
-  // 解析 DocumentRes 里的 <ofd:CompositeGraphicUnit>，供 CompositeObject 引用展开。
-  // 数科等第三方产物把 Form XObject 的内容放在这里（实测 tracemonkey 那份 226 个 Unit，
-  // 内含 226 处 Clips），引擎此前完全忽略，导致页面里 731 个图元渲染不出来。
-  async function parseCompositeUnits(resPath, zip) {
+  // 解析 DocumentRes/PublicRes 里的 <ofd:CompositeGraphicUnit>，供 CompositeObject 引用展开。
+  // 两种常见写法都要支持：标准 <Content><Layer><PathObject/></Layer></Content>，
+  // 以及数科产物 <Content><PathObject/></Content>（图元直接挂在 Content 下）。
+  async function parseCompositeUnits(resPath, zip, ctx) {
+    ctx = normalizeCtx(ctx);
     const units = {};
     const xmlText = await readEntryText(zip, resPath);
     if (!xmlText) return units;
@@ -33,12 +83,22 @@
     const list = child(root, "CompositeGraphicUnits");
     if (!list) return units;
     for (const u of children(list, "CompositeGraphicUnit")) {
-      const content = child(u, "Content");
-      const layers = content ? children(content, "Layer").map((l) => parseLayer(l)) : [];
-      units[attr(u, "ID")] = {
-        boundary: parseBox(attr(u, "Boundary")),
-        layers,
-      };
+      const layers = [];
+      for (const content of children(u, "Content")) {
+        const layerEls = children(content, "Layer");
+        if (layerEls.length) {
+          for (const l of layerEls) layers.push(parseLayer(l, undefined, ctx));
+          // Layer 之外直接挂在 Content 下的图元也不能丢
+          const direct = parseLayer(content, undefined, ctx);
+          if (direct.objects.length) layers.push(direct);
+        } else {
+          layers.push(parseLayer(content, undefined, ctx));
+        }
+      }
+      const boundary = attr(u, "Boundary")
+        ? parseBox(attr(u, "Boundary"))
+        : { x: 0, y: 0, w: num(u, "Width", 0), h: num(u, "Height", 0) };
+      units[attr(u, "ID")] = { boundary, layers };
     }
     return units;
   }
@@ -47,7 +107,7 @@
   // 返回 null 表示普通纯色（调用方走 parseColor）；否则返回
   //   { kind:'axial'|'radial', extend, start:[x,y,(r)], end:[x,y,(r)], stops:[{pos,color}] }
   // StartPoint/EndPoint 与 AbbreviatedData 同在对象用户坐标系（渐变按 userSpaceOnUse 对齐）。
-  function parseGradient(el) {
+  function parseGradient(el, res, defaultCs) {
     if (!el) return null;
     const ax = child(el, "AxialShd");
     const rad = child(el, "RadialShd");
@@ -66,7 +126,7 @@
         );
         if (isNaN(pos)) pos = null;
         const colorEl = child(seg, "Color") || seg;
-        return { pos, color: parseColor(colorEl) };
+        return { pos, color: parseColor(colorEl, res, defaultCs) };
       });
     let stops = readStops("Segment");
     if (!stops.length) stops = readStops("Stop");
@@ -84,12 +144,13 @@
     };
   }
 
-  function parsePathObject(el, layerDp) {
+  function parsePathObject(el, layerDp, ctx) {
+    ctx = normalizeCtx(ctx);
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const abbr = child(el, "AbbreviatedData");
-    const fillGrad = parseGradient(fillEl);
-    const strokeGrad = parseGradient(strokeEl);
+    const fillGrad = parseGradient(fillEl, ctx.res, ctx.defaultCs);
+    const strokeGrad = parseGradient(strokeEl, ctx.res, ctx.defaultCs);
     return {
       type: "path",
       id: attr(el, "ID"),
@@ -99,42 +160,69 @@
       dash: attr(el, "DashPattern") || null,
       stroke: bool(el, "Stroke", true),
       fill: bool(el, "Fill", false),
-      fillColor: fillGrad ? null : fillEl ? parseColor(fillEl) : null,
+      fillColor: fillGrad
+        ? null
+        : fillEl
+          ? parseColor(fillEl, ctx.res, ctx.defaultCs)
+          : null,
       fillGradient: fillGrad,
-      strokeColor: strokeGrad ? null : strokeEl ? parseColor(strokeEl) : null,
+      strokeColor: strokeGrad
+        ? null
+        : strokeEl
+          ? parseColor(strokeEl, ctx.res, ctx.defaultCs)
+          : null,
       strokeGradient: strokeGrad,
       abbreviatedData: abbr ? text(abbr) : "",
       rule: attr(el, "Rule"),
       drawParam: attr(el, "DrawParam") || layerDp,
+      clips: parseClips(el, ctx),
     };
   }
 
   // 解析 <ofd:CGTransform>/<ofd:Glyphs>：字符码位 -> 字形索引的显式映射。
   //
   // 为什么必须解析：TextCode 的文本只是「可搜索副本」，真实字形由 Glyphs 指定。
-  // 子集字体里相当多的码位没有 cmap 映射（例如 tracemonkey 第 10 页刻度标签
-  // 里的 `#`），浏览器按 Unicode 交给 @font-face 时查不到轮廓，
+  // 子集字体里相当多的码位没有 cmap 映射（例如图表刻度标签里的
+  // `#`），浏览器按 Unicode 交给 @font-face 时查不到轮廓，
   // 会按字体回退链显示成另一个符号 —— 表现就是「图表标签多出 # 等杂符号」。
   // 拿到 Glyphs 后，引擎可以逐字定位，让缺字形的字符只影响自己。
-  function parseGlyphs(el) {
-    const cg = child(el, "CGTransform");
-    if (!cg) return null;
-    const g = child(cg, "Glyphs");
-    if (!g) return null;
-    const raw = (g.text || "").trim();
-    if (!raw) return null;
-    const gids = raw.split(/\s+/).map(Number);
-    if (!gids.length || gids.some((n) => !Number.isFinite(n))) return null;
-    const cp = +attr(cg, "CodePosition");
-    const cc = +attr(cg, "CodeCount");
-    return {
-      glyphs: gids,
-      codePosition: Number.isFinite(cp) ? cp : 0,
-      codeCount: Number.isFinite(cc) ? cc : gids.length,
-    };
+  //
+  // 一个 TextObject 可以包含多个 CGTransform，各自用 CodePosition/CodeCount
+  // 指定覆盖的字符区间；多个 TextCode 之间也要按累计字符偏移取字形。
+  function parseGlyphMap(el) {
+    const segments = [];
+    for (const cg of children(el, "CGTransform")) {
+      const g = child(cg, "Glyphs");
+      if (!g) continue;
+      const raw = (g.text || "").trim();
+      if (!raw) continue;
+      const gids = raw.split(/\s+/).map(Number);
+      if (!gids.length || gids.some((n) => !Number.isFinite(n))) continue;
+      const cp = +attr(cg, "CodePosition");
+      const cc = +attr(cg, "CodeCount");
+      segments.push({
+        codePosition: Number.isFinite(cp) && cp >= 0 ? cp : 0,
+        codeCount:
+          Number.isFinite(cc) && cc > 0
+            ? Math.min(cc, 1000000)
+            : gids.length,
+        glyphs: gids,
+      });
+    }
+    if (!segments.length) return null;
+    const map = [];
+    for (const seg of segments) {
+      for (let j = 0; j < seg.codeCount; j++) {
+        // GlyphCount < CodeCount 时，规范约定重复使用最后一个字形
+        const gid = seg.glyphs[Math.min(j, seg.glyphs.length - 1)];
+        map[seg.codePosition + j] = gid;
+      }
+    }
+    return map;
   }
 
-  function parseTextObject(el, layerDp) {
+  function parseTextObject(el, layerDp, ctx) {
+    ctx = normalizeCtx(ctx);
     const fillEl = child(el, "FillColor");
     const strokeEl = child(el, "StrokeColor");
     const textCodes = children(el, "TextCode").map((tc) => ({
@@ -143,12 +231,20 @@
       deltaX: attr(tc, "DeltaX"),
       deltaY: attr(tc, "DeltaY"),
       // 仅剥离 XML 缩进产生的换行空白；保留行内首尾空格字形（它们按 DeltaX 占位，
-      // 若误删会导致后续字符合并到窄间距重叠，见 1287页.ofd 段首缩进）
-      text: (tc.text || "").replace(/^\s*\n[\s ]*/, "").replace(/[\s ]*\n\s*$/, ""),
+      // 若误删会导致后续字符合并到窄间距重叠，整段文字挤成一团）
+      text: (tc.text || "").replace(/^\s*\n[\s ]*/, "").replace(/[\s ]*\n\s*$/, ""),
     }));
-    const glyphInfo = parseGlyphs(el);
+    // CGTransform 的 CodePosition 以 TextObject 的全文为基准；为每个 TextCode
+    // 记录累计字符偏移（按码点计数，避免代理对把后续字形整体错位）。
+    let codeOffset = 0;
+    for (const tc of textCodes) {
+      tc.codeStart = codeOffset;
+      codeOffset += Array.from(tc.text).length;
+    }
+    const glyphMap = parseGlyphMap(el);
     return {
       type: "text",
+      id: attr(el, "ID"),
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       fontId: attr(el, "Font"),
@@ -156,31 +252,37 @@
       readDirection: num(el, "ReadDirection", 0),
       charDirection: num(el, "CharDirection", 0),
       hScale: num(el, "HScale", 1),
+      lineWidth: num(el, "LineWidth", null),
       weight: num(el, "Weight", 400),
       italic: bool(el, "Italic", false),
       stroke: bool(el, "Stroke", false),
       fill: bool(el, "Fill", true),
-      fillColor: fillEl ? parseColor(fillEl) : { r: 0, g: 0, b: 0, a: 1 },
-      strokeColor: strokeEl ? parseColor(strokeEl) : null,
+      fillColor: fillEl
+        ? parseColor(fillEl, ctx.res, ctx.defaultCs)
+        : { r: 0, g: 0, b: 0, a: 1 },
+      strokeColor: strokeEl
+        ? parseColor(strokeEl, ctx.res, ctx.defaultCs)
+        : null,
       textCodes,
-      // 逐字字形索引；为 null 表示该 TextObject 未提供 Glyphs
-      glyphs: glyphInfo ? glyphInfo.glyphs : null,
-      codePosition: glyphInfo ? glyphInfo.codePosition : 0,
-      codeCount: glyphInfo ? glyphInfo.codeCount : 0,
+      // 全文逐字字形索引；null 表示未提供 Glyphs
+      glyphMap,
       drawParam: attr(el, "DrawParam") || layerDp,
+      clips: parseClips(el, ctx),
     };
   }
 
-  function parseImageObject(el) {
+  function parseImageObject(el, ctx) {
     return {
       type: "image",
       boundary: parseBox(attr(el, "Boundary")),
       ctm: parseMatrix(attr(el, "CTM")),
       resourceId: attr(el, "ResourceID"),
+      clips: parseClips(el, ctx),
     };
   }
 
-  async function parsePage(pagePath, zip) {
+  async function parsePage(pagePath, zip, ctx) {
+    ctx = normalizeCtx(ctx);
     const xmlText = await readEntryText(zip, pagePath);
     if (!xmlText) return { pagePath, pageBox: null, templates: [], layers: [] };
     const root = parseXml(xmlText).documentElement;
@@ -196,7 +298,7 @@
     }));
     const content = child(root, "Content");
     const layers = content
-      ? children(content, "Layer").map((l) => parseLayer(l))
+      ? children(content, "Layer").map((l) => parseLayer(l, undefined, ctx))
       : [];
     return { pagePath, pageBox, templates, layers };
   }
@@ -208,6 +310,7 @@
       const ofdXmlText = await readEntryText(sealZip, "OFD.xml");
       if (!ofdXmlText) return null;
       const ofdRoot = parseXml(ofdXmlText).documentElement;
+      const version = attr(ofdRoot, "Version") || "";
       const docBody = child(ofdRoot, "DocBody");
       if (!docBody) return null;
       const docEle = child(docBody, "DocRoot");
@@ -220,13 +323,22 @@
       const docRoot = parseXml(docXmlText).documentElement;
 
       // 解析公共资源（CommonData > PublicRes）
-      let res = { fonts: {}, colorSpaces: {}, multiMedias: {}, drawParams: {} };
+      let res = {
+        fonts: {},
+        colorSpaces: {},
+        multiMedias: {},
+        drawParams: {},
+        compositeUnits: {},
+      };
       const commonDataEl = child(docRoot, "CommonData");
+      const defaultCs = commonDataEl
+        ? text(child(commonDataEl, "DefaultCS"))
+        : "";
       if (commonDataEl) {
         const publicResEl = child(commonDataEl, "PublicRes");
         if (publicResEl) {
           const publicResPath = resolvePath(docPath, text(publicResEl));
-          res = await parseRes(publicResPath, sealZip);
+          res = await parseRes(publicResPath, sealZip, defaultCs);
         }
       }
 
@@ -238,7 +350,11 @@
       const pageBaseLoc = attr(pageEl, "BaseLoc");
       if (!pageBaseLoc) return null;
       const pagePath = resolvePath(docPath, pageBaseLoc);
-      const page = await parsePage(pagePath, sealZip);
+      const page = await parsePage(pagePath, sealZip, {
+        version,
+        res,
+        defaultCs: null,
+      });
 
       return { page, res, pagePath };
     } catch (e) {
@@ -246,4 +362,3 @@
       return null;
     }
   }
-

@@ -44,7 +44,7 @@
 DOMContentLoaded
   ├─ 缓存 DOM 元素（els.*）
   ├─ 绑定工具栏 / 侧栏 / 查找条事件
-  ├─ 读 URL 参数 ?file=（缺省 ../test/ofdFile/999.ofd）
+  ├─ 读 URL 参数 ?file=（缺省指向 ../test/ofdFile/ 下的仓库自带样本）
   └─ openFile(url)
 ```
 
@@ -107,8 +107,8 @@ onSearchInput(query)
 web/
 ├─ viewer.html   页面骨架（工具栏 / 侧栏 / 查找条 / 主容器）
 ├─ viewer.js     应用逻辑（本文件）
-├─ viewer.css    样式（工具栏图标已内联为 data URI，不再请求外部图片）
-└─ images/       独立 SVG 图标（保留备查，viewer.css 已不引用）
+├─ viewer.css    样式（工具栏图标引用 images/*.svg，不再使用 base64）
+└─ images/       独立 SVG 图标（viewer.css 直接引用）
 
 依赖：
 ├─ ../build/ofd.min.js  解析与渲染（必须；viewer.html 加载的是压缩版引擎）
@@ -118,17 +118,17 @@ web/
 
 ## 启动流程与 URL 参数
 
-界面在 `file://` 下也能打开（图标已内联），但**按 URL 加载 OFD** 需要 HTTP（`file://` 下 `fetch` 被拦截）——在 `file://` 下请用工具栏「打开 OFD 文件」按钮选择本地 `.ofd`。
+界面在 `file://` 下也能打开（图标为随页面的 `images/*.svg` 外链），但**按 URL 加载 OFD** 需要 HTTP（`file://` 下 `fetch` 被拦截）——在 `file://` 下请用工具栏「打开 OFD 文件」按钮选择本地 `.ofd`。
 
 ```bash
 npx http-server .     # 根目录指向本仓库
 ```
 
-访问 `http://localhost:8080/web/viewer.html?file=../test/ofdFile/999.ofd`。
+访问 `http://localhost:8080/web/viewer.html?file=<你的 .ofd 路径>`（相对仓库根的路径也可，如 `../test/ofdFile/<你的样本>.ofd`）。
 
 | 参数 | 说明 |
 | --- | --- |
-| `file` | 要打开的 OFD 路径或 URL，仓库内缺省 `../test/ofdFile/999.ofd`；`dist` 发行包会剥离测试文件选择器与该缺省（无 `?file=` 时不自动加载） |
+| `file` | 要打开的 OFD 路径或 URL，仓库内缺省指向 `test/ofdFile/` 下的样本文件；`dist` 发行包会剥离测试文件选择器与该缺省（无 `?file=` 时不自动加载） |
 | `page` | 打开后自动跳转的页码（1-based） |
 | `rotate` | 初始旋转角度（度） |
 | `search` | 文档打开后自动检索并高亮的文本 |
@@ -145,7 +145,7 @@ npx http-server .     # 根目录指向本仓库
 
 ### 缩放
 
-缩放 − / + 与「自动」模式（`scaleMode: 'auto'` 按容器宽度自适应）。缩放只改容器尺寸与 SVG width，矢量不失真。
+缩放 − / + 与下拉的缩放模式：`auto`（默认，优先适合页高，页面能完整显示时再放大到适合页宽，上限 1.5 倍）、`page-actual`（100%）、`page-fit`（整页适应容器）、`page-width`（适合页宽）、固定百分比，及手动缩放后的 `custom`。缩放只改容器尺寸与 SVG width，矢量不失真。
 
 ### 旋转
 
@@ -153,7 +153,7 @@ npx http-server .     # 根目录指向本仓库
 
 ### 搜索
 
-全文搜索条：输入即搜，上一处 / 下一处，显示命中计数。命中位置按文本节点字符范围定位并滚动到可视区。
+全文搜索条：输入即搜，上一处 / 下一处，显示命中计数。命中位置按文本节点字符范围定位并滚动到可视区。按 `Ctrl+F` / `Cmd+F` 打开搜索条；若正文中有选中文字，会自动把选区文本填入搜索框并立即搜索（选区在搜索框或侧栏内时不覆盖当前查询）。
 
 ### 侧边栏
 
@@ -170,6 +170,10 @@ npx http-server .     # 根目录指向本仓库
 ### 签名查看与验证
 
 签名面板展示 `OFD.getSignatures` 的结果；「验证」按钮调 `OFD.verifySignature(ofd, sig.index)`，展示 `status` / `message`。页面上的签名区域可点击弹出详情。
+
+### 注解与链接
+
+页面注解（高亮、路径、水印、贴片章）由引擎 `renderAnnot` 随页渲染，`Visible="false"` 的注解不渲染。`Link` 注解额外叠一层透明热区（`.ofd-link`），点击在新标签打开其 `URL`（`noopener,noreferrer`），仅接受 `http(s)` 链接。
 
 ### 盖章（签章放置）
 
@@ -192,13 +196,14 @@ const state = {
   pageCount: 0,
   currentPage: 0,        // 0-based
   scale: 1.0,
-  scaleMode: 'auto',     // 'auto' | 手动倍数
+  scaleMode: 'auto',     // 'auto' | 'page-actual' | 'page-fit' | 'page-width' | 'custom'
   rotation: 0,
   pageContainers: [],    // 每页容器 DOM
   pageSvgs: [],          // 每页 SVG（懒渲染，卸载后为 null）
+  renderedPages: new Set(), // 当前已渲染页索引，滚动卸载只遍历它
   pageDimensions: [],    // 每页 { width, height }（毫米）
   loadToken: 0,          // 加载竞态代次
-  fileName: '999.ofd',
+  fileName: 'sample.ofd', // 当前文档显示名（取 URL/所选文件的末段；仓库版初值为 test 样本）
   searchMatches: [],     // 命中列表
   searchIndex: -1,
   searchQuery: '',
@@ -220,7 +225,7 @@ const state = {
 
 ## 对外接口
 
-viewer 在全局 `OFD` 对象上额外挂 5 个接口，供第三方系统做签章集成与翻页联动。
+viewer 在全局 `OFD` 对象上挂载签章、翻页及工具栏操作接口。签章/翻页的 5 个接口在下面详细说明，其余工具栏操作见「工具栏操作接口」。
 
 ### OFD.setSeal(opts)
 
@@ -281,6 +286,34 @@ OFD.onPageChange((page, total) => {
 });
 ```
 
+### 工具栏操作接口
+
+| 接口 | 说明 |
+| --- | --- |
+| `OFD.openFile(source, fileName?)` | 打开文档。`source` 支持 URL / Blob / ArrayBuffer / Uint8Array，返回 `Promise<boolean>` |
+| `OFD.chooseFile()` | 打开浏览器文件选择框（等同工具栏「打开」按钮） |
+| `OFD.download()` | 原样下载当前 OFD，返回 `Promise<boolean>` |
+| `OFD.print()` | 打开打印对话框，返回是否启动成功 |
+| `OFD.convertToPdf()` | 转换为 PDF 并下载，返回 `Promise<boolean>` |
+| `OFD.showDocumentInfo()` | 打开文档属性弹窗，返回是否成功 |
+| `OFD.firstPage()` / `OFD.lastPage()` | 跳到首页 / 末页，返回是否成功 |
+| `OFD.prevPage()` / `OFD.nextPage()` | 上一页 / 下一页，到边界返回 `false` |
+| `OFD.setScale(value)` | `auto` / `page-actual` / `page-fit` / `page-width`，或 0.2–5 的数字；返回实际缩放 |
+| `OFD.zoomIn()` / `OFD.zoomOut()` | 放大 / 缩小一级，返回实际缩放 |
+| `OFD.rotate(delta)` | 相对旋转，`delta` 必须是 90 的倍数；返回当前角度 |
+| `OFD.setRotation(deg)` | 绝对旋转，`deg` 必须是 90 的倍数；返回当前角度 |
+| `OFD.setSidebar(view)` | 打开并切换到 `thumb` / `outline` / `sign` |
+| `OFD.toggleSidebar(view)` | 切换指定侧栏：打开返回 `true`，关闭或参数无效返回 `false` |
+| `OFD.closeSidebar()` | 关闭侧栏 |
+| `OFD.openSearch()` | 打开搜索条（保留当前查询） |
+| `OFD.search(query)` | 打开搜索条、填入并搜索，返回 `Promise<number>` 命中数 |
+| `OFD.findNext()` / `OFD.findPrev()` | 下一个 / 上一个匹配，返回命中总数（无命中为 0） |
+| `OFD.closeSearch()` | 关闭搜索条并清除高亮 |
+| `OFD.stamp()` | 进入盖章模式（等同工具栏「盖章」按钮）；无文档/无印章时返回 `false` |
+| `OFD.exitStamp()` | 退出盖章模式 |
+| `OFD.toggleTools(show?)` | 打开/关闭次级工具栏；不传 `show` 则切换，返回是否可见 |
+| `OFD.getViewerState()` | 返回当前 `{ fileName, page, pageCount, scale, scaleMode, rotation, sidebarOpen, sidebarView, searchQuery, searchCount, stampMode }` |
+
 ## 完整集成示例
 
 ```html
@@ -313,7 +346,7 @@ OFD.onPageChange((page, total) => {
 
 ### iframe 内嵌
 
-viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再通过 iframe 自身 `window` 上同样的 **5 个接口** 驱动。下面是一个完整的宿主页示例：用 URL 打开文档、等文档真正就绪后挂上全部 5 个接口，并由控件驱动。
+viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再通过 iframe 自身 `window` 上同样的 **`OFD` 接口** 驱动。下面是一个完整的宿主页示例：用 URL 打开文档、等文档真正就绪后挂上接口，并由控件驱动。
 
 > 宿主页与 viewer 必须通过 **HTTP(S) 同源** 访问（如在仓库根 `npx http-server .`）——跨域时 `contentWindow.OFD` 会被浏览器拦截，且 `?file=` 依赖 `fetch`（`file://` 下不可用）。
 
@@ -375,7 +408,7 @@ viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再�
   frame.addEventListener('load', wireIframe);
 
   document.getElementById('open').onclick = () => {
-    const file = prompt('OFD 路径/URL（相对仓库根）', '../test/ofdFile/999.ofd');
+    const file = prompt('OFD 路径/URL（相对仓库根）', '../test/ofdFile/<你的样本>.ofd');
     if (file) frame.src = 'web/viewer.html?file=' + encodeURIComponent(file);
   };
 
@@ -398,7 +431,7 @@ viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再�
 宿主页若只需打开并定位文档，完全不用写 JS，直接把 iframe 指向 viewer 即可：
 
 ```html
-<iframe src="web/viewer.html?file=../test/ofdFile/999.ofd&page=3&search=合同" width="100%" height="800"></iframe>
+<iframe src="web/viewer.html?file=../test/ofdFile/<你的样本>.ofd&page=3&search=合同" width="100%" height="800"></iframe>
 ```
 
 - **优先用 URL 参数打开 / 定位**：`?file=`（配合 `page` / `rotate` / `search`）无需任何 JS，是把 viewer 交给宿主页最简单的方式。
@@ -448,9 +481,10 @@ viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再�
 
 ## 注意事项
 
-1. 界面在 `file://` 下可打开（图标已内联），但按 URL 加载 OFD 需 HTTP；`file://` 下请用「打开 OFD 文件」按钮
+1. 界面在 `file://` 下可打开（图标为 `images/*.svg` 外链），但按 URL 加载 OFD 需 HTTP；`file://` 下请用「打开 OFD 文件」按钮
 2. 导出 PDF 是演示级转换，复杂版式以实际效果为准；缺 `build/toPdf.js` 时报「未加载 toPdf.js，无法转换」
 3. 外部字体是可选的。`npm run build` 会创建 `<根>/font/`，引擎据 `ofd.min.js` 位置自动识别，把 `字体原名.ttf|.otf|.woff2` 放进去即可，无需 `setFontBase`。但该目录必须被服务器**输出目录列表**（如 nginx autoindex、`serve`/`http-server`），否则 `fetchFontIndex()` 返回 `null`、外部字体加载不上；此时渲染仍回退到内嵌/系统字体栈（声明了却加载不了的内嵌字体同样回落系统栈）。仅当要指到别处时才用 `OFD.setFontBase('你的目录/')`
 4. 打印会渲染全部页，超大文档注意内存与耗时
-5. 盖章回调只记录**位置**，不做落章写回 OFD 文件；落库/写文件由第三方系统完成
-6. `file` 参数为空时**不自动加载任何文件**（发行包已剥离仓库内的测试文件），需用户用工具栏按钮选择
+5. 搜索同样先全量渲染再匹配（`renderAllPages()`），千页文档一次检索会渲染整份文档，耗时与内存都明显上升
+6. 盖章回调只记录**位置**，不做落章写回 OFD 文件；落库/写文件由第三方系统完成
+7. `file` 参数为空时**不自动加载任何文件**（发行包已剥离仓库内的测试文件），需用户用工具栏按钮选择

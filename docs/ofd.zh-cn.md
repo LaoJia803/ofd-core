@@ -71,7 +71,7 @@ SM2 验签依赖 `external/sm-crypto.js`（国密算法库，已拼入产物）�
 
 页面解析之外，还有两级渲染结果缓存：
 
-- **页面 SVG 缓存**（`ofd._svgCache`，按 `pageIndex|width` 键控，上限 256 条）：每页最终 SVG 字符串挂在 ofd 实例上。翻页、打印、搜索、PDF 转换（`toPdf` 逐页调 `renderPageToString`）等重复渲染直接返回缓存字符串，命中约 0ms。
+- **页面 SVG 缓存**（`ofd._svgCache`，按 `pageIndex` 键控，上限 256 条）：缓存只存与宽度无关的 `head/mid/body`，不同 `width` 共享同一份页面内容，输出时再拼 `width` 属性；翻页、打印、搜索、PDF 转换（`toPdf` 逐页调 `renderPageToString`）等重复渲染直接命中。
 - **简写路径缓存**（模块级 `abbrPathCache`，上限 4096 条）：`abbreviatedToSvgPath` 按原始路径字符串 memoize，避免跨页/跨渲染重复 tokenize 同一路径数据。
 
 > 两类缓存（页面 SVG 缓存、简写路径缓存）均由模块内的 `LRUCache` 类（`src/shared/lru.js`）实现：命中时把键移到队尾，容量超限时**淘汰最旧的一个条目**（标准 LRU），不是批量清理。
@@ -111,15 +111,17 @@ OFD.load(source)
   ├─ readZip(data)                        → ZIP 句柄
   └─ parseOFD(zip)
        └─ parseDocument(zip)
-            ├─ readEntryText(zip, 'OFD.xml')     → 解析文档信息 info
+            ├─ readEntryText(zip, 'OFD.xml')     → 解析文档信息 info + Version
             ├─ readEntryText(zip, docPath)       → 解析 Document.xml
             │    ├─ parseBox()                   → 页面物理尺寸 pageBox
-            │    ├─ parseRes(publicRes)          → 公共资源（字体/颜色/图片引用）
-            │    ├─ parseRes(documentRes)        → 文档资源，mergeRes 合并
+            │    ├─ DefaultCS                    → 默认颜色空间 defaultCs
+            │    ├─ parseRes(publicRes, zip, defaultCs)   → 公共资源（字体/颜色/图片引用）
+            │    ├─ parseRes(documentRes, zip, defaultCs) → 文档资源，mergeRes 合并
+            │    ├─ parseCompositeUnits(resPath, zip, ctx) → 复合图元 CompositeGraphicUnit
             │    └─ 收集页面路径列表 pages（不解析页面内容）
-            ├─ parseSignatures(zip)              → 签名/印章/ASN.1 结构
-            ├─ parseOutline(zip)                 → 目录（大纲）
-            └─ parseAnnotations(zip)             → 注解（含贴片章）
+            ├─ parseSignatures(signaturesPath, zip)        → 签名/印章/ASN.1 结构
+            ├─ parseAnnotations(annotationsPath, zip, ctx) → 注解（含贴片章、通用外观）
+            └─ parseOutline / parseOutlineFromXml          → 目录（大纲），内嵌 Outlines 优先，否则 Document_Structure.xml
 ```
 
 ### 渲染阶段
@@ -131,9 +133,10 @@ OFD.renderPageToString(ofd, pageIndex, opts)
   ├─ 组装图层：背景模板 → 页面图层 → 前景模板
   ├─ 预取：图像 ensureImageDataUrl / 字体 ensureFontLoaded + fetchFontIndex
   ├─ 逐对象 renderObject
-  │    ├─ renderPathObject   路径/描边/填充/裁剪
-  │    ├─ renderTextObject   文字（字体映射 + DeltaX/DeltaY 逐字定位）
-  │    └─ renderImageObject  图像
+  │    ├─ buildPathObject    路径/描边/填充/渐变
+  │    ├─ buildTextObject    文字（字体映射 + DeltaX/DeltaY + HScale/方向/描边）
+  │    ├─ buildImageObject   图像（完整 CTM）
+  │    └─ applyClips         对象级 Clips 裁剪（Path/Text Area）
   ├─ renderStamp / renderAnnot            → 印章与注解贴片
   └─ 拼 <svg viewBox="0 0 W H"> 写入缓存
 ```
@@ -151,9 +154,10 @@ OFD.verifySignature(ofd, index)
   ├─ checkPeriods：signTime 是否落在 sealAttrs.notBefore~notAfter 内
   │               signTime 是否落在每张证书 Validity 内（collectCerts → extractCertValidity）
   └─ 汇总为 { valid, status, checks: { sigValue, digest, sealPeriod, certPeriod } }
-       ├─ 各项均非 fail → { valid: true,  status: 'valid' }
-       ├─ 任一项 fail   → { valid: false, status: 'invalid' }
-       └─ 无可验证数据 → { valid: false, status: 'unknown' }
+       ├─ 签名值 pass 且其余项非 fail → { valid: true,  status: 'valid' }
+       ├─ 任一摘要/有效期 fail        → { valid: false, status: 'invalid' }
+       ├─ 摘要 pass 但签名值 unknown  → { valid: false, status: 'partial' }（仅摘要自洽）
+       └─ 无可验证数据               → { valid: false, status: 'unknown' }
 ```
 
 ## 引入方式
@@ -181,10 +185,12 @@ const OFD = require('./build/ofd.js');
   info,                 // 文档元信息（getDocumentInfo 的数据来源）
   document: {
     docPath,            // Document.xml 所在目录，作为相对路径基准
+    version,            // OFD.xml 的 Version（如 "1.1"），决定 Clips 的 TransFlag 缺省值
+    defaultCs,          // CommonData/DefaultCS 默认颜色空间 id
     pageBox,            // 文档默认页面尺寸 { x, y, w, h }（毫米）
     templates,          // 模板页列表，懒解析结果缓存在各元素 _parsed
     templateById,       // 模板 id → 模板对象 的 Map
-    pages,              // 页面列表 [ { id, baseLoc, pagePath, ... } ]
+    pages,              // 页面列表 [ { id, baseLoc, _parsed } ]，首次渲染时才解析，结果缓存在 _parsed
     res,                // 资源表，见下
     stamps,             // 印章贴片（签章 / 注解）
     signatures,         // 签名原始数据（getSignatures 的数据来源）
@@ -200,9 +206,10 @@ const OFD = require('./build/ofd.js');
 ```js
 {
   fonts:        {},     // id → { fontName, fontFile, fontBaseDir, ... }
-  colorSpaces:  {},     // id → 颜色空间（含调色板）
+  colorSpaces:  {},     // id → { type: GRAY|RGB|CMYK, bits, palette: [[...]] }
   multiMedias:  {},     // id → 图像对象（含 type/format，dataUrl 渲染时补）
-  drawParams:   {},     // id → 绘制参数（线宽/线帽/虚线等）
+  drawParams:   {},     // id → 绘制参数（线宽/线帽/线接/斜接/虚线 + 描边/填充渐变）
+  compositeUnits: {},   // id → CompositeGraphicUnit（懒解析，缓存在 _templateObj）
 }
 ```
 
@@ -229,14 +236,14 @@ const OFD = require('./build/ofd.js');
 
 ```js
 // 从 URL 加载
-const ofd = await OFD.load('999.ofd');
+const ofd = await OFD.load('sample.ofd');
 
 // 从 <input type="file"> 加载
 const file = document.getElementById('fileInput').files[0];
 const ofd = await OFD.load(file);
 
 // 从 ArrayBuffer 加载
-const buf = await fetch('999.ofd').then(r => r.arrayBuffer());
+const buf = await fetch('sample.ofd').then(r => r.arrayBuffer());
 const ofd = await OFD.load(buf);
 ```
 
@@ -469,8 +476,8 @@ font/                   外部字体投放目录；由 `npm run build` 创建，
 ## 关键内部机制
 
 - **相对路径解析**：`resolvePath(base, rel)` 以 `docPath` 为基准处理 `..` / 绝对路径
-- **颜色解析**：`parseColor` 支持 `"156 82 35"` / `#9C5223` / `"#ee #20 #25"` / 灰度 `"255"` 与 `Alpha` 通道，结果缓存 `_colorCache`
-- **字体加载**：`font.js` 内嵌 `FontFace` 动态加载，`fontLoadCache` 去重，`embeddedFontMap` 收录 OFD 内嵌字体（`parseOFD` 时登记），`fetchFontIndex` 解析外部字体目录索引
+- **颜色解析**：`parseColor(el, res, defaultCs)` 读 `Value`（空格分隔的分量，每段可为十进制或 `#` 前缀十六进制，如 `"#ee #20 #25"`）、`ColorSpace`（缺省回退 `DefaultCS`）与 `Alpha`；按引用的颜色空间判定 GRAY/RGB/CMYK 与分量位宽（`BitsPerComponent`）缩放，带 `Index` 时取调色板 `CV` 项。`colorToCss` 负责序列化为 CSS 颜色并用 `_colorCache`（256 条）记忆化
+- **字体加载**：`font.js` 内嵌 `FontFace` 动态加载，`fontLoadCache` 去重，`embeddedFontMap` 收录 OFD 内嵌字体（`parseOFD` 时登记），`fetchFontIndex` 解析外部字体目录索引；`parseDocument` 在登记新文档前调用 `resetFontCaches()`，清空这些缓存并把 `document.fonts` 里 `ofdf_` 前缀的旧 `FontFace` 删掉，打开第二份文档不会复用上一份的字体
 - **ZIP 读取**：`readZip` 扫描中央目录，`readEntry` 按条目缓存解压结果（`LRUCache`），`readEntryText` UTF-8 解码
 - **摘要算法**：`md.js` 手写 SM3，`hashBytes(data, method)` 按 OID 分发（SM3 / SHA 系列）
 
@@ -494,7 +501,7 @@ font/                   外部字体投放目录；由 `npm run build` 创建，
 
 - **压缩比异常**：只卡绝对体积（256 MB），未卡压缩比。理论上仍可用高压缩比条目消耗 CPU。
 - **解析器复杂度攻击**：XML 解析为单遍线性扫描，无嵌套深度上限。构造深度嵌套的 XML 可消耗栈空间。
-- **图像解码器**：`core/image.js` 的 TIFF/LZW 解码器为手写实现，边界检查不完整（见 `parseTiffTags` 各处 `if (... > bytes.length)`）。
+- **图像解码器**：`core/image.js` 的 TIFF/LZW 解码器为手写实现；已限制 TIFF 32MP、BMP 160MB 及 LZW 单条带输出上限，但仍建议只处理可信文件。
 - **验签不等于可信**：见下节。
 
 ## 签名验证的能力边界
@@ -532,7 +539,8 @@ font/                   外部字体投放目录；由 `npm run build` 创建，
 const r = await OFD.verifySignature(ofd, 0);
 // {
 //   valid: false,
-//   status: 'invalid' | 'unknown',   // 'valid' 时 valid 为 true
+//   status: 'invalid' | 'unknown' | 'partial', // 'valid' 时 valid 为 true；
+//                                  // 'partial' 表示摘要一致但签名值未验证，valid 为 false
 //   message: '验证失败：Doc_0/xxx.xml（摘要不一致）',
 //   digestValid: false,              // 摘要是否一致
 //   checked: ['Doc_0/a.xml', ...],   // 摘要一致的文件
@@ -685,8 +693,9 @@ console.log('带内嵌文件的', Object.values(fonts).filter(f => f.fontFile).l
 
 **症状：整页内容不显示 / 被裁掉**
 
-引擎不输出页面层 `<ofd:Clips>`。若你的 OFD 依赖页面层裁剪表达可见区域，
-需要确认引擎的 `clipBoxes` 剔除逻辑是否覆盖了该场景。
+引擎会读取并应用图元对象上的 `<ofd:Clips>`（多个 Clip 取交集，Clip 内多个 Area 取并集，
+按 `TransFlag` 决定是否受图元自身 CTM 影响）。但 `pdf2ofd` 转换器不会输出 `<ofd:Clips>`
+（见 PDF→OFD 文档）。若整页被裁掉，先确认 OFD 里 Clip 的路径与 `Boundary/CTM` 是否符合预期。
 
 **症状：单页渲染报错但其他页正常**
 

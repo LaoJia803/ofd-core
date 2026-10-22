@@ -166,8 +166,24 @@
         checks: checks,
       };
     }
+    // 摘要一致不等于签名值已验证。签名值未验证时必须降级为 partial，
+    // 不能返回 valid: true（CheckValue 可以随文件内容一起被重算）。
+    if (sv.state !== "pass") {
+      return {
+        valid: false,
+        status: "partial",
+        message:
+          "摘要校验通过（" +
+          checked.length +
+          " 个文件），但签名值未验证：" +
+          (sv.message || "无可用签名值数据"),
+        digestValid: true,
+        checked: checked,
+        failed: failed,
+        checks: checks,
+      };
+    }
     const skipped = [];
-    if (sv.state === "unknown") skipped.push(sv.message);
     if (periods.sealPeriod === "unknown") skipped.push("印章有效期");
     if (periods.certPeriod === "unknown") skipped.push("证书有效期");
     return {

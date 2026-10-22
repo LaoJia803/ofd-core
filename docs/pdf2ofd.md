@@ -173,6 +173,12 @@ Gradients are expressed as OFD axial shades:
 
 Radial gradients are approximated as axial (OFD has a corresponding spec but compatibility is unverified).
 
+### Tiling patterns: average colour, no texture
+
+`setFillColorN` / `setStrokeColorN` are not plain colours — page 13's grey halftone screen is a `TilingPattern`. `patternImageId()` digs the pattern's inline image object id out of the `[ 'TilingPattern', backdrop, { fnArray, argsArray }, matrix, bbox ]` array, and `prefetchPatternColors()` — run alongside `prefetchGradients()` before the operator loop, for the same `page.objs.get()` async reason — decodes each such image once and stores its **average RGB** in `patternColors`. The fill/stroke colour is then replaced by that average, so the region renders in the right tone.
+
+Only the average tone is kept: pattern tiling itself is not expressed (OFD has no direct equivalent that WPS renders reliably). Other `...ColorN` colour spaces (Indexed / CMYK / Lab) stay unsupported — they keep the previous colour instead of collapsing to black.
+
 ### Composite graphic units: not emitted
 
 Form XObjects are **always inlined** as page-level `PathObject` / `ImageObject` (semantically equivalent to `save + concat(matrix) … restore`). They are **not** collected into `<ofd:CompositeGraphicUnit>` in `DocumentRes`, and the page does **not** reference them via `<ofd:CompositeObject>`.
@@ -235,15 +241,15 @@ Hand-written in pure JS (IHDR / IDAT / IEND + CRC32) over Node's `zlib.deflateSy
 
 ## Measured results
 
-Using `test/ofdFile/compressed.tracemonkey-pldi-09.pdf` (a 14-page paper) as the baseline:
+Using the 14-page academic-paper PDF kept in `test/` as the baseline (US Letter, mixed text/vector figures, 9 subset fonts):
 
 ```bash
-node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf
+node build/pdf2ofd.js test/<your-sample>.pdf
 #   已处理 14/14 页
-# 完成：test/ofdFile/compressed.tracemonkey-pldi-09.ofd（14 页，24 字体，90 图像，875598 字节）
+# 完成：test/<your-sample>.ofd（14 页，24 字体，90 图像，875598 字节）
 ```
 
-Alignment against the reference output (`sk-compressed.tracemonkey-pldi-09.ofd`):
+Alignment against the commercial converter's output for the same PDF:
 
 | Check | Reference | This converter |
 | --- | --- | --- |
@@ -254,6 +260,7 @@ Alignment against the reference output (`sk-compressed.tracemonkey-pldi-09.ofd`)
 | Page 11 all-zero CTM paths | 0 | 0 ✓ |
 | Page 11 AxialShd | 162 | 162 ✓ |
 | Page 11 gradient bars | 81 | 81 ✓ |
+| Page 13 halftone screen | tiled `TilingPattern` texture | flat grey — only the pattern's average colour is kept |
 
 **Known unaligned items**: the reference splits each graphic into its own `CompositeGraphicUnit` (226 units, 96 of them empty) isolated by clipping; this converter flattens everything at page level with no clipping, so curves overflow into neighbouring graphics. The reference also keeps only 22 skeleton lines document-wide (widths clustered at 0.75 / 2 / 3), discarding the PDF's 190 strokes. Both points have been confirmed as out of scope.
 
@@ -270,10 +277,11 @@ This converter parses external PDF files.
 
 1. **Not supported**: form fields, annotations, Type3 fonts
 2. **Radial gradients are approximated as axial**; strict visual parity is unverified
-3. **Image-heavy PDFs grow**: pdf.js hands over decoded pixels, so re-encoded PNGs are usually larger than the source JPEGs — scans especially so
-4. **Text spacing is approximated**: per-glyph `DeltaX` splits the total width evenly; long Latin runs may drift slightly (CJK is accurate since it is monospaced)
-5. **CropBox offsets are not specially handled**; page size comes from `page.view`
-6. **Beta**: this module is in beta; its API and behavior may change as it evolves. Not all PDF features are covered — manually verify the output before formal archiving, contracts, invoices or similar use
+3. **Tiling patterns keep only their average colour** — the halftone texture itself is not reproduced; `...ColorN` spaces other than pattern images (Indexed / CMYK / Lab) fall back to the previous colour
+4. **Image-heavy PDFs grow**: pdf.js hands over decoded pixels, so re-encoded PNGs are usually larger than the source JPEGs — scans especially so
+5. **Text spacing is approximated**: per-glyph `DeltaX` splits the total width evenly; long Latin runs may drift slightly (CJK is accurate since it is monospaced)
+6. **CropBox offsets are not specially handled**; page size comes from `page.view`
+7. **Beta**: this module is in beta; its API and behavior may change as it evolves. Not all PDF features are covered — manually verify the output before formal archiving, contracts, invoices or similar use
 
 ## Maintainer notes
 
@@ -283,7 +291,7 @@ The following are **not** synced automatically — handle them manually before p
 | --- | --- | --- |
 | npm package version | `PKG.version` in `build/build-pdf2ofd.js` | **Hardcoded**, not read from `package.json`'s `version`. Must be bumped manually or npm will reject the duplicate version |
 | npm package name | `PKG.name` in `build/build-pdf2ofd.js` | Same. Change it if `pdf2ofd` is taken on npmjs |
-| Release-package file stripping | `distTransform()` in `build/build.js` | After changing the structure of `web/viewer.html` / `web/viewer.js` (selectors, events, the `999.ofd` default), the regexes stop matching. Assertions now make the build fail loudly instead of silently shipping a broken package |
+| Release-package file stripping | `distTransform()` in `build/build.js` | After changing the structure of `web/viewer.html` / `web/viewer.js` (selectors, events, the test-file default), the regexes stop matching. Assertions now make the build fail loudly instead of silently shipping a broken package |
 
 `npm run build:pdf2ofd` only reassembles `dist/pdf2ofd/`; it does not publish. Publishing is a separate step:
 
@@ -297,7 +305,7 @@ npm publish --access public
 After changing the converter, run the baseline sample and check the reported counts (should be 14 pages / 24 fonts / 90 images):
 
 ```bash
-node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf /tmp/chk.ofd
+node build/pdf2ofd.js test/<your-sample>.pdf /tmp/chk.ofd
 ```
 
 For deeper product verification (ZIP entries inflate and match their CRC32, PNG chunk CRCs, MultiMedia declarations == image entries == per-page ImageObject total) write a throwaway script — but mind three traps:

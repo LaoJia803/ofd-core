@@ -1,5 +1,31 @@
   // ==================== 注解解析 ====================
-  async function parseAnnotations(annotationsPath, zip) {
+  // Appearance 是完整页块：可以包含 PathObject / TextObject / ImageObject / CompositeObject，
+  // 不能只认 PathObject（Watermark 常见文字/图片外观）。
+  function parseAppearance(appearance, ctx) {
+    const boundary = parseBox(attr(appearance, "Boundary"));
+    const dp = attr(appearance, "DrawParam") || null;
+    const objects = [];
+    const walk = (el) => {
+      for (const c of el.children) {
+        const name = stripNs(c.tag);
+        if (name === "Layer" || name === "Content") {
+          walk(c);
+          continue;
+        }
+        const obj = parseObjectEl(c, dp, ctx);
+        if (obj) objects.push(obj);
+      }
+    };
+    walk(appearance);
+    return {
+      boundary,
+      objects,
+      blendMode: attr(appearance, "BlendMode") || "Normal",
+    };
+  }
+
+  async function parseAnnotations(annotationsPath, zip, ctx) {
+    ctx = ctx || {};
     const stamps = [];
     const annotsXmlText = await readEntryText(zip, annotationsPath);
     if (!annotsXmlText) return stamps;
@@ -16,53 +42,73 @@
       const annotRoot = parseXml(annotXmlText).documentElement;
 
       for (const annot of children(annotRoot, "Annot")) {
+        if (!bool(annot, "Visible", true)) continue;
         const type = attr(annot, "Type");
         const subtype = attr(annot, "Subtype") || type;
+        const appearance = child(annot, "Appearance");
+        const app = appearance ? parseAppearance(appearance, ctx) : null;
+
         if (type === "Stamp") {
           if (subtype === "SignatureInFile") continue;
-          const appearance = child(annot, "Appearance");
-          if (appearance) {
-            const boundary = parseBox(attr(appearance, "Boundary"));
+          if (app && app.objects.length) {
             stamps.push({
               pageRef: pageId,
-              boundary,
+              boundary: app.boundary,
+              annotType: subtype,
+              objects: app.objects,
+              blendMode: app.blendMode,
+              isAnnot: true,
+            });
+          } else if (appearance) {
+            stamps.push({
+              pageRef: pageId,
+              boundary: app.boundary,
               clip: null,
               sealDataUrl: null,
               isPlaceholder: true,
             });
           }
-        } else if (type === "Highlight" || type === "Path") {
-          const appearance = child(annot, "Appearance");
-          if (appearance) {
-            const boundary = parseBox(attr(appearance, "Boundary"));
-            const appearanceBlend = attr(appearance, "BlendMode") || "Normal";
-            const paths = [];
-            for (const po of children(appearance, "PathObject")) {
-              paths.push({
-                boundary: parseBox(attr(po, "Boundary")),
-                stroke: bool(po, "Stroke", true),
-                fill: bool(po, "Fill", false),
-                fillColor: parseColor(child(po, "FillColor")),
-                strokeColor: parseColor(child(po, "StrokeColor")),
-                lineWidth: num(po, "LineWidth", null),
-                rule: attr(po, "Rule"),
-                blendMode: attr(po, "BlendMode") || appearanceBlend,
-                abbr: text(child(po, "AbbreviatedData")),
-              });
-            }
-            if (paths.length) {
-              stamps.push({
-                pageRef: pageId,
-                boundary,
-                annotType: subtype,
-                paths,
-                isAnnot: true,
-              });
-            }
+          continue;
+        }
+
+        const params = {};
+        const paramsEl = child(annot, "Parameters");
+        if (paramsEl)
+          for (const p of children(paramsEl, "Parameter")) {
+            const name = attr(p, "Name");
+            if (name) params[name] = text(p);
           }
+
+        if (type === "Link") {
+          let url = "";
+          for (const k in params)
+            if (k.toLowerCase() === "url" && params[k]) url = params[k];
+          if (app && (app.objects.length || url)) {
+            stamps.push({
+              pageRef: pageId,
+              boundary: app.boundary,
+              annotType: "Link",
+              objects: app.objects,
+              blendMode: app.blendMode,
+              linkUrl: url,
+              isAnnot: true,
+            });
+          }
+          continue;
+        }
+
+        // Path / Highlight / Watermark 以及其他带外观的注解统一按页块渲染
+        if (app && app.objects.length) {
+          stamps.push({
+            pageRef: pageId,
+            boundary: app.boundary,
+            annotType: subtype,
+            objects: app.objects,
+            blendMode: app.blendMode,
+            isAnnot: true,
+          });
         }
       }
     }
     return stamps;
   }
-

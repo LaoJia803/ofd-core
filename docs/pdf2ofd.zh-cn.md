@@ -173,6 +173,12 @@ pdf.js 的 `clip()` / `eoClip()` **只置位** `pendingClip`，真正建立裁�
 
 径向渐变按轴向近似（OFD 有对应规范但兼容性未验证）。
 
+### 平铺图案（TilingPattern）：只取平均色，不还原纹理
+
+`setFillColorN` / `setStrokeColorN` 的参数不一定是普通颜色——第 13 页的灰度网点就是一张 `TilingPattern`。`patternImageId()` 从 `[ 'TilingPattern', backdrop, { fnArray, argsArray }, matrix, bbox ]` 里挖出图案内联图片的 objId，`prefetchPatternColors()` 与 `prefetchGradients()` 一起在算子循环之前预取（同样因为 `page.objs.get()` 是异步的），解码每张图案图一次并求**平均 RGB** 存进 `patternColors`；填充/描边色随后替换成这个平均色，区域明暗与原件一致。
+
+只保留平均色调，不表达平铺纹理（OFD 里没有 WPS 能稳定渲染的对应写法）。其余 `...ColorN` 色彩空间（Indexed / CMYK / Lab）仍不支持，策略是保持上一个颜色，而不是塌成纯黑。
+
 ### 复合图形单元：本转换器不输出
 
 **Form XObject 一律内联展开**为页面级 `PathObject` / `ImageObject`（语义等价于 `save + concat(matrix) … restore`），**不**收进 `DocumentRes` 的 `<ofd:CompositeGraphicUnit>`，页面也**不**用 `<ofd:CompositeObject>` 引用。
@@ -235,15 +241,15 @@ Form 内部常含「远大于自身」的背景块（如 1152×2199 的整页白
 
 ## 实测数据
 
-以 `test/ofdFile/compressed.tracemonkey-pldi-09.pdf`（14 页论文）为例：
+以 `test/` 下保留的那份 14 页论文 PDF（US Letter，正文 + 矢量图表 + 9 种子集字体）为基线：
 
 ```bash
-node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf
+node build/pdf2ofd.js test/<你的样本>.pdf
 #   已处理 14/14 页
-# 完成：test/ofdFile/compressed.tracemonkey-pldi-09.ofd（14 页，24 字体，90 图像，875598 字节）
+# 完成：test/<你的样本>.ofd（14 页，24 字体，90 图像，875598 字节）
 ```
 
-与数科基准产物（`sk-compressed.tracemonkey-pldi-09.ofd`）的对齐情况：
+与数科（商业转换器）对同一份 PDF 的产物对齐情况：
 
 | 检查项 | 数科 | 本转换器 |
 | --- | --- | --- |
@@ -254,6 +260,7 @@ node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf
 | 第 11 页 CTM 全零路径 | 0 | 0 ✓ |
 | 第 11 页 AxialShd | 162 | 162 ✓ |
 | 第 11 页渐变柱 | 81 | 81 ✓ |
+| 第 13 页灰度网点 | `TilingPattern` 纹理 | 平铺灰（只保留图案平均色） |
 
 **已知未对齐项**：数科把每个图形拆成独立 `CompositeGraphicUnit`（226 个 Unit，其中 96 个为空）靠裁剪隔离；本转换器全部平铺在页面层且不输出裁剪，因此曲线会溢出到相邻图形。另外数科全文档只保留 22 条骨架线（线宽集中在 0.75 / 2 / 3），丢弃了 PDF 的 190 条描边。这两点已确认不再跟进。
 
@@ -270,10 +277,11 @@ node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf
 
 1. **不支持**：表单域、注释、Type3 字体
 2. **径向渐变按轴向近似**，未验证严格视觉一致性
-3. **图像型PDF 体积会涨**：pdf.js 给的是解码后像素，重编 PNG 通常比原 JPEG 大，扫描件尤其明显
-4. **文本间距近似**：逐字 `DeltaX` 均分总宽，长串拉丁文本可能有轻微字距偏移（中文等宽准确）
-5. **CropBox 偏移未特殊处理**，页面尺寸取 `page.view`
-6. **Beta 阶段**：API 与行为可能随版本演进而调整；未覆盖 PDF 全部特性，用于正式归档、合同、票据等场景前请人工核对输出文件
+3. **平铺图案只取平均色**：网点/纹理本身不还原；除图案内联图片外的 `...ColorN` 色彩空间（Indexed / CMYK / Lab）保持上一个颜色
+4. **图像型PDF 体积会涨**：pdf.js 给的是解码后像素，重编 PNG 通常比原 JPEG 大，扫描件尤其明显
+5. **文本间距近似**：逐字 `DeltaX` 均分总宽，长串拉丁文本可能有轻微字距偏移（中文等宽准确）
+6. **CropBox 偏移未特殊处理**，页面尺寸取 `page.view`
+7. **Beta 阶段**：API 与行为可能随版本演进而调整；未覆盖 PDF 全部特性，用于正式归档、合同、票据等场景前请人工核对输出文件
 
 ## 维护者注记
 
@@ -283,7 +291,7 @@ node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf
 | --- | --- | --- |
 | npm 包版本号 | `build/build-pdf2ofd.js` 的 `PKG.version` | **硬编码**，不读 `package.json` 的 `version`。发新版必须手动改这里，否则 npm 会拒绝重复版本 |
 | npm 包名 | `build/build-pdf2ofd.js` 的 `PKG.name` | 同上。`pdf2ofd` 在 npmjs 上已被占用时需改名 |
-| 发行包的文件剥离 | `build/build.js` 的 `distTransform()` | 改了 `web/viewer.html` / `web/viewer.js` 的结构（选择器、事件、`999.ofd` 默认值）后，正则会失配。已加断言，构建会报错提示，不会静默发坏包 |
+| 发行包的文件剥离 | `build/build.js` 的 `distTransform()` | 改了 `web/viewer.html` / `web/viewer.js` 的结构（选择器、事件、测试文件默认值）后，正则会失配。已加断言，构建会报错提示，不会静默发坏包 |
 
 `npm run build:pdf2ofd` 只重新组装 `dist/pdf2ofd/`，不发布。发布是独立动作：
 
@@ -297,7 +305,7 @@ npm publish --access public
 改完转换器后，跑一遍基准样本并核对统计数字（应为 14 页 / 24 字体 / 90 图像）：
 
 ```bash
-node build/pdf2ofd.js test/ofdFile/compressed.tracemonkey-pldi-09.pdf /tmp/chk.ofd
+node build/pdf2ofd.js test/<你的样本>.pdf /tmp/chk.ofd
 ```
 
 产物完整性检查（ZIP 条目可解压 + CRC32、PNG chunk CRC、MultiMedia 声明数 == 图像条目数 == 各页 ImageObject 合计）可临时写脚本验证，**注意三个易错点**：

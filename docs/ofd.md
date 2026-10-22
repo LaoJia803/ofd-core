@@ -71,7 +71,7 @@ The artifact is one IIFE with no runtime third-party dependency. XML parsing, SM
 
 Two more render-result caches sit on top:
 
-- **Page SVG cache** (`ofd._svgCache`, keyed `pageIndex|width`, max 256): final SVG strings hang off the ofd instance, so re-renders (paging, printing, search, PDF export) return in ~0ms.
+- **Page SVG cache** (`ofd._svgCache`, keyed by `pageIndex`, max 256): the cache stores width-independent `head/mid/body`, so all `width` variants share one page body and only splice in the `width` attribute at render time; re-renders (paging, printing, search, PDF export) hit the cache.
 - **Abbreviated path cache** (module-level `abbrPathCache`, max 4096): `abbreviatedToSvgPath` memoizes by raw path string.
 
 > Both caches are implemented by the module's `LRUCache` class (`src/shared/lru.js`): on hit the key moves to the tail; on overflow **the single oldest entry is evicted** (standard LRU).
@@ -111,15 +111,17 @@ OFD.load(source)
   ├─ readZip(data)                        → zip handle
   └─ parseOFD(zip)
        └─ parseDocument(zip)
-            ├─ readEntryText(zip, 'OFD.xml')     → document info
+            ├─ readEntryText(zip, 'OFD.xml')     → DocInfo + Version
             ├─ readEntryText(zip, docPath)       → Document.xml
             │    ├─ parseBox()                   → page size pageBox
-            │    ├─ parseRes(publicRes)          → shared resources
-            │    ├─ parseRes(documentRes)        → document resources (merged)
+            │    ├─ DefaultCS                    → default colour space
+            │    ├─ parseRes(publicRes, zip, defaultCs)   → shared resources
+            │    ├─ parseRes(documentRes, zip, defaultCs) → document resources (merged)
+            │    ├─ parseCompositeUnits(resPath, zip, ctx) → CompositeGraphicUnit
             │    └─ collect page path list (contents unparsed)
-            ├─ parseSignatures(zip)              → signatures / seals / ASN.1
-            ├─ parseOutline(zip)                 → outline tree
-            └─ parseAnnotations(zip)             → annotations (stamp overlays)
+            ├─ parseSignatures(signaturesPath, zip)        → signatures / seals / ASN.1
+            ├─ parseAnnotations(annotationsPath, zip, ctx) → annotations (incl. generic Appearance)
+            └─ parseOutline / parseOutlineFromXml          → outline tree (embedded Outlines, else Document_Structure.xml)
 ```
 
 ### Rendering
@@ -131,9 +133,10 @@ OFD.renderPageToString(ofd, pageIndex, opts)
   ├─ assemble layers: background templates → page layers → foreground templates
   ├─ prefetch: images (ensureImageDataUrl), fonts (ensureFontLoaded + fetchFontIndex)
   ├─ renderObject per object
-  │    ├─ renderPathObject   path / stroke / fill / clip
-  │    ├─ renderTextObject   text (font mapping + DeltaX/DeltaY per-glyph placement)
-  │    └─ renderImageObject  image
+  │    ├─ buildPathObject    path / stroke / fill / gradients
+  │    ├─ buildTextObject    text (font mapping + DeltaX/DeltaY + HScale/direction/stroke)
+  │    ├─ buildImageObject   image (full CTM)
+  │    └─ applyClips         object-level Clips (Path/Text areas)
   ├─ renderStamp / renderAnnot            → seals and annotation overlays
   └─ assemble <svg viewBox="0 0 W H"> and cache
 ```
@@ -151,9 +154,10 @@ OFD.verifySignature(ofd, index)
   ├─ checkPeriods: is signTime inside sealAttrs.notBefore~notAfter?
   │               is signTime inside each certificate's Validity? (collectCerts → extractCertValidity)
   └─ aggregate into { valid, status, checks: { sigValue, digest, sealPeriod, certPeriod } }
-       ├─ no item is 'fail' → { valid: true,  status: 'valid' }
-       ├─ any item fails    → { valid: false, status: 'invalid' }
-       └─ nothing to check  → { valid: false, status: 'unknown' }
+       ├─ sigValue 'pass', other items not 'fail' → { valid: true,  status: 'valid' }
+       ├─ any digest/period failure               → { valid: false, status: 'invalid' }
+       ├─ digest 'pass' but sigValue 'unknown'    → { valid: false, status: 'partial' }
+       └─ nothing to check                        → { valid: false, status: 'unknown' }
 ```
 
 ## Usage
@@ -181,10 +185,12 @@ The `ofd` object returned by `load()`:
   info,                 // document metadata (source of getDocumentInfo)
   document: {
     docPath,            // directory of Document.xml — base for relative paths
+    version,            // OFD.xml Version (e.g. "1.1") — drives Clips TransFlag default
+    defaultCs,          // CommonData/DefaultCS colour space id
     pageBox,            // default page size { x, y, w, h } (mm)
     templates,          // template pages; lazy parse result cached in each element's _parsed
     templateById,       // Map: template id → template object
-    pages,              // page list [ { id, baseLoc, pagePath, ... } ]
+    pages,              // page list [ { id, baseLoc, _parsed } ] — parsed lazily, see below
     res,                // resource table, see below
     stamps,             // seal overlays (signatures / annotations)
     signatures,         // raw signature data (source of getSignatures)
@@ -200,9 +206,10 @@ Resource table `document.res`:
 ```js
 {
   fonts:        {},     // id → { fontName, fontFile, fontBaseDir, ... }
-  colorSpaces:  {},     // id → color space (incl. palettes)
+  colorSpaces:  {},     // id → { type: GRAY|RGB|CMYK, bits, palette: [[...]] }
   multiMedias:  {},     // id → image object (type/format; dataUrl filled at render time)
-  drawParams:   {},     // id → drawing params (line width/cap/dash…)
+  drawParams:   {},     // id → drawing params (line width/cap/join/miter/dash + stroke/fill gradients)
+  compositeUnits: {},   // id → CompositeGraphicUnit (lazy _templateObj, parsed page-like block)
 }
 ```
 
@@ -229,14 +236,14 @@ Loads and parses an OFD file, returns the `ofd` object.
 
 ```js
 // from a URL
-const ofd = await OFD.load('999.ofd');
+const ofd = await OFD.load('sample.ofd');
 
 // from <input type="file">
 const file = document.getElementById('fileInput').files[0];
 const ofd = await OFD.load(file);
 
 // from an ArrayBuffer
-const buf = await fetch('999.ofd').then(r => r.arrayBuffer());
+const buf = await fetch('sample.ofd').then(r => r.arrayBuffer());
 const ofd = await OFD.load(buf);
 ```
 
@@ -458,8 +465,8 @@ font/                   external font drop-in; created by `npm run build`, auto-
 ## Key Internal Mechanisms
 
 - **Relative paths**: `resolvePath(base, rel)` resolves against `docPath`, handling `..` and absolute paths
-- **Colours**: `parseColor` understands `"156 82 35"` / `#9C5223` / `"#ee #20 #25"` / grayscale `"255"` plus `Alpha`, cached in `_colorCache`
-- **Fonts**: `font.js` loads fonts with `FontFace`, dedupes via `fontLoadCache`, registers OFD-embedded fonts in `embeddedFontMap` (filled by `parseOFD`) and reads the external index via `fetchFontIndex`
+- **Colours**: `parseColor(el, res, defaultCs)` reads `Value` (space-separated components, each decimal or `#`-prefixed hex, e.g. `"#ee #20 #25"`) plus the `ColorSpace` id (falling back to `DefaultCS`) and `Alpha`; the referenced colour space decides GRAY/RGB/CMYK and component scaling (`BitsPerComponent`), and `Index` picks a `Palette` `CV` entry. `colorToCss` serialises the result and memoises it in `_colorCache` (256 entries)
+- **Fonts**: `font.js` loads fonts with `FontFace`, dedupes via `fontLoadCache`, registers OFD-embedded fonts in `embeddedFontMap` (filled by `parseOFD`) and reads the external index via `fetchFontIndex`; `parseDocument` calls `resetFontCaches()` before registering a new document, which clears those caches and removes the `ofdf_*` faces from `document.fonts`, so opening a second document never reuses the first one's fonts
 - **ZIP**: `readZip` scans the central directory, `readEntry` caches inflated entries (`LRUCache`), `readEntryText` decodes UTF-8
 - **Digests**: `md.js` implements SM3; `hashBytes(data, method)` dispatches by OID (SM3 / SHA family)
 
@@ -483,7 +490,7 @@ This engine parses untrusted OFD files. The mitigations below are implemented, b
 
 - **Anomalous compression ratios**: only absolute size (256 MB) is capped, not the ratio. A high-ratio entry can still consume CPU.
 - **Parser complexity attacks**: the XML parser is a single linear pass with no nesting-depth limit. Deeply nested XML can exhaust stack space.
-- **Image decoders**: the TIFF/LZW decoder in `core/image.js` is hand-written with incomplete bounds checking.
+- **Image decoders**: the TIFF/LZW decoder in `core/image.js` is hand-written; TIFF is capped at 32MP, BMP output at 160MB, and LZW output per strip is bounded, but untrusted files should still be handled with care.
 - **Verification is not trust**: see below.
 
 ## Signature verification boundaries
@@ -521,7 +528,8 @@ Furthermore, `CheckValue` digests live **inside** the OFD file, so an attacker w
 const r = await OFD.verifySignature(ofd, 0);
 // {
 //   valid: false,
-//   status: 'invalid' | 'unknown',   // 'valid' accompanies valid: true
+//   status: 'invalid' | 'unknown' | 'partial', // 'valid' accompanies valid: true;
+//                                  // 'partial' = digest passed, signature value unverified
 //   message: '验证失败：Doc_0/xxx.xml（摘要不一致）',
 //   digestValid: false,
 //   checked: ['Doc_0/a.xml', ...],
@@ -660,7 +668,7 @@ The subset font has no outline for that code point. The engine already drops gly
 
 **Symptom: an entire page is blank or clipped away**
 
-The engine emits no page-level `<ofd:Clips>`. If your OFD relies on page-level clipping to express the visible region, confirm the engine's `clipBoxes` culling covers that case.
+The engine reads and applies `<ofd:Clips>` on graphic objects (multiple Clips intersect; Areas within one Clip union; `TransFlag` controls whether the object's own CTM affects the clip). The `pdf2ofd` converter, however, does not emit `<ofd:Clips>` (see the PDF→OFD doc). If a whole page is clipped away, first check that the Clip paths and their `Boundary/CTM` are what you expect.
 
 **Symptom: one page fails to render while others are fine**
 

@@ -1,45 +1,71 @@
   // ==================== 颜色 ====================
   // "156 82 35" | "#9C5223" | "#ee #20 #25" | "255"(灰度)
-  function parseColor(el) {
+  // ColorSpace 支持 GRAY / RGB / CMYK，以及调色板（<Color Index="n">）。
+  function parseColorComponents(str) {
+    const parts = String(str || "").trim().split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const s of parts) {
+      if (s.startsWith("#")) {
+        const v = parseInt(s.slice(1), 16);
+        out.push(isNaN(v) ? 0 : v);
+      } else {
+        const v = parseFloat(s);
+        out.push(isNaN(v) ? 0 : v);
+      }
+    }
+    return out;
+  }
+
+  function colorFromComponents(vals, cs, a) {
+    const type = ((cs && cs.type) || "RGB").toUpperCase();
+    const bits = cs && +cs.bits > 0 ? +cs.bits : 8;
+    const max = Math.pow(2, bits) - 1;
+    const ch = vals.map((v) => {
+      const n = Math.max(0, Math.min(max, v));
+      return Math.round((n * 255) / max);
+    });
+    if (type === "GRAY") {
+      const g = ch.length ? ch[0] : 0;
+      return { r: g, g, b: g, a };
+    }
+    if (type === "CMYK") {
+      const c = ch.length > 0 ? ch[0] : 0;
+      const m = ch.length > 1 ? ch[1] : 0;
+      const y = ch.length > 2 ? ch[2] : 0;
+      const k = ch.length > 3 ? ch[3] : 0;
+      // 简单 CMYK→RGB（不做 ICC 色彩管理）
+      return {
+        r: Math.round(255 * (1 - c / 255) * (1 - k / 255)),
+        g: Math.round(255 * (1 - m / 255) * (1 - k / 255)),
+        b: Math.round(255 * (1 - y / 255) * (1 - k / 255)),
+        a,
+      };
+    }
+    return {
+      r: ch.length > 0 ? ch[0] : 0,
+      g: ch.length > 1 ? ch[1] : 0,
+      b: ch.length > 2 ? ch[2] : 0,
+      a,
+    };
+  }
+
+  function parseColor(el, res, defaultCs) {
     if (!el) return null;
-    const val = attr(el, "Value");
     const alpha = attr(el, "Alpha");
     let a = 1;
     if (alpha !== null && alpha !== "")
       a = Math.max(0, Math.min(1, parseFloat(alpha) / 255));
-    if (!val) return { r: 0, g: 0, b: 0, a };
-    const parts = val.trim().split(/\s+/);
-    if (parts.length === 1) {
-      if (parts[0].startsWith("#")) {
-        const hex = parts[0].slice(1);
-        const full =
-          hex.length === 3
-            ? hex
-                .split("")
-                .map((c) => c + c)
-                .join("")
-            : hex;
-        const n = parseInt(full, 16);
-        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a };
-      }
-      const g = parseInt(parts[0]);
-      return { r: g, g: g, b: g, a };
+    const csId = attr(el, "ColorSpace") || defaultCs || "";
+    const cs =
+      res && res.colorSpaces && csId != null ? res.colorSpaces[csId] : null;
+    const index = attr(el, "Index");
+    if (index !== null && index !== "" && cs && cs.palette) {
+      const entry = cs.palette[parseInt(index, 10)];
+      if (entry) return colorFromComponents(entry, cs, a);
     }
-    // 多分量：可能是 "156 82 35" 或 "#ee #20 #25"
-    const parseComp = (s) => {
-      if (s.startsWith("#")) {
-        const v = parseInt(s.slice(1), 16);
-        return isNaN(v) ? 0 : v;
-      }
-      const v = parseInt(s);
-      return isNaN(v) ? 0 : v;
-    };
-    return {
-      r: parseComp(parts[0]),
-      g: parseComp(parts[1]),
-      b: parseComp(parts[2]),
-      a,
-    };
+    const val = attr(el, "Value");
+    if (!val) return { r: 0, g: 0, b: 0, a };
+    return colorFromComponents(parseColorComponents(val), cs, a);
   }
   const _colorCache = new Map();
   function colorToCss(c) {
@@ -55,4 +81,3 @@
     _colorCache.set(key, css);
     return css;
   }
-

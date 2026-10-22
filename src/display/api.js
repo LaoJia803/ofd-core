@@ -1,14 +1,21 @@
   // ==================== SVG 缓存 ====================
   const SVG_CACHE_MAX = 256;
-  function svgCacheKey(pageIndex, opts) {
-    return pageIndex + "|" + (opts && opts.width ? opts.width : "");
+  function svgCacheKey(pageIndex) {
+    return String(pageIndex);
+  }
+  function svgWidthAttr(opts) {
+    const width = Number(opts && opts.width);
+    return Number.isFinite(width) && width > 0 ? ` width="${width}"` : "";
   }
   async function renderPageToString(ofd, pageIndex, opts) {
     opts = opts || {};
     if (!ofd._svgCache) ofd._svgCache = new LRUCache(SVG_CACHE_MAX);
-    const cacheKey = svgCacheKey(pageIndex, opts);
+    const cacheKey = svgCacheKey(pageIndex);
+    const widthAttr = svgWidthAttr(opts);
     const cached = ofd._svgCache.get(cacheKey);
-    if (cached !== undefined) return cached;
+    // 缓存只存与宽度无关的 head/mid/body，各缩放级别共享同一份页面内容
+    if (cached !== undefined)
+      return cached.head + widthAttr + cached.mid + ">" + cached.body;
     const doc = ofd.document;
     const pgTag = _profiling ? "page-" + pageIndex : "";
     if (_profiling)
@@ -44,12 +51,19 @@
     // 收集 **Font ID**（而不是字体名）：同名不同 ID 的内嵌字体必须各自预取，
     // 否则只有第一个注册成功，其余静默回退系统字体（第 13 页整页乱码的真凶）。
     const fontIds = new Set();
+    const seenComposite = new Set();
     for (const layer of layers) {
-      for (const obj of layer.objects) {
-        if (obj.type === "image") imgIds.add(obj.resourceId);
-        if (obj.type === "text" && obj.fontId != null) fontIds.add(obj.fontId);
-      }
+      for (const obj of layer.objects)
+        collectObjectResources(obj, doc.res, imgIds, fontIds, seenComposite);
     }
+    const pageId = doc.pages[pageIndex] ? doc.pages[pageIndex].id : null;
+    // 注解外观（水印/高亮/链接）里的图片与字体同样要参与整页预取
+    if (doc.stamps && pageId)
+      for (const stamp of doc.stamps) {
+        if (stamp.pageRef !== pageId) continue;
+        for (const obj of stamp.objects || [])
+          collectObjectResources(obj, doc.res, imgIds, fontIds, seenComposite);
+      }
 
     const prefetchTasks = [];
     for (const id of imgIds) {
@@ -91,13 +105,12 @@
       for (const obj of layer.objects)
         bodyParts.push(await renderObject(obj, doc.res));
     }
-    const pageId = doc.pages[pageIndex] ? doc.pages[pageIndex].id : null;
     if (doc.stamps && pageId) {
       let stampIdx = 0;
       for (const stamp of doc.stamps) {
         if (stamp.pageRef === pageId) {
           if (stamp.isAnnot) {
-            bodyParts.push(renderAnnot(stamp));
+            bodyParts.push(await renderAnnot(stamp, doc.res));
           } else {
             bodyParts.push(await renderStamp(stamp, stampIdx++));
           }
@@ -105,9 +118,11 @@
       }
     }
     if (_profiling) mark("页面 " + (pageIndex + 1) + "：SVG 构建", pgTag);
-    const widthAttr = opts.width ? ` width="${opts.width}"` : "";
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pageW} ${pageH}"${widthAttr} preserveAspectRatio="xMidYMin meet" class="ofd-page-svg">${bodyParts.join("")}</svg>`;
-    ofd._svgCache.set(cacheKey, svg);
+    const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pageW} ${pageH}"`;
+    const mid = ` preserveAspectRatio="xMidYMin meet" class="ofd-page-svg"`;
+    const body = `${bodyParts.join("")}</svg>`;
+    const svg = head + widthAttr + mid + ">" + body;
+    ofd._svgCache.set(cacheKey, { head, mid, body });
     if (_profiling) mark("页面 " + (pageIndex + 1) + "：渲染完成", pgTag);
     if (_profiling) flushProfile("渲染 第 " + (pageIndex + 1) + " 页", pgTag);
     return svg;

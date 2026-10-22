@@ -174,7 +174,7 @@
   // Font ID -> 唯一的 @font-face family 名
   //
   // 为什么必须按 ID 区分：OFD 允许同一个 FontName 声明多次（不同 ID 指向不同字体文件）。
-  // 实测 tracemonkey 产物里5 个不同 ID（121~125）都叫 Calibri，
+  // 实测某份转换产物里 5 个不同 ID（121~125）都叫 Calibri，
   // 各自的 cmap / 字形集完全不同（Font 122 有 `#` 的真实轮廓 gid 17，
   // Font 123 则完全没有）。
   // 若只用 fontName 做 key，ensureFontLoaded('Calibri') 只会加载**第一个**，
@@ -377,7 +377,8 @@
         const fontPath = resolvePath(emb.baseDir + "/_.x", emb.fontFile);
         const bytes = await readEntry(emb._zip, fontPath);
         if (bytes) {
-          const face = new FontFace(familyName, bytes.buffer);
+          // 必须传 bytes 本身：Stored 条目是 ZIP 的 subarray，bytes.buffer 会从 ZIP 头开始解析
+          const face = new FontFace(familyName, bytes);
           await face.load();
           document.fonts.add(face);
           // 同步解析 cmap：供 hasGlyphFor 判断某码位在本格栅字体里是否真有轮廓
@@ -428,6 +429,28 @@
   }
 
   let fontIndexCache = null;
+  // 切换文档时清空所有字体状态，并移除上一份文档注册的 @font-face。
+  // 仅清 Map 不够：同名 family 的旧 FontFace 仍留在 document.fonts 里，
+  // 新文档同 FontID/字体名会命中旧字形。
+  function resetFontCaches() {
+    embeddedFontMap.clear();
+    embeddedLoaded.clear();
+    fontLoadCache.clear();
+    fontCmapCache.clear();
+    fontIndexCache = null;
+    if (typeof document !== "undefined" && document.fonts) {
+      try {
+        const stale = [];
+        document.fonts.forEach((face) => {
+          if (face && face.family && /^ofdf_/.test(face.family))
+            stale.push(face);
+        });
+        for (const face of stale) document.fonts.delete(face);
+      } catch (e) {
+        // 某些环境没有 FontFaceSet.delete，忽略即可
+      }
+    }
+  }
   function fetchFontIndex() {
     if (fontIndexCache) return fontIndexCache;
     fontIndexCache = fetch(resolveFontBase())
