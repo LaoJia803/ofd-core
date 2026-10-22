@@ -4,7 +4,7 @@
 
 `web/viewer.js` 是 OFD 在线阅读器的应用层逻辑，配合 `viewer.html` / `viewer.css` 提供完整的阅读体验：懒渲染翻页、缩放旋转、全文搜索、缩略图 / 大纲 / 签名侧栏、签章放置、打印、下载、导出 PDF。
 
-它不重复造轮子：解析与渲染全部委托 `build/ofd.js`，PDF 导出委托 `build/toPdf.js`，自身只做状态管理、DOM 交互与调度。
+它不重复造轮子：解析与渲染全部委托 `build/ofd/ofd.js`，PDF 导出委托 `build/ofd2pdf/ofd2pdf.js`，自身只做状态管理、DOM 交互与调度。
 
 ## 设计理念
 
@@ -28,8 +28,8 @@
 
 | 层 | 职责 | 归属 |
 | --- | --- | --- |
-| 解析 / 渲染 | OFD → SVG | `build/ofd.js` |
-| 转换 | SVG → PDF | `build/toPdf.js` |
+| 解析 / 渲染 | OFD → SVG | `build/ofd/ofd.js` |
+| 转换 | SVG → PDF | `build/ofd2pdf/ofd2pdf.js` |
 | 应用 | 状态、交互、调度 | `web/viewer.js` |
 
 ### loadToken 竞态保护
@@ -111,10 +111,12 @@ web/
 └─ images/       独立 SVG 图标（viewer.css 直接引用）
 
 依赖：
-├─ ../build/ofd.min.js  解析与渲染（必须；viewer.html 加载的是压缩版引擎）
-├─ ../build/toPdf.js    导出 PDF（可选，缺失时按钮报「未加载 toPdf.js」）
-└─ 外部字体目录          可选；放入 `<根>/font/`（`npm run build` 创建，据 ofd.min.js 自动识别），该目录需被服务器输出目录列表才生效
+├─ ../build/ofd/ofd.min.js        解析与渲染（必须；viewer.html 加载的是压缩版引擎）
+├─ ../build/ofd2pdf/ofd2pdf.js   导出 PDF（可选，缺失时按钮报「未加载 ofd2pdf.js」）
+└─ 外部字体目录                   可选；放入 `<根>/font/`（`npm run build` 创建，据 ofd.min.js 自动识别），该目录需被服务器输出目录列表才生效
 ```
+
+> 发行 zip（`npm run build:viewer`）内部仍保持旧布局 `build/ofd.min.js` + `build/ofd2pdf.js`，`build-viewer.js` 打包时会改写 `viewer.html` 的脚本引用。
 
 ## 启动流程与 URL 参数
 
@@ -185,7 +187,7 @@ npx http-server .     # 根目录指向本仓库
 | --- | --- |
 | 打印 | 隐藏 iframe 里渲染全部页后调浏览器打印 |
 | 下载 | 下载原始 `.ofd`（沿用原文件名） |
-| 导出 PDF | 调 `build/toPdf.js` 转换，下载同名 `.pdf` |
+| 导出 PDF | 调 `build/ofd2pdf/ofd2pdf.js` 转换，下载同名 `.pdf` |
 | 文档属性 | 展示 `OFD.getDocumentInfo` 的元信息 |
 
 ## 状态对象（state）
@@ -317,8 +319,8 @@ OFD.onPageChange((page, total) => {
 ## 完整集成示例
 
 ```html
-<script src="build/ofd.js"></script>
-<script src="build/toPdf.js"></script>
+<script src="build/ofd/ofd.js"></script>
+<script src="build/ofd2pdf/ofd2pdf.js"></script>
 <script src="web/viewer.js"></script>
 <script>
   // 外部字体目录（可选；默认自动用 <根>/font/，此处演示指到别处）
@@ -482,7 +484,7 @@ viewer 是一个自包含页面，宿主页可以用 `<iframe>` 嵌入它，再�
 ## 注意事项
 
 1. 界面在 `file://` 下可打开（图标为 `images/*.svg` 外链），但按 URL 加载 OFD 需 HTTP；`file://` 下请用「打开 OFD 文件」按钮
-2. 导出 PDF 是演示级转换，复杂版式以实际效果为准；缺 `build/toPdf.js` 时报「未加载 toPdf.js，无法转换」
+2. 导出 PDF 是演示级转换，复杂版式以实际效果为准；缺 `build/ofd2pdf/ofd2pdf.js` 时报「未加载 ofd2pdf.js，无法转换」
 3. 外部字体是可选的。`npm run build` 会创建 `<根>/font/`，引擎据 `ofd.min.js` 位置自动识别，把 `字体原名.ttf|.otf|.woff2` 放进去即可，无需 `setFontBase`。但该目录必须被服务器**输出目录列表**（如 nginx autoindex、`serve`/`http-server`），否则 `fetchFontIndex()` 返回 `null`、外部字体加载不上；此时渲染仍回退到内嵌/系统字体栈（声明了却加载不了的内嵌字体同样回落系统栈）。仅当要指到别处时才用 `OFD.setFontBase('你的目录/')`
 4. 打印会渲染全部页，超大文档注意内存与耗时
 5. 搜索同样先全量渲染再匹配（`renderAllPages()`），千页文档一次检索会渲染整份文档，耗时与内存都明显上升

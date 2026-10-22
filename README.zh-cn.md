@@ -17,8 +17,8 @@ OFD 是电子公文的国标格式（类似 PDF，但更贴合中文排版与电
 | **电子签章** | 支持第三方取章回调、自定义印章放置与删除 |
 | **全文搜索** | 跨页搜索，按字符精确高亮定位 |
 | **版式保真** | 对象级 Clips 裁剪、CMYK/灰度/调色板颜色、渐变描边、文字描边与 HScale/ReadDirection |
-| **OFD → PDF** | 纯前端转换，零依赖（`build/toPdf.js`） |
-| **PDF → OFD** | Node 命令行脚本 / npm 包（`build/pdf2ofd.js`，beta） |
+| **OFD → PDF** | 纯前端转换，零依赖（`build/ofd2pdf/ofd2pdf.js`） |
+| **PDF → OFD** | Node 命令行脚本 / npm 包（`build/pdf2ofd/pdf2ofd.js`，beta） |
 
 ## 快速开始
 
@@ -55,7 +55,7 @@ ruby -run -e httpd . -p 8090  # Ruby
 引入引擎，两行代码渲染：
 
 ```html
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 <script>
   const ofd = await OFD.load('document.ofd');
   const svg = await OFD.renderPage(ofd, 0, { width: 800 });
@@ -69,7 +69,7 @@ ruby -run -e httpd . -p 8090  # Ruby
 
 ```bash
 npm install
-node build/pdf2ofd.js input.pdf output.ofd
+node build/pdf2ofd/pdf2ofd.js input.pdf output.ofd
 ```
 
 或作为 npm 包：
@@ -83,37 +83,70 @@ pdf2ofd input.pdf output.ofd
 
 ## 构建
 
-源码在 `src/`（浏览器/Node 通用），用 esbuild 拼装、terser 压缩：
+仓库按四个模块组织：
+
+| 模块 | 职责 | 源码形式 |
+| --- | --- | --- |
+| `ofd/` | OFD 解析 / 渲染核心库（模块一） | ES 模块 |
+| `ofd2pdf/` | OFD → PDF 转换库（模块二） | ES 模块 |
+| `pdf2ofd/` | PDF → OFD 转换库，仅 Node（模块三） | ES 模块 |
+| `web/` | OFD 预览器（模块四） | 普通脚本 |
+
+三个库用 esbuild 打包到 `build/` 下各自的子目录，每个产物都带一份压缩版：
 
 ```bash
-npm install       # 安装 esbuild / terser / pdfjs-dist
-npm run build     # → build/ofd.js、build/ofd.min.js、dist/ofdjs-<版本>-dist.zip
-npm run build:pdf2ofd   # → dist/pdf2ofd/（可发布的 npm 包）
+npm install               # 安装 esbuild / terser / pdfjs-dist
+npm run build             # pdf2ofd + viewer（viewer 会先构建 ofd / ofd2pdf）
+npm run build:ofd         # → build/ofd/ofd.js、ofd.min.js
+npm run build:ofd2pdf     # → build/ofd2pdf/ofd2pdf.js、ofd2pdf.min.js
+npm run build:pdf2ofd     # → build/pdf2ofd/pdf2ofd.js、pdf2ofd.min.js
+npm run build:viewer      # 先跑 build:ofd、build:ofd2pdf，再打 zip → dist/<版本>/
+npm run build:ofd-npm     # → dist/<版本>/ofd/（包名 ofd-core）
+npm run build:ofd2pdf-npm # → dist/<版本>/ofd2pdf/（依赖 ofd-core）
+npm run build:pdf2ofd-npm # → dist/<版本>/pdf2ofd/
+npm test                  # golden 基线：两份引擎产物渲染结果必须逐字节一致
 ```
 
-`build.js` 读取 `package.json` 的 `version`，写入引擎头注释、`OFD.version` 与 dist 包名，三者始终同步。
+`build/common.js` 读取 `package.json` 的 `version`，写入各产物头注释、`OFD.version`、发行 zip 名与 `dist/<版本>/` 目录名，始终同步。
 
 ## 目录结构
 
 ```
 ofd-core/
 ├── build/                    # 构建产物 + 构建脚本
-│   ├── ofd.js                # 核心引擎（未压缩，~198 KB）
-│   ├── ofd.min.js                # 核心引擎（压缩，~104 KB）—— 实际加载这个
-│   ├── toPdf.js              # OFD → PDF 转换模块（~61 KB）
-│   ├── pdf2ofd.js            # PDF → OFD 转换脚本（Node，beta，~78 KB）
-│   ├── build.js              # 引擎构建 + 发行 zip 打包
-│   └── build-pdf2ofd.js      # 把 pdf2ofd.js 组装成 npm 包
-├── src/                      # 引擎源码（22 个文件）
+│   ├── ofd/                  # 核心引擎：ofd.js（~231 KB）/ ofd.min.js（~107 KB）
+│   ├── ofd2pdf/              # OFD → PDF：ofd2pdf.js / ofd2pdf.min.js
+│   ├── pdf2ofd/              # PDF → OFD：pdf2ofd.js / pdf2ofd.min.js
+│   ├── build-ofd.js          # 打包引擎
+│   ├── build-ofd2pdf.js      # 打包 OFD → PDF
+│   ├── build-pdf2ofd.js      # 打包 PDF → OFD
+│   ├── build-viewer.js       # 先构建 ofd / ofd2pdf，再打发行 zip
+│   ├── build-ofd-npm.js      # 组装 ofd-core npm 包
+│   ├── build-ofd2pdf-npm.js  # 组装 ofd2pdf npm 包
+│   ├── build-pdf2ofd-npm.js  # 组装 pdf2ofd npm 包
+│   └── common.js             # 路径 / esbuild / terser / ZIP / 发行包改写
+├── ofd/                      # 模块一：引擎源码（22 个文件，ES 模块）
 │   ├── index.js              # 公开 API 定义
 │   ├── core/                 # 解析层：zip / parser / page / res / signature / verify / seal / asn1 / md / image
 │   ├── display/              # 渲染层：api / svg / font
 │   └── shared/               # 工具：util / xml / color / path / lru
-├── web/                      # 预览器（viewer.html / css / js + SVG 图标，~186 KB）
+├── ofd2pdf/                  # 模块二：OFD → PDF 源码（ES 模块）
+│   ├── index.js              # 公开 API：ofdToPdf / svgToPdf
+│   ├── core/                 # 常量 / CSS 颜色 / 环境桥接 / 基础工具
+│   ├── pdf/                  # PDF 对象与内容流：render / writer / docstring
+│   ├── svg/                  # XML 解析、变换、路径转换
+│   └── image/                # PNG / BMP / GIF / JPEG 解码 + XObject 输出（尺寸防线）
+├── pdf2ofd/                  # 模块三：PDF → OFD 源码（ES 模块，仅 Node）
+│   ├── index.js              # convert() 编排
+│   ├── core/                 # pdf.js 定位、矩阵 / 单位、pdf.js 图像 → RGBA
+│   ├── ops/                  # 操作符遍历：状态 / 几何 / 裁剪 / 文本 / 路径 / 图像 / 渐变
+│   ├── res/                  # 颜色工具 + 渐变 / 图案取色预取
+│   ├── ofd/                  # 包组装：package / PNG 编码 / XML / ZIP
+│   └── font/                 # 编译字体解析、cmap 重建、命名
+├── web/                      # 模块四：预览器（viewer.html / css / js + SVG 图标，~186 KB）
 ├── font/                     # 外部字体投放目录（`npm run build` 创建；需服务器输出目录列表才生效）
-├── external/                 # 第三方 vendored 代码：sm-crypto.js（国密，~42 KB）、pdf.min.js（无使用方，可删）
 ├── docs/                     # 详细文档（中英双语）
-├── dist/                     # 构建输出（发行 zip + npm 包）
+├── dist/                     # 构建输出（<版本>/ 下：发行 zip + 三个 npm 包）
 ├── test/                     # 测试页面与 OFD 样本
 ├── LICENSE                   # Apache-2.0
 └── 免责声明.md
@@ -125,25 +158,25 @@ ofd-core/
 
 | 保留 | 大小 | 用途 |
 | --- | --- | --- |
-| `build/ofd.min.js` | ~104 KB | **必需**，核心引擎 |
-| `build/toPdf.js` | ~61 KB | 仅需 OFD → PDF 时保留 |
-| `external/sm-crypto.js` | ~42 KB | 仅需验签时保留 |
+| `build/ofd/ofd.min.js` | ~107 KB | **必需**，核心引擎（已编入 SM2 验签） |
+| `build/ofd2pdf/ofd2pdf.js` | ~53 KB | 仅需 OFD → PDF 时保留 |
 | `web/` | ~186 KB | 仅需完整预览器时保留 |
 | `font/`（仓库根） | `npm run build` 创建 | 未映射 OFD 字体名的外部字体投放目录；所在目录需被服务器**输出目录列表**才生效 |
 
-**可删**：`src/`（源码，构建用）、`external/pdf.min.js`（无使用方）、`docs/`、`test/`、`build/ofd.js`（未压缩版）、`build/pdf2ofd.js` 与 `build/build*.js`（Node 侧，浏览器不需要）。
+**可删**：`ofd/`、`ofd2pdf/`、`pdf2ofd/`（源码，构建用）、`docs/`、`test/`、`build/ofd/ofd.js`（未压缩版）、`build/pdf2ofd/` 与 `build/build*.js`（Node 侧，浏览器不需要）。
 
-精简到最小只需 `build/ofd.min.js` 即可渲染。外部字体是可选的：`npm run build` 会在包根创建 `font/` 目录，引擎据 `ofd.min.js` 的位置自动识别它为外部字体目录，把 `字体原名.ttf|.otf|.woff2` 放进去即可生效，无需调用 `OFD.setFontBase()`。但该目录必须被服务器**输出目录列表**（如 nginx `autoindex`，或 `serve`/`http-server`），否则索引抓取失败、外部字体加载不上；此时渲染仍会回退到 OFD 内嵌字体与内置系统字体栈映射。只有要把字体放到别处时，才用 `OFD.setFontBase('你的路径/')` 指定。
+精简到最小只需 `build/ofd/ofd.min.js` 即可渲染。外部字体是可选的：`npm run build` 会在包根创建 `font/` 目录，引擎据 `ofd.min.js` 的位置自动识别它为外部字体目录（`build/ofd/`、旧 zip 的扁平 `build/` 与 npm 的 `lib/` 布局都兼容），把 `字体原名.ttf|.otf|.woff2` 放进去即可生效，无需调用 `OFD.setFontBase()`。但该目录必须被服务器**输出目录列表**（如 nginx `autoindex`，或 `serve`/`http-server`），否则索引抓取失败、外部字体加载不上；此时渲染仍会回退到 OFD 内嵌字体与内置系统字体栈映射。只有要把字体放到别处时，才用 `OFD.setFontBase('你的路径/')` 指定。
 
 ### 文件大小参考
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| `build/ofd.js` | 核心引擎（未压缩） | ~198 KB |
-| `build/ofd.min.js` | 核心引擎（压缩版） | ~104 KB |
-| `build/toPdf.js` | OFD → PDF 转换模块 | ~61 KB |
-| `build/pdf2ofd.js` | PDF → OFD 转换脚本（Node，beta） | ~78 KB |
-| `external/sm-crypto.js` | 国密算法库 | ~42 KB |
+| `build/ofd/ofd.js` | 核心引擎（未压缩） | ~231 KB |
+| `build/ofd/ofd.min.js` | 核心引擎（压缩版） | ~107 KB |
+| `build/ofd2pdf/ofd2pdf.js` | OFD → PDF 转换模块 | ~53 KB |
+| `build/ofd2pdf/ofd2pdf.min.js` | OFD → PDF（压缩版） | ~26 KB |
+| `build/pdf2ofd/pdf2ofd.js` | PDF → OFD 转换脚本（Node，beta） | ~50 KB |
+| `build/pdf2ofd/pdf2ofd.min.js` | PDF → OFD（压缩版） | ~30 KB |
 | `web/viewer.js` | 预览器应用逻辑 | ~93 KB |
 | `web/viewer.css` | 预览器样式（图标引用 `images/*.svg`，不使用 base64） | ~43 KB |
 
@@ -235,7 +268,7 @@ OFD.onSealChange((list, action) => saveSeals(list));                 // 签章�
 > 任何人都能自签一份证书并通过验证。
 >
 > 另注：签名文件被修改后摘要可被同步重算，因此「摘要一致」只说明文件自洽；
-> 签名值验证才是身份与完整性的依据。若摘要一致但签名值无法验证（如缺少 SM2 库或非 SES 结构），
+> 签名值验证才是身份与完整性的依据。若摘要一致但签名值无法验证（如非 SES 结构或未取到可用公钥），
 > 返回 `status: "partial"`、`valid: false`，预览器显示「部分验证」。
 >
 > 法律意义上的电子签名有效性需要合规的 CA 体系与时间戳服务，本项目不提供。
@@ -251,7 +284,7 @@ OFD.onSealChange((list, action) => saveSeals(list));                 // 签章�
 ZIP 解压依赖原生 `DecompressionStream` API。
 **Firefox 78–112 与 Safari 14–16.3 缺少该 API，无法解压 OFD。**
 
-`toPdf.js` 的 PDF 压缩优先用 `CompressionStream`，但有 `zlib` 兜底路径（Node 环境），因此不额外抬高浏览器版本要求。
+`ofd2pdf.js` 的 PDF 压缩优先用 `CompressionStream`，但有 `zlib` 兜底路径（Node 环境），因此不额外抬高浏览器版本要求。
 
 Node.js 18+ 可用于 PDF → OFD 转换（需要 `DecompressionStream`，Node 18+ 具备）。
 
@@ -260,7 +293,7 @@ Node.js 18+ 可用于 PDF → OFD 转换（需要 `DecompressionStream`，Node 1
 本项目会解析不受信任的 OFD 文件，已做以下防护，但**未经过专业安全审计**：
 
 - ZIP 解压体积上限 256 MB/条目，条目缓存 64 项（防解压炸弹）
-- 图像解码像素上限 1 亿像素（`toPdf.js`）
+- 图像解码像素上限 1 亿像素（`ofd2pdf.js`）
 - 拒绝 `javascript:` / `file:` / `data:` URL 协议
 - XML 字符引用做码点合法性校验，畸形引用返回 U+FFFD 而非抛异常中断解析
 - 签名数据解析全程 `try/catch`，单个签名损坏不影响文档加载
@@ -275,14 +308,14 @@ Node.js 18+ 可用于 PDF → OFD 转换（需要 `DecompressionStream`，Node 1
 | --- | --- |
 | [核心引擎](docs/ofd.zh-cn.md) | 公开 API、解析流程、签名验证范围与局限、性能打点、实现要点 |
 | [预览器](docs/viewer.zh-cn.md) | 集成示例、URL 参数、工具栏/签章/导航接口、盖章流程、内部状态 |
-| [OFD → PDF](docs/toPdf.zh-cn.md) | 转换能力、字体策略、图像支持、已知损失 |
+| [OFD → PDF](docs/ofd2pdf.zh-cn.md) | 转换能力、字体策略、图像支持、已知损失 |
 | [PDF → OFD](docs/pdf2ofd.zh-cn.md) | CLI / npm 包、转换原理、与数科产物的对齐情况 |
 
-可运行的示例页面在 `test/` 下：`example-intro.html`（入门）、`example-basic.html`（API 演示）、`example-seal.html`（盖章接入）、`example-topdf.html`（PDF 转换）、`benchmark.html`（性能剖析）。
+可运行的示例页面在 `test/` 下：`example-intro.html`（入门）、`example-basic.html`（API 演示）、`example-seal.html`（盖章接入）、`example-ofd2pdf.html`（PDF 转换）、`benchmark.html`（性能剖析）。
 
 ### English
 
-[Core engine](docs/ofd.md) · [Viewer](docs/viewer.md) · [toPdf](docs/toPdf.md) · [pdf2ofd](docs/pdf2ofd.md) · [README](README.md)
+[Core engine](docs/ofd.md) · [Viewer](docs/viewer.md) · [ofd2pdf](docs/ofd2pdf.md) · [pdf2ofd](docs/pdf2ofd.md) · [README](README.md)
 
 ## 常见问题
 

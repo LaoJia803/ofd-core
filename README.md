@@ -17,8 +17,8 @@ OFD is the Chinese national standard format for electronic official documents (s
 | **Electronic seals** | Third-party seal-provider callback, custom seal placement and removal |
 | **Full-text search** | Cross-page search with precise per-character highlighting |
 | **Layout fidelity** | Object-level Clips, CMYK/gray/palette colors, gradient strokes, text stroke and HScale/ReadDirection |
-| **OFD → PDF** | Pure front-end conversion, zero dependencies (`build/toPdf.js`) |
-| **PDF → OFD** | Node CLI script / npm package (`build/pdf2ofd.js`, beta) |
+| **OFD → PDF** | Pure front-end conversion, zero dependencies (`build/ofd2pdf/ofd2pdf.js`) |
+| **PDF → OFD** | Node CLI script / npm package (`build/pdf2ofd/pdf2ofd.js`, beta) |
 
 ## Quick start
 
@@ -55,7 +55,7 @@ ruby -run -e httpd . -p 8090  # Ruby
 Include the engine and render in two lines:
 
 ```html
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 <script>
   const ofd = await OFD.load('document.ofd');
   const svg = await OFD.renderPage(ofd, 0, { width: 800 });
@@ -69,7 +69,7 @@ Full API reference: [core engine docs](docs/ofd.md).
 
 ```bash
 npm install
-node build/pdf2ofd.js input.pdf output.ofd
+node build/pdf2ofd/pdf2ofd.js input.pdf output.ofd
 ```
 
 Or as an npm package:
@@ -83,37 +83,70 @@ See the [PDF → OFD docs](docs/pdf2ofd.md).
 
 ## Building
 
-Sources live in `src/` (runs in both browser and Node), assembled with esbuild and minified with terser:
+The repo is split into four modules:
+
+| Module | Role | Sources |
+| --- | --- | --- |
+| `ofd/` | OFD parsing / rendering engine (module 1) | ES modules |
+| `ofd2pdf/` | OFD → PDF conversion (module 2) | ES modules |
+| `pdf2ofd/` | PDF → OFD conversion, Node only (module 3) | ES modules |
+| `web/` | viewer UI (module 4) | plain script |
+
+The three libraries are bundled with esbuild into their own subfolders under `build/`, each with a minified variant:
 
 ```bash
-npm install# esbuild / terser / pdfjs-dist
-npm run build                # → build/ofd.js, build/ofd.min.js, dist/ofdjs-<version>-dist.zip
-npm run build:pdf2ofd        # → dist/pdf2ofd/ (publishable npm package)
+npm install                # installs esbuild / terser / pdfjs-dist
+npm run build              # pdf2ofd + viewer (viewer builds ofd / ofd2pdf first)
+npm run build:ofd          # → build/ofd/ofd.js, ofd.min.js
+npm run build:ofd2pdf      # → build/ofd2pdf/ofd2pdf.js, ofd2pdf.min.js
+npm run build:pdf2ofd      # → build/pdf2ofd/pdf2ofd.js, pdf2ofd.min.js
+npm run build:viewer       # runs build:ofd + build:ofd2pdf, then zips into dist/<version>/
+npm run build:ofd-npm      # → dist/<version>/ofd/ (package name ofd-core)
+npm run build:ofd2pdf-npm  # → dist/<version>/ofd2pdf/ (depends on ofd-core)
+npm run build:pdf2ofd-npm  # → dist/<version>/pdf2ofd/
+npm test                   # golden baseline: both engine artifacts must render byte-identically
 ```
 
-`build.js` reads `version` from `package.json` and writes it into the engine banner, `OFD.version`, and the dist zip name, so the three always stay in sync.
+`build/common.js` reads `version` from `package.json` and writes it into each banner, `OFD.version`, the distribution zip name, and the `dist/<version>/` folder, so they always stay in sync.
 
 ## Layout
 
 ```
 ofd-core/
 ├── build/                    # build outputs + build scripts
-│   ├── ofd.js                # core engine, unminified (~198 KB)
-│   ├── ofd.min.js                # core engine, minified (~104 KB) — this is what you load
-│   ├── toPdf.js              # OFD → PDF module (~61 KB)
-│   ├── pdf2ofd.js            # PDF → OFD script (Node, beta, ~78 KB)
-│   ├── build.js              # engine build + distribution zip
-│   └── build-pdf2ofd.js      # assembles pdf2ofd.js into an npm package
-├── src/                      # engine sources (22 files)
+│   ├── ofd/                  # core engine: ofd.js (~231 KB) / ofd.min.js (~107 KB)
+│   ├── ofd2pdf/              # OFD → PDF: ofd2pdf.js / ofd2pdf.min.js
+│   ├── pdf2ofd/              # PDF → OFD: pdf2ofd.js / pdf2ofd.min.js
+│   ├── build-ofd.js          # bundles the engine
+│   ├── build-ofd2pdf.js      # bundles OFD → PDF
+│   ├── build-pdf2ofd.js      # bundles PDF → OFD
+│   ├── build-viewer.js       # builds ofd / ofd2pdf first, then the distribution zip
+│   ├── build-ofd-npm.js      # assembles the ofd-core npm package
+│   ├── build-ofd2pdf-npm.js  # assembles the ofd2pdf npm package
+│   ├── build-pdf2ofd-npm.js  # assembles the pdf2ofd npm package
+│   └── common.js             # paths / esbuild / terser / ZIP / release rewriting
+├── ofd/                      # module 1: engine sources (22 files, ES modules)
 │   ├── index.js              # public API surface
 │   ├── core/                 # parsing: zip / parser / page / res / signature / verify / seal / asn1 / md / image
 │   ├── display/              # rendering: api / svg / font
 │   └── shared/               # utils: util / xml / color / path / lru
-├── web/                      # viewer (viewer.html / css / js + SVG icons, ~186 KB)
+├── ofd2pdf/                  # module 2: OFD → PDF sources (ES modules)
+│   ├── index.js              # public API: ofdToPdf / svgToPdf
+│   ├── core/                 # constants / CSS colours / platform bridge / basic helpers
+│   ├── pdf/                  # PDF objects + content stream: render / writer / docstring
+│   ├── svg/                  # XML parsing, transforms, path conversion
+│   └── image/                # PNG / BMP / GIF / JPEG decoding + XObject emission (size guard)
+├── pdf2ofd/                  # module 3: PDF → OFD sources (ES modules, Node only)
+│   ├── index.js              # convert() orchestration
+│   ├── core/                 # pdf.js locator, matrices/units, pdf.js image → RGBA
+│   ├── ops/                  # operator walker: state / geometry / clip / text / path / image / shading
+│   ├── res/                  # colour helpers + gradient/pattern prefetch
+│   ├── ofd/                  # package assembly: package / PNG encoder / XML / ZIP
+│   └── font/                 # compiled-font parsing, cmap rebuilding, naming
+├── web/                      # module 4: viewer (viewer.html / css / js + SVG icons, ~186 KB)
 ├── font/                     # external font drop-in (created by `npm run build`; needs a directory listing to serve)
-├── external/                 # third-party vendored code: sm-crypto.js (SM2/SM3, ~42 KB), pdf.min.js (unused, deletable)
 ├── docs/                     # detailed documentation (bilingual)
-├── dist/                     # build output (distribution zip + npm package)
+├── dist/                     # build output (<version>/: distribution zip + three npm packages)
 ├── test/                     # demo pages and OFD samples
 ├── LICENSE                   # Apache-2.0
 └── 免责声明.md# disclaimer (Chinese)
@@ -125,25 +158,25 @@ Trim by what you actually need:
 
 | Keep | Size | Why |
 | --- | --- | --- |
-| `build/ofd.min.js` | ~104 KB | **required**, the core engine |
-| `build/toPdf.js` | ~61 KB | only for OFD → PDF |
-| `external/sm-crypto.js` | ~42 KB | only for signature verification |
+| `build/ofd/ofd.min.js` | ~107 KB | **required**, the core engine (SM2 verification compiled in) |
+| `build/ofd2pdf/ofd2pdf.js` | ~53 KB | only for OFD → PDF |
 | `web/` | ~186 KB | only for the full viewer |
 | `font/` (repo root) | created by `npm run build` | external-font drop-in for unmapped OFD font names; the served folder must expose a **directory listing** to take effect |
 
-**Safe to delete**: `src/` (sources, build-time only), `external/pdf.min.js` (unused), `docs/`, `test/`, `build/ofd.js` (unminified), `build/pdf2ofd.js` and `build/build*.js` (Node-side).
+**Safe to delete**: `ofd/`, `ofd2pdf/`, `pdf2ofd/` (sources, build-time only), `docs/`, `test/`, `build/ofd/ofd.js` (unminified), `build/pdf2ofd/` and `build/build*.js` (Node-side).
 
-The absolute minimum for rendering is just `build/ofd.min.js`. External fonts are optional: `npm run build` creates a `font/` folder at the package root, which the engine auto-detects (from the `ofd.min.js` location) as the external font directory — drop `字体原名.ttf|.otf|.woff2` there and no `OFD.setFontBase()` call is needed. That folder must be served with a **directory listing** (nginx `autoindex`, or `serve`/`http-server`), otherwise the index fetch fails and external fonts won't load; in that case rendering still falls back to OFD-embedded fonts and the built-in system-stack mapping. Call `OFD.setFontBase('your/path/')` only to point somewhere else.
+The absolute minimum for rendering is just `build/ofd/ofd.min.js`. External fonts are optional: `npm run build` creates a `font/` folder at the package root, which the engine auto-detects (from the `ofd.min.js` location; the `build/ofd/`, flat `build/`, and npm `lib/` layouts are all supported) as the external font directory — drop `字体原名.ttf|.otf|.woff2` there and no `OFD.setFontBase()` call is needed. That folder must be served with a **directory listing** (nginx `autoindex`, or `serve`/`http-server`), otherwise the index fetch fails and external fonts won't load; in that case rendering still falls back to OFD-embedded fonts and the built-in system-stack mapping. Call `OFD.setFontBase('your/path/')` only to point somewhere else.
 
 ### File sizes
 
 | File | Description | Size |
 | --- | --- | --- |
-| `build/ofd.js` | core engine, unminified | ~198 KB |
-| `build/ofd.min.js` | core engine, minified | ~104 KB |
-| `build/toPdf.js` | OFD → PDF module | ~61 KB |
-| `build/pdf2ofd.js` | PDF → OFD script (Node, beta) | ~78 KB |
-| `external/sm-crypto.js` | Chinese national crypto library | ~42 KB |
+| `build/ofd/ofd.js` | core engine, unminified | ~231 KB |
+| `build/ofd/ofd.min.js` | core engine, minified | ~107 KB |
+| `build/ofd2pdf/ofd2pdf.js` | OFD → PDF module | ~53 KB |
+| `build/ofd2pdf/ofd2pdf.min.js` | OFD → PDF, minified | ~26 KB |
+| `build/pdf2ofd/pdf2ofd.js` | PDF → OFD script (Node, beta) | ~50 KB |
+| `build/pdf2ofd/pdf2ofd.min.js` | PDF → OFD, minified | ~30 KB |
 | `web/viewer.js` | viewer application logic | ~93 KB |
 | `web/viewer.css` | viewer styles (icons reference `images/*.svg`; no base64) | ~43 KB |
 
@@ -233,7 +266,7 @@ Read this before relying on this project's verification results.
 > `valid: true` means the signature value is self-consistent, protected files are unmodified, and the validity periods cover the signing time.
 > It does **not** mean the signer is a trusted authority. Since certificates are trusted as-is with no chain building, anyone can self-sign a certificate and pass verification.
 >
-> Also note that digests live inside the OFD file and can be recomputed after tampering, so "digest matches" only proves the file is self-consistent. Signature-value verification is the actual basis for identity and integrity. If digests match but the signature value cannot be verified (missing SM2 library or non-SES structure), the result is `status: "partial"` with `valid: false`, shown as "Partial" in the viewer.
+> Also note that digests live inside the OFD file and can be recomputed after tampering, so "digest matches" only proves the file is self-consistent. Signature-value verification is the actual basis for identity and integrity. If digests match but the signature value cannot be verified (non-SES structure or no usable public key), the result is `status: "partial"` with `valid: false`, shown as "Partial" in the viewer.
 >
 > Legally binding electronic signatures require a compliant CA infrastructure and timestamp service, which this project does not provide.
 
@@ -248,7 +281,7 @@ Read this before relying on this project's verification results.
 ZIP decompression relies on the native `DecompressionStream` API.
 **Firefox 78–112 and Safari 14–16.3 lack it and cannot decompress OFD.**
 
-`toPdf.js` prefers `CompressionStream` for PDF compression but falls back to `zlib` (Node), so it raises no additional browser requirement.
+`ofd2pdf.js` prefers `CompressionStream` for PDF compression but falls back to `zlib` (Node), so it raises no additional browser requirement.
 
 Node.js 18+ works for PDF → OFD conversion.
 
@@ -257,7 +290,7 @@ Node.js 18+ works for PDF → OFD conversion.
 This project parses untrusted OFD files. The following mitigations are in place, but **the code has not undergone professional security auditing**:
 
 - ZIP decompression capped at 256 MB per entry, 64-entry cache (decompression-bomb defense)
-- Image decoding capped at 100 megapixels (`toPdf.js`)
+- Image decoding capped at 100 megapixels (`ofd2pdf.js`)
 - `javascript:` / `file:` / `data:` URL protocols rejected
 - XML character references are range-checked; malformed ones yield U+FFFD instead of throwing
 - Signature parsing is fully wrapped in `try/catch`; one corrupt signature won't break document loading
@@ -272,14 +305,14 @@ Evaluate the risk yourself before processing OFD files from untrusted sources.
 | --- | --- |
 | [Core engine](docs/ofd.md) | Public API, parsing flow, signature verification scope and limits, profiling, implementation notes |
 | [Viewer](docs/viewer.md) | Integration examples, URL parameters, toolbar/seal/navigation APIs, sealing flow, internal state |
-| [OFD → PDF](docs/toPdf.md) | Conversion capabilities, font strategy, image support, known losses |
+| [OFD → PDF](docs/ofd2pdf.md) | Conversion capabilities, font strategy, image support, known losses |
 | [PDF → OFD](docs/pdf2ofd.md) | CLI / npm package, conversion principles, alignment with reference output |
 
-Runnable demos live in `test/`: `example-intro.html`, `example-basic.html`, `example-seal.html`, `example-topdf.html`, `benchmark.html`.
+Runnable demos live in `test/`: `example-intro.html`, `example-basic.html`, `example-seal.html`, `example-ofd2pdf.html`, `benchmark.html`.
 
 ### 中文
 
-[核心引擎](docs/ofd.zh-cn.md) · [预览器](docs/viewer.zh-cn.md) · [OFD → PDF](docs/toPdf.zh-cn.md) · [PDF → OFD](docs/pdf2ofd.zh-cn.md) · [中文 README](README.zh-cn.md)
+[核心引擎](docs/ofd.zh-cn.md) · [预览器](docs/viewer.zh-cn.md) · [OFD → PDF](docs/ofd2pdf.zh-cn.md) · [PDF → OFD](docs/pdf2ofd.zh-cn.md) · [中文 README](README.zh-cn.md)
 
 ## FAQ
 

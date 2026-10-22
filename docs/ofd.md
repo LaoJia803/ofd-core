@@ -1,22 +1,31 @@
 # ofd-core Core Engine — OFD Parsing and SVG Rendering
 
-> Library name **ofd-core**; the engine artifact is `build/ofd.js`, exposed as the global `OFD`.
+> Library name **ofd-core**; engine artifact `build/ofd/ofd.js`, global object `OFD`.
 > Throughout this document `ofd.js` refers to the file and `OFD` to the global object.
 
 ## Overview
 
-`build/ofd.js` is the core engine of the OFD online reader. It handles:
+`build/ofd/ofd.js` is the core engine of the OFD online reader. It handles:
 
 - **Parsing**: reads OFD (ZIP container) files — OFD.xml / Document.xml / pages / resources / signatures / annotations
 - **Rendering**: renders each page as an SVG string or DOM element (text, paths, images, templates, seals)
 - **Verification**: signature-value verification (GB/T 38540 SES `toSign` verified with the signer certificate's SM2 public key), file digest comparison (SM3/SHA), seal and certificate validity (checked against the signing time). Not included: certificate chain & trust anchors / revocation lookups / timestamp verification / the seal's own signature
 
-The artifact is assembled from `src/` fragments (`node build/build.js`). It mounts a global `OFD` object in browsers and also exports via CommonJS (`module.exports`).
+The artifact is bundled from the ES modules in `ofd/` (`node build/build-ofd.js`, or `npm run build:ofd`). It mounts a global `OFD` object in browsers and also exports via CommonJS (`module.exports`).
+
+Two shapes come out of the same build:
+
+| | command | output |
+| --- | --- | --- |
+| Repository artifact | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
+| npm package (`ofd-core`) | `npm run build:ofd-npm` | `dist/<version>/ofd/` (`lib/ofd.js` + `lib/ofd.min.js`, generated `package.json` / `README.md` / `LICENSE`) |
+
+Rendering regressions are checked with `npm test`, which runs `test/golden.js --check` against both artifacts (20 documents, byte-identical SVG).
 
 ## Quick start
 
 ```html
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 <script>
   const ofd   = await OFD.load('document.ofd');   // URL / File / ArrayBuffer / Uint8Array
   const count = OFD.getPageCount(ofd);             // page count
@@ -33,7 +42,7 @@ Node.js (CommonJS):
 
 ```js
 const fs  = require('fs');
-const OFD = require('./build/ofd.js');
+const OFD = require('./build/ofd/ofd.js');
 const ofd = await OFD.load(new Uint8Array(fs.readFileSync('a.ofd')));
 const svg = await OFD.renderPageToString(ofd, 0);
 ```
@@ -49,17 +58,17 @@ SM3("abc")      = 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8
 SM3("abcd"×16)  = debe9ff92275b8a138604889c18e5a4d6fdb70e5387e5765293dcba39c0c5732
 ```
 
-SM2 verification relies on `external/sm-crypto.js` (national crypto library, inlined into the bundle).
+SM2 verification uses the `sm-crypto` npm package, bundled into the engine at build time (devDependency only — the artifact still has no runtime dependencies).
 
 ## Design
 
 ### Single-file IIFE, zero dependencies
 
-The artifact is one IIFE with no runtime third-party dependency. XML parsing, SM3 hashing, ASN.1 parsing and the ZIP container reader are all hand-written; Deflate uses the browser-native `DecompressionStream`. Benefits:
+The artifact is one IIFE with no runtime third-party dependency. XML parsing, SM3 hashing, ASN.1 parsing and the ZIP container reader are all hand-written; Deflate uses the browser-native `DecompressionStream`; SM2 verification uses `sm-crypto`, bundled at build time from a devDependency. Benefits:
 
 - Small, fast, no dependency conflicts
 - The same code runs in browsers and Node.js (`typeof window` to detect the environment)
-- Source is maintained in layers (`src/shared` / `src/core` / `src/display`) and concatenated back into one file at build time (see "Source Layout")
+- Source is maintained in layers as ES modules (`ofd/shared` / `ofd/core` / `ofd/display`) and bundled back into one file at build time with esbuild (see "Source Layout")
 
 ### Lazy parsing + caching
 
@@ -74,7 +83,7 @@ Two more render-result caches sit on top:
 - **Page SVG cache** (`ofd._svgCache`, keyed by `pageIndex`, max 256): the cache stores width-independent `head/mid/body`, so all `width` variants share one page body and only splice in the `width` attribute at render time; re-renders (paging, printing, search, PDF export) hit the cache.
 - **Abbreviated path cache** (module-level `abbrPathCache`, max 4096): `abbreviatedToSvgPath` memoizes by raw path string.
 
-> Both caches are implemented by the module's `LRUCache` class (`src/shared/lru.js`): on hit the key moves to the tail; on overflow **the single oldest entry is evicted** (standard LRU).
+> Both caches are implemented by the module's `LRUCache` class (`ofd/shared/lru.js`): on hit the key moves to the tail; on overflow **the single oldest entry is evicted** (standard LRU).
 
 ### SVG vector rendering
 
@@ -148,7 +157,7 @@ OFD.verifySignature(ofd, index)
   ├─ take doc.signatures[index]
   ├─ read signedValuePath → parseSesSignBlocks locates the SES block
   │    [toSign SEQUENCE, certificate OCTET, algorithm OID, signature BIT STRING]
-  ├─ extractCertPublicKey reads the SM2 key from the cert SPKI → SM_CRYPTO.sm2 verifies the raw toSign DER
+  ├─ extractCertPublicKey reads the SM2 key from the cert SPKI → `sm2.doVerifySignature` verifies the raw toSign DER
   ├─ for each reference: readEntry(zip, fileRef) → hashBytes(data, checkMethod)
   ├─ compare recomputed digest against base64ToBytes(checkValue)
   ├─ checkPeriods: is signTime inside sealAttrs.notBefore~notAfter?
@@ -165,15 +174,21 @@ OFD.verifySignature(ofd, index)
 Browser:
 
 ```html
-<script src="build/ofd.js"></script>
+<script src="build/ofd/ofd.js"></script>
 <!-- or the minified build -->
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 ```
 
 Node.js (ZIP inflation needs `DecompressionStream`, so Node 20+):
 
 ```js
-const OFD = require('./build/ofd.js');
+const OFD = require('./build/ofd/ofd.js');
+```
+
+From the npm package (built by `npm run build:ofd-npm`, published as `ofd-core`):
+
+```js
+const OFD = require('ofd-core');
 ```
 
 ## Core Data Structures
@@ -384,7 +399,7 @@ const res = await OFD.verifySignature(ofd, 0);
 console.log(res.status, res.checks, res.message);
 ```
 
-> **Important**: signature-value verification (SM2/SM3), digest comparison and validity periods are implemented. Still missing: **certificate chain and trust anchors, revocation status (CRL/OCSP), timestamp verification and the seal's own signature**. Signature-value verification needs `external/sm-crypto.js`; without it `checks.sigValue` returns `unknown` and every other item still runs. Note also that `CheckValue` lives inside the OFD file and can be recomputed after tampering — real trust comes from the signature value plus a valid certificate (see the comment at the top of `src/core/verify.js`).
+> **Important**: signature-value verification (SM2/SM3), digest comparison and validity periods are implemented. Still missing: **certificate chain and trust anchors, revocation status (CRL/OCSP), timestamp verification and the seal's own signature**. The SM2 library is bundled, so `checks.sigValue` returns `pass`/`fail` whenever the signature is GB/T 38540 SES with a usable public key, and `unknown` otherwise (non-SES structure, missing `SignedValue`, unsupported algorithm OID). Note also that `CheckValue` lives inside the OFD file and can be recomputed after tampering — real trust comes from the signature value plus a valid certificate (see the comment at the top of `ofd/core/verify.js`).
 
 ### OFD.setProfiling(on) / OFD.getLastProfile()
 
@@ -402,7 +417,7 @@ OFD.setProfiling(false);
 
 Sets the external font directory URL prefix (ending in `/`). Fonts are tried as `encodeURIComponent(name) + '.ttf|otf|woff2'`.
 
-Default is inferred: the **parent** of the directory containing the engine `<script>` — it matches **both** `ofd.js` and `ofd.min.js` — plus `font/`. So `build/ofd.min.js` resolves to `<root>/font/`. `npm run build` also creates that root `font/` (with a `README.txt` placeholder), so dropping font files there works without calling `setFontBase`.
+Default is inferred: the engine `<script>` (it matches **both** `ofd.js` and `ofd.min.js`) is used to locate the package root, then `font/` is appended — `build/ofd/ofd.min.js` and the flat `build/ofd.min.js` in the release zip both resolve to `<root>/font/`, while the npm package's `lib/ofd.min.js` resolves to the package-root `font/`. `npm run build` also creates that root `font/` (with a `README.txt` placeholder), so dropping font files there works without calling `setFontBase`.
 
 ```js
 OFD.setFontBase('assets/font/');   // only needed when the font directory lives elsewhere
@@ -426,7 +441,7 @@ OFD._internals = {
 };
 ```
 
-- `build/toPdf.js` uses `base64ToBytes`, `decodeEntities`
+- `build/ofd2pdf/ofd2pdf.js` uses `base64ToBytes`, `decodeEntities`
 - `test/benchmark.html` uses the other six
 
 Use the public API in new code; for debugging internals, set breakpoints in the source instead.
@@ -434,24 +449,55 @@ Use the public API in new code; for debugging internals, set breakpoints in the 
 ## Source Layout
 
 ```
-src/                    source (bare fragments, no import/export, concatenated into one IIFE closure)
+ofd/                    engine source, module 1 (ES modules; cross-file deps declared with import/export)
 ├─ shared/              utilities: util.js profiling / xml.js nodes / path.js paths / color.js colors / lru.js LRU
 ├─ core/                parsing: zip / parser / image / md(SM3) / seal / asn1 / verify
 │                       res / page / signature / outline / annotation / document
 ├─ display/             rendering: font / svg / api
-└─ index.js             public API assembly (OFD object + _internals whitelist)
+└─ index.js             public API assembly (OFD object + _internals whitelist); esbuild entry point
+
+ofd2pdf/                OFD → PDF library source, module 2 (ES modules; bundled to build/ofd2pdf/ofd2pdf.js)
+├─ index.js             public API: ofdToPdf / svgToPdf
+├─ core/                constants, CSS colour parsing, platform bridge, basic helpers
+├─ pdf/                 render.js (SVG → content stream), writer.js, docstring.js
+├─ svg/                 XML parsing, transforms, path conversion
+└─ image/               PNG / BMP / GIF / JPEG decoding, XObject emission (xobject.js owns the size guard)
+
+pdf2ofd/                PDF → OFD library source, module 3 (ES modules, Node only; bundled to build/pdf2ofd/pdf2ofd.js)
+├─ index.js             convert() orchestration
+├─ core/                pdf.js locator, affine matrices / units, pdf.js image → RGBA
+├─ ops/                 operator walker: state / geometry / clip / text / path / image / shading
+├─ res/                 colour helpers, gradient & pattern colour prefetch
+├─ ofd/                 package assembly: package.js / png.js / xml.js / zip.js
+└─ font/                compiled-font parsing, cmap rebuilding, naming
 
 build/
-├─ build.js             build script: ordered concat → ofd.js, terser → ofd.min.js
-├─ ofd.js               artifact (readable)
-├─ ofd.min.js           artifact (minified)
-└─ toPdf.js             OFD → PDF converter (standalone, not part of the engine)
+├─ common.js            shared build layer: paths/version, esbuild + terser wrappers, ZIP writer, distTransform()
+├─ build-ofd.js         esbuild → build/ofd/ofd.js, terser → build/ofd/ofd.min.js
+├─ build-ofd2pdf.js     → build/ofd2pdf/ofd2pdf.js / .min.js
+├─ build-pdf2ofd.js     → build/pdf2ofd/pdf2ofd.js / .min.js (CommonJS, Node)
+├─ build-viewer.js      runs build-ofd + build-ofd2pdf, then zips the viewer → dist/<version>/
+├─ build-*-npm.js       the three npm packagers → dist/<version>/<module>/
+├─ ofd/                 engine artifacts
+├─ ofd2pdf/             OFD → PDF artifacts
+└─ pdf2ofd/             PDF → OFD artifacts
 
-external/               vendored third-party code: sm-crypto.js (SM2/SM3 for signature-value verification; concatenated first by build.js); pdf.min.js (Apache-2.0, listed in build.js `STANDALONE` — excluded from the engine bundle, unused)
 font/                   external font drop-in; created by `npm run build`, auto-detected as the external font directory (see `OFD.setFontBase`)
 ```
 
-> The concatenation order lives in `build.js` and is load-bearing: `class LRUCache` (`src/shared/lru.js`) is not hoisted, while `src/display/svg.js` constructs one at top level. Read the comment at the top of `build.js` before reordering.
+> Module evaluation order now follows the `import` graph, so there is no hand-maintained file list.
+> Historically the old single `build.js` pinned an order because `class LRUCache` (`ofd/shared/lru.js`) is not
+> hoisted while `ofd/display/svg.js` constructs one at top level; `svg.js` now does
+> `import { LRUCache }` and ESM guarantees the dependency is evaluated first.
+>
+> Two conventions still hold:
+> - **Never reference `module` / `exports` inside the ESM sources (`ofd/`, `ofd2pdf/`, `pdf2ofd/`).** esbuild then classifies the entry as
+>   CommonJS and wraps it in a fake `module` object, so `module.exports = OFD` lands on the inner
+>   one and Node's `require()` returns an empty object. The CJS bridges live in each build script's `TAIL`
+>   (`build/build-ofd.js` and friends), which is real file scope.
+> - **Third-party code is a normal ES import.** `ofd/core/verify.js` does `import { sm2 } from "sm-crypto"`;
+>   esbuild inlines it from `node_modules` into the IIFE, so the artifact has no bare globals or runtime
+>   `require`. `sm-crypto` stays a devDependency — it is only needed to build.
 
 ## Render Pipeline
 
@@ -696,6 +742,6 @@ That is **not** a pass — it means there wasn't enough data to judge. Common ca
 2. `verifySignature` boundaries — see "Signature verification boundaries" above
 3. The external font directory is not shipped — create it and point `setFontBase` at it; absence degrades silently
 4. The `ofd` object is an opaque handle — pass it around, don't read its fields
-5. The `_internals` allowlist may change; it exists for `toPdf.js` and the benchmark page
+5. The `_internals` allowlist may change; it exists for `ofd2pdf.js` and the benchmark page
 6. Node.js requires **18+** (`DecompressionStream`)
 7. ZIP64 is not supported and reports so explicitly

@@ -25,14 +25,15 @@ npm install pdf2ofd pdfjs-dist
 仓库内自行组装：
 
 ```bash
-npm run build:pdf2ofd        # 产物落在 dist/pdf2ofd/
+npm run build:pdf2ofd        # 转换器产物 → build/pdf2ofd/（pdf2ofd.js / pdf2ofd.min.js）
+npm run build:pdf2ofd-npm    # npm 包 → dist/<版本>/pdf2ofd/
 ```
 
 ### 二、源码树直接跑
 
 ```bash
-node build/pdf2ofd.js input.pdf                # 输出 input.ofd
-node build/pdf2ofd.js input.pdf output.ofd     # 指定输出路径
+node build/pdf2ofd/pdf2ofd.js input.pdf                # 输出 input.ofd
+node build/pdf2ofd/pdf2ofd.js input.pdf output.ofd     # 指定输出路径
 ```
 
 ## 命令行
@@ -244,7 +245,7 @@ Form 内部常含「远大于自身」的背景块（如 1152×2199 的整页白
 以 `test/` 下保留的那份 14 页论文 PDF（US Letter，正文 + 矢量图表 + 9 种子集字体）为基线：
 
 ```bash
-node build/pdf2ofd.js test/<你的样本>.pdf
+node build/pdf2ofd/pdf2ofd.js test/<你的样本>.pdf
 #   已处理 14/14 页
 # 完成：test/<你的样本>.ofd（14 页，24 字体，90 图像，875598 字节）
 ```
@@ -289,14 +290,14 @@ node build/pdf2ofd.js test/<你的样本>.pdf
 
 | 项 | 位置 | 说明 |
 | --- | --- | --- |
-| npm 包版本号 | `build/build-pdf2ofd.js` 的 `PKG.version` | **硬编码**，不读 `package.json` 的 `version`。发新版必须手动改这里，否则 npm 会拒绝重复版本 |
-| npm 包名 | `build/build-pdf2ofd.js` 的 `PKG.name` | 同上。`pdf2ofd` 在 npmjs 上已被占用时需改名 |
-| 发行包的文件剥离 | `build/build.js` 的 `distTransform()` | 改了 `web/viewer.html` / `web/viewer.js` 的结构（选择器、事件、测试文件默认值）后，正则会失配。已加断言，构建会报错提示，不会静默发坏包 |
+| npm 包版本号 | `build/build-pdf2ofd-npm.js` 的 `PKG.version` | 自动读取仓库根 `package.json` 的 `version`，与 `dist/<版本>/` 目录保持一致 |
+| npm 包名 | `build/build-pdf2ofd-npm.js` 的 `PKG.name` | `pdf2ofd` 在 npmjs 上已被占用时需改名 |
+| 发行包的文件剥离 | `build/common.js` 的 `distTransform()` | 改了 `web/viewer.html` / `web/viewer.js` 的结构（选择器、事件、测试文件默认值）后，正则会失配。已加断言，构建会报错提示，不会静默发坏包 |
 
-`npm run build:pdf2ofd` 只重新组装 `dist/pdf2ofd/`，不发布。发布是独立动作：
+`npm run build:pdf2ofd-npm` 只重新组装 `dist/<版本>/pdf2ofd/`，不发布。发布是独立动作：
 
 ```bash
-cd dist/pdf2ofd
+cd dist/<版本>/pdf2ofd
 npm publish --access public
 ```
 
@@ -305,7 +306,7 @@ npm publish --access public
 改完转换器后，跑一遍基准样本并核对统计数字（应为 14 页 / 24 字体 / 90 图像）：
 
 ```bash
-node build/pdf2ofd.js test/<你的样本>.pdf /tmp/chk.ofd
+node build/pdf2ofd/pdf2ofd.js test/<你的样本>.pdf /tmp/chk.ofd
 ```
 
 产物完整性检查（ZIP 条目可解压 + CRC32、PNG chunk CRC、MultiMedia 声明数 == 图像条目数 == 各页 ImageObject 合计）可临时写脚本验证，**注意三个易错点**：
@@ -314,7 +315,7 @@ node build/pdf2ofd.js test/<你的样本>.pdf /tmp/chk.ofd
 - **结构校验通过 ≠ 内容正确**。PNG 的签名/尺寸/CRC/inflate 全过，像素内容仍可能完全错。涉及图像编码必须做逐字节像素比对。
 - **只看「没有全零 CTM」不够**。第 11 页颜色丢失那次，CTM 全零路径 0 条、描边路径 8 条都正常，但 81 根渐变柱被静默丢弃了。**按图元类型分别计数**（AxialShd 数、ImageObject 数、TextObject 数）才能定位。
 
-排查显示问题时优先复用项目现成的 `src/core/zip.js`，别自己重写 ZIP 解析器。
+排查显示问题时优先复用项目现成的 `ofd/core/zip.js`，别自己重写 ZIP 解析器。
 
 ## 六条通用规律
 

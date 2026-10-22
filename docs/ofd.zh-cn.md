@@ -1,22 +1,31 @@
 # ofd-core 核心引擎 — OFD 解析与 SVG 渲染
 
-> 库名 **ofd-core**；引擎产物文件名 `build/ofd.js`，全局对象 `OFD`。
+> 库名 **ofd-core**；引擎产物 `build/ofd/ofd.js`，全局对象 `OFD`。
 > 本文后续出现的 `ofd.js` 均指文件，`OFD` 指全局对象。
 
 ## 概述
 
-`build/ofd.js` 是 OFD 在线阅读器的核心引擎，负责：
+`build/ofd/ofd.js` 是 OFD 在线阅读器的核心引擎，负责：
 
 - **解析**：读取 OFD（ZIP 容器）文件，解析 OFD.xml / Document.xml / 页面 / 资源 / 签名 / 注解
 - **渲染**：将每个页面渲染为 SVG 字符串或 DOM 元素（文本、路径、图像、模板、印章）
 - **验证**：签名值验证（GB/T 38540 SES 的 toSign 用证书 SM2 公钥验签，SM2/SM3）、文件摘要比对（SM3/SHA）、印章与证书有效期校验（按签名时间判定）（不含证书链与信任根 / 吊销查询 / 时间戳验证 / 印章自身签名验证）
 
-产物由 `src/` 下的片段拼接而成（`node build/build.js`），在浏览器端挂载为全局对象 `OFD`，同时支持 CommonJS（`module.exports`）导出。
+产物由 `ofd/` 下的 ESM 模块经 esbuild 打包而成（`node build/build-ofd.js`，即 `npm run build:ofd`），在浏览器端挂载为全局对象 `OFD`，同时支持 CommonJS（`module.exports`）导出。
+
+同一个构建有两种输出形态：
+
+| | 命令 | 输出 |
+| --- | --- | --- |
+| 仓库产物 | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
+| npm 包（`ofd-core`） | `npm run build:ofd-npm` | `dist/<版本>/ofd/`（`lib/ofd.js` + `lib/ofd.min.js`，并生成 `package.json` / `README.md` / `LICENSE`） |
+
+渲染回归用 `npm test` 检查：它对两个产物分别跑 `test/golden.js --check`（20 篇文档，SVG 逐字节一致）。
 
 ## 快速上手
 
 ```html
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 <script>
   const ofd   = await OFD.load('document.ofd');   // URL / File / ArrayBuffer / Uint8Array
   const count = OFD.getPageCount(ofd);             // 总页数
@@ -33,7 +42,7 @@ Node.js（CommonJS）：
 
 ```js
 const fs  = require('fs');
-const OFD = require('./build/ofd.js');
+const OFD = require('./build/ofd/ofd.js');
 const ofd = await OFD.load(new Uint8Array(fs.readFileSync('a.ofd')));
 const svg = await OFD.renderPageToString(ofd, 0);
 ```
@@ -49,17 +58,17 @@ SM3("abc")      = 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8
 SM3("abcd"×16)  = debe9ff92275b8a138604889c18e5a4d6fdb70e5387e5765293dcba39c0c5732
 ```
 
-SM2 验签依赖 `external/sm-crypto.js`（国密算法库，已拼入产物）。
+SM2 验签使用 `sm-crypto` npm 包，构建时打进产物（仅 devDependency，产物运行时仍零依赖）。
 
 ## 设计理念
 
 ### IIFE 单文件零依赖
 
-产物是一个 IIFE（立即调用函数表达式），运行时不依赖任何第三方库。XML 解析、SM3 哈希、ASN.1 解析、ZIP 容器结构解析均纯手写实现；Deflate 解压使用浏览器原生 `DecompressionStream`。好处是：
+产物是一个 IIFE（立即调用函数表达式），运行时不依赖任何第三方库。XML 解析、SM3 哈希、ASN.1 解析、ZIP 容器结构解析均纯手写实现；Deflate 解压使用浏览器原生 `DecompressionStream`；SM2 验签使用 `sm-crypto`，构建时作为 devDependency 打包进来。好处是：
 
 - 体积小、加载快、无依赖冲突
 - 同一份代码同时跑在浏览器和 Node.js 中（`typeof window` 判断环境）
-- 源码按 `src/shared` / `src/core` / `src/display` 分层维护，构建时拼回同一个单文件（见「目录（大纲）」）
+- 源码按 `ofd/shared` / `ofd/core` / `ofd/display` 分层维护成 ESM 模块，构建时用 esbuild 打包回同一个单文件（见「目录（大纲）」）
 
 ### 懒解析 + 缓存
 
@@ -71,10 +80,10 @@ SM2 验签依赖 `external/sm-crypto.js`（国密算法库，已拼入产物）�
 
 页面解析之外，还有两级渲染结果缓存：
 
-- **页面 SVG 缓存**（`ofd._svgCache`，按 `pageIndex` 键控，上限 256 条）：缓存只存与宽度无关的 `head/mid/body`，不同 `width` 共享同一份页面内容，输出时再拼 `width` 属性；翻页、打印、搜索、PDF 转换（`toPdf` 逐页调 `renderPageToString`）等重复渲染直接命中。
+- **页面 SVG 缓存**（`ofd._svgCache`，按 `pageIndex` 键控，上限 256 条）：缓存只存与宽度无关的 `head/mid/body`，不同 `width` 共享同一份页面内容，输出时再拼 `width` 属性；翻页、打印、搜索、PDF 转换（`ofd2pdf` 逐页调 `renderPageToString`）等重复渲染直接命中。
 - **简写路径缓存**（模块级 `abbrPathCache`，上限 4096 条）：`abbreviatedToSvgPath` 按原始路径字符串 memoize，避免跨页/跨渲染重复 tokenize 同一路径数据。
 
-> 两类缓存（页面 SVG 缓存、简写路径缓存）均由模块内的 `LRUCache` 类（`src/shared/lru.js`）实现：命中时把键移到队尾，容量超限时**淘汰最旧的一个条目**（标准 LRU），不是批量清理。
+> 两类缓存（页面 SVG 缓存、简写路径缓存）均由模块内的 `LRUCache` 类（`ofd/shared/lru.js`）实现：命中时把键移到队尾，容量超限时**淘汰最旧的一个条目**（标准 LRU），不是批量清理。
 
 ### SVG 矢量渲染
 
@@ -148,7 +157,7 @@ OFD.verifySignature(ofd, index)
   ├─ 取 doc.signatures[index]
   ├─ 读 signedValuePath → parseSesSignBlocks 定位 SES 签名块
   │    [待签数据 SEQUENCE, 证书 OCTET, 算法 OID, 签名 BIT STRING]
-  ├─ extractCertPublicKey 取证书 SPKI 的 SM2 公钥 → SM_CRYPTO.sm2 验签 toSign 原始 DER
+  ├─ extractCertPublicKey 取证书 SPKI 的 SM2 公钥 → `sm2.doVerifySignature` 验签 toSign 原始 DER
   ├─ 遍历 references[]：readEntry(zip, fileRef) → hashBytes(data, checkMethod)
   ├─ base64ToBytes(checkValue) 与重算摘要 digestMatches 比对
   ├─ checkPeriods：signTime 是否落在 sealAttrs.notBefore~notAfter 内
@@ -165,15 +174,21 @@ OFD.verifySignature(ofd, index)
 浏览器：
 
 ```html
-<script src="build/ofd.js"></script>
+<script src="build/ofd/ofd.js"></script>
 <!-- 或压缩版 -->
-<script src="build/ofd.min.js"></script>
+<script src="build/ofd/ofd.min.js"></script>
 ```
 
 Node.js（ZIP 解压依赖 `DecompressionStream`，需 Node 20+）：
 
 ```js
-const OFD = require('./build/ofd.js');
+const OFD = require('./build/ofd/ofd.js');
+```
+
+npm 包（由 `npm run build:ofd-npm` 生成，包名 `ofd-core`）：
+
+```js
+const OFD = require('ofd-core');
 ```
 
 ## 核心数据结构
@@ -395,7 +410,7 @@ const res = await OFD.verifySignature(ofd, 0);
 console.log(res.status, res.checks, res.message);
 ```
 
-> **注意**：已实现签名值验证（SM2/SM3）、文件摘要比对、印章与证书有效期。仍未实现：**证书链与信任根校验、吊销状态查询（CRL/OCSP）、时间戳验证、印章自身签名验证**。签名值验证依赖 `external/sm-crypto.js`，该文件缺失时 `checks.sigValue` 返回 `unknown`（其余项照常）。另外 `CheckValue` 存在 OFD 文件内部、可被同步重算，所以真正的信任依据是签名值 + 证书有效性（见 `src/core/verify.js` 开头注释）。
+> **注意**：已实现签名值验证（SM2/SM3）、文件摘要比对、印章与证书有效期。仍未实现：**证书链与信任根校验、吊销状态查询（CRL/OCSP）、时间戳验证、印章自身签名验证**。SM2 库已编入产物：只要签名是 GB/T 38540 SES 结构且能取到可用公钥，`checks.sigValue` 就返回 `pass`/`fail`；非 SES 结构、`SignedValue` 缺失或算法 OID 不支持时返回 `unknown`。另外 `CheckValue` 存在 OFD 文件内部、可被同步重算，所以真正的信任依据是签名值 + 证书有效性（见 `ofd/core/verify.js` 开头注释）。
 
 ### OFD.setProfiling(on) / OFD.getLastProfile()
 
@@ -413,7 +428,7 @@ OFD.setProfiling(false);
 
 设置外部字体目录 URL 前缀（以 `/` 结尾）。字体文件按 `encodeURIComponent(字体名) + '.ttf|otf|woff2'` 逐个试探。
 
-默认值自动推断：取引擎 `<script>`（**同时识别 `ofd.js` 与 `ofd.min.js`**）所在目录的**上一级** + `font/`，即 `build/ofd.min.js` 默认找 `<根>/font/`。`npm run build` 还会在仓库根创建这个 `font/`（含 `README.txt` 占位），把字体放进去即可生效，无需调用 `setFontBase`。
+默认值自动推断：从引擎 `<script>`（**同时识别 `ofd.js` 与 `ofd.min.js`**）定位包根，再加 `font/` —— `build/ofd/ofd.min.js` 与旧发行 zip 的扁平 `build/ofd.min.js` 都指向 `<根>/font/`，npm 包的 `lib/ofd.min.js` 指向包根 `font/`。`npm run build` 还会在仓库根创建这个 `font/`（含 `README.txt` 占位），把字体放进去即可生效，无需调用 `setFontBase`。
 
 ```js
 OFD.setFontBase('assets/font/');   // 仅当字体目录放在别处时才需要
@@ -424,7 +439,7 @@ OFD.setFontBase('assets/font/');   // 仅当字体目录放在别处时才需要
 
 ### OFD.version
 
-字符串，如 `"1.0.0"`。构建时从 `package.json` 的 `version` 注入（同时写入文件头注释与 dist 包名），始终与发布版本一致。
+字符串，如 `"1.0.0"`。构建时从 `package.json` 的 `version` 注入（同时写入文件头注释、发行 zip 名与 `dist/<版本>/` 目录名），始终与发布版本一致。
 
 ### OFD.\_internals
 
@@ -437,7 +452,7 @@ OFD._internals = {
 };
 ```
 
-- `build/toPdf.js` 用 `base64ToBytes`、`decodeEntities`
+- `build/ofd2pdf/ofd2pdf.js` 用 `base64ToBytes`、`decodeEntities`
 - `test/benchmark.html` 用其余六个
 
 新代码请用公开 API；要调试别的内部函数请直接在源码断点。
@@ -445,24 +460,53 @@ OFD._internals = {
 ## 目录（大纲）
 
 ```
-src/                    源码（裸片段，无 import/export，拼进同一个 IIFE 闭包）
+ofd/                    模块一：引擎源码（ESM 模块，跨文件依赖用 import/export 显式声明）
 ├─ shared/              纯工具：util.js 打点 / xml.js 节点工具 / path.js 路径 / color.js 颜色 / lru.js LRU
 ├─ core/                解析层：zip / parser / image / md(SM3) / seal / asn1 / verify
 │                       res / page / signature / outline / annotation / document
 ├─ display/             渲染层：font(字体映射与加载) / svg(元素渲染) / api(缓存与公开 API)
-└─ index.js             公开 API 汇总（OFD 对象 + _internals 白名单）
+└─ index.js             公开 API 汇总（OFD 对象 + _internals 白名单）；esbuild 的 entry
+
+ofd2pdf/                模块二：OFD → PDF 库源码（ESM 模块；打包为 build/ofd2pdf/ofd2pdf.js）
+├─ index.js             公开 API：ofdToPdf / svgToPdf
+├─ core/                常量、CSS 颜色解析、环境桥接、基础工具
+├─ pdf/                 render.js（SVG → 内容流）、writer.js、docstring.js
+├─ svg/                 XML 解析、变换、路径转换
+└─ image/               PNG / BMP / GIF / JPEG 解码、XObject 输出（尺寸防线在 xobject.js）
+
+pdf2ofd/                模块三：PDF → OFD 库源码（ESM 模块，仅 Node；打包为 build/pdf2ofd/pdf2ofd.js）
+├─ index.js             convert() 编排
+├─ core/                pdf.js 定位、仿射矩阵 / 单位、pdf.js 图像 → RGBA
+├─ ops/                 操作符遍历：状态 / 几何 / 裁剪 / 文本 / 路径 / 图像 / 渐变
+├─ res/                 颜色工具、渐变与图案取色预取
+├─ ofd/                 包组装：package.js / png.js / xml.js / zip.js
+└─ font/                编译字体解析、cmap 重建、命名
 
 build/
-├─ build.js             构建脚本：按固定顺序拼接 → ofd.js，terser 压缩 → ofd.min.js
-├─ ofd.js               产物（可读版）
-├─ ofd.min.js           产物（压缩版）
-└─ toPdf.js             OFD → PDF 转换模块（独立件，非引擎一部分）
+├─ common.js            共享构建层：路径 / 版本号、esbuild + terser 封装、ZIP 写出、distTransform()
+├─ build-ofd.js         esbuild 打包 → build/ofd/ofd.js，terser 压缩 → build/ofd/ofd.min.js
+├─ build-ofd2pdf.js     → build/ofd2pdf/ofd2pdf.js / .min.js
+├─ build-pdf2ofd.js     → build/pdf2ofd/pdf2ofd.js / .min.js（CommonJS，Node）
+├─ build-viewer.js      先跑 build-ofd + build-ofd2pdf，再把 viewer 打成 zip → dist/<版本>/
+├─ build-*-npm.js       三个 npm 打包脚本 → dist/<版本>/<模块>/
+├─ ofd/                 引擎产物
+├─ ofd2pdf/             OFD → PDF 产物
+└─ pdf2ofd/             PDF → OFD 产物
 
-external/               vendored 第三方代码：sm-crypto.js（SM2/SM3，供签名值验证；由 build.js 拼在产物最前）、pdf.min.js（Apache-2.0，列在 build.js 的 `STANDALONE` 名单，不并入引擎、当前无使用方）
 font/                   外部字体投放目录；由 `npm run build` 创建，自动识别为外部字体目录（见 `OFD.setFontBase`）
 ```
 
-> 拼接顺序写死在 `build.js` 里，且顺序承重：`class LRUCache`（`src/shared/lru.js`）不提升，而 `src/display/svg.js` 顶层 `new LRUCache(...)` 用到它。改顺序前先看 `build.js` 顶部注释。
+> 模块初始化顺序由 `import` 图决定，不再需要维护拼接顺序。历史上旧的单文件 `build.js` 里写死过一份
+> 文件清单，因为 `class LRUCache`（`ofd/shared/lru.js`）不提升、而 `ofd/display/svg.js` 顶层
+> `new LRUCache(...)` 要用到它；现在 `svg.js` 直接 `import { LRUCache }`，ESM 保证依赖模块先求值。
+>
+> 两个仍然成立的约定：
+> - **ESM 源码（`ofd/`、`ofd2pdf/`、`pdf2ofd/`）里不要写 `module` / `exports`**。esbuild 见到这两个标识符会把入口判成 CommonJS
+>   并套一层假的 `module` 壳，`module.exports = OFD` 就落到内层、Node 侧 require 拿到空对象。
+>   CJS 桥接统一放在各构建脚本的 `TAIL`（`build/build-ofd.js` 等，那里才是真实的文件作用域）。
+> - **第三方代码就是普通 ES import**。`ofd/core/verify.js` 写 `import { sm2 } from "sm-crypto"`，
+>   esbuild 从 `node_modules` 内联进 IIFE，产物里既没有裸标识符也没有运行时 `require`。
+>   `sm-crypto` 保持为 devDependency —— 只有构建时才需要它。
 
 ## 渲染管线
 
@@ -654,7 +698,7 @@ translate(obj.boundary) · obj.ctm · translate(-unit.boundary)
 2. `verifySignature` 的能力边界见上文「签名验证的能力边界」一节
 3. 外部字体目录仓库不提供，需自行创建后用 `setFontBase` 指定；缺失时静默降级，不影响渲染
 4. `ofd` 对象是不透明句柄，只当参数传，不要读内部字段
-5. `_internals` 白名单随时可能变化，仅供 `toPdf.js` 与调试页使用
+5. `_internals` 白名单随时可能变化，仅供 `ofd2pdf.js` 与调试页使用
 6. Node.js 需要 **18+**（`DecompressionStream`）
 7. ZIP64 格式暂不支持，遇到会明确报错
 

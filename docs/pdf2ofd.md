@@ -25,14 +25,15 @@ npm install pdf2ofd pdfjs-dist
 To assemble it from this repository:
 
 ```bash
-npm run build:pdf2ofd        # output lands in dist/pdf2ofd/
+npm run build:pdf2ofd        # converter artifacts → build/pdf2ofd/ (pdf2ofd.js / pdf2ofd.min.js)
+npm run build:pdf2ofd-npm    # npm package → dist/<version>/pdf2ofd/
 ```
 
 ### 2. Run from the source tree
 
 ```bash
-node build/pdf2ofd.js input.pdf# writes input.ofd
-node build/pdf2ofd.js input.pdf output.ofd     # explicit output path
+node build/pdf2ofd/pdf2ofd.js input.pdf# writes input.ofd
+node build/pdf2ofd/pdf2ofd.js input.pdf output.ofd     # explicit output path
 ```
 
 ## CLI
@@ -244,7 +245,7 @@ Hand-written in pure JS (IHDR / IDAT / IEND + CRC32) over Node's `zlib.deflateSy
 Using the 14-page academic-paper PDF kept in `test/` as the baseline (US Letter, mixed text/vector figures, 9 subset fonts):
 
 ```bash
-node build/pdf2ofd.js test/<your-sample>.pdf
+node build/pdf2ofd/pdf2ofd.js test/<your-sample>.pdf
 #   已处理 14/14 页
 # 完成：test/<your-sample>.ofd（14 页，24 字体，90 图像，875598 字节）
 ```
@@ -289,14 +290,14 @@ The following are **not** synced automatically — handle them manually before p
 
 | Item | Location | Notes |
 | --- | --- | --- |
-| npm package version | `PKG.version` in `build/build-pdf2ofd.js` | **Hardcoded**, not read from `package.json`'s `version`. Must be bumped manually or npm will reject the duplicate version |
-| npm package name | `PKG.name` in `build/build-pdf2ofd.js` | Same. Change it if `pdf2ofd` is taken on npmjs |
-| Release-package file stripping | `distTransform()` in `build/build.js` | After changing the structure of `web/viewer.html` / `web/viewer.js` (selectors, events, the test-file default), the regexes stop matching. Assertions now make the build fail loudly instead of silently shipping a broken package |
+| npm package version | `PKG.version` in `build/build-pdf2ofd-npm.js` | Read automatically from the repository-root `package.json` `version`, kept in sync with the `dist/<version>/` folder |
+| npm package name | `PKG.name` in `build/build-pdf2ofd-npm.js` | Change it if `pdf2ofd` is taken on npmjs |
+| Release-package file stripping | `distTransform()` in `build/common.js` | After changing the structure of `web/viewer.html` / `web/viewer.js` (selectors, events, the test-file default), the regexes stop matching. Assertions now make the build fail loudly instead of silently shipping a broken package |
 
-`npm run build:pdf2ofd` only reassembles `dist/pdf2ofd/`; it does not publish. Publishing is a separate step:
+`npm run build:pdf2ofd-npm` only reassembles `dist/<version>/pdf2ofd/`; it does not publish. Publishing is a separate step:
 
 ```bash
-cd dist/pdf2ofd
+cd dist/<version>/pdf2ofd
 npm publish --access public
 ```
 
@@ -305,7 +306,7 @@ npm publish --access public
 After changing the converter, run the baseline sample and check the reported counts (should be 14 pages / 24 fonts / 90 images):
 
 ```bash
-node build/pdf2ofd.js test/<your-sample>.pdf /tmp/chk.ofd
+node build/pdf2ofd/pdf2ofd.js test/<your-sample>.pdf /tmp/chk.ofd
 ```
 
 For deeper product verification (ZIP entries inflate and match their CRC32, PNG chunk CRCs, MultiMedia declarations == image entries == per-page ImageObject total) write a throwaway script — but mind three traps:
@@ -314,7 +315,7 @@ For deeper product verification (ZIP entries inflate and match their CRC32, PNG 
 - **Structural validation passing ≠ content being correct.** Signature, dimensions, CRC and inflate can all pass while the pixels are entirely wrong. Any image-encoding change needs a byte-for-byte pixel comparison.
 - **"No all-zero CTMs" is not a sufficient check.** When page 11 lost its colours, all-zero CTM paths were 0 and stroked paths were 8 — both healthy — yet 81 gradient bars had been silently dropped. You have to **count by graphic type** (AxialShd count, ImageObject count, TextObject count) to localise such failures.
 
-When diagnosing display problems, reuse the project's existing `src/core/zip.js` instead of hand-rolling another ZIP reader.
+When diagnosing display problems, reuse the project's existing `ofd/core/zip.js` instead of hand-rolling another ZIP reader.
 
 ## Six general rules
 

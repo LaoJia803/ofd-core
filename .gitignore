@@ -1,5 +1,7 @@
 node_modules/
 dist/*
+test/golden/
 *.tgz
 npm-debug.log*
 package-lock.json
+tools/esm-plan.json

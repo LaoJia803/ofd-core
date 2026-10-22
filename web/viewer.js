@@ -2269,7 +2269,7 @@
   async function convertToPdf() {
     if (!state.ofd || state.pdfConverting) return false;
     if (!window.TOPDF || typeof TOPDF.ofdToPdf !== 'function') {
-      showError('未加载 toPdf.js，无法转换', '转换失败');
+      showError('未加载 ofd2pdf.js，无法转换', '转换失败');
       return false;
     }
     state.pdfConverting = true;

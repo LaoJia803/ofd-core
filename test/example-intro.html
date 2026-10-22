@@ -390,7 +390,7 @@
   <div class="section" id="notes">
     <div class="section-title"><span class="icon">7</span>注意事项</div>
     <ul class="notes-list">
-      <li><strong>依赖顺序</strong>：必须先加载 <code>ofd.js</code>，再加载依赖它的模块（如 toPdf.js）</li>
+      <li><strong>依赖顺序</strong>：必须先加载 <code>ofd.js</code>，再加载依赖它的模块（如 ofd2pdf.js）</li>
       <li><strong>ZIP 解压</strong>：浏览器依赖 <code>DecompressionStream</code>（Chrome 80+），Node 依赖内置 <code>zlib</code></li>
       <li><strong>坐标系统</strong>：Y 轴向下，不翻转；页面尺寸单位为毫米（mm）</li>
       <li><strong>懒解析 + 缓存</strong>：<code>load()</code> 只解析文档元信息与签名/注解，每页 XML 在首次渲染时才解析，结果缓存到页面对象的 <code>_parsed</code></li>
@@ -420,7 +420,7 @@
   </div>
 </div>
 
-<script src="../build/ofd.min.js?v=29"></script>
+<script src="../build/ofd/ofd.min.js?v=30"></script>
 <script>
 // ==================== API 文档数据 ====================
 const apiData = [
@@ -497,7 +497,7 @@ const apiData = [
   {
     method: 'INT', name: 'OFD._internals', brief: '暴露内部函数，便于扩展/调试',
     params: '',
-    code: `const {\n  parseOFD, parsePage, renderPageToString,\n  readZip, readEntry, readEntryText,\n  sm3Hash, hashBytes, resolvePath,\n  parseXml, base64ToBytes, bytesToBase64,\n  // 与 toPdf.js 共享的工具\n  decodeEntities, escapeXml,\n  parseColor, colorToCss,\n  bytesToHex, hexToBytes\n} = OFD._internals;`
+    code: `const {\n  parseOFD, parsePage, renderPageToString,\n  readZip, readEntry, readEntryText,\n  sm3Hash, hashBytes, resolvePath,\n  parseXml, base64ToBytes, bytesToBase64,\n  // 与 ofd2pdf.js 共享的工具\n  decodeEntities, escapeXml,\n  parseColor, colorToCss,\n  bytesToHex, hexToBytes\n} = OFD._internals;`
   }
 ];
 

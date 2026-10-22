@@ -4,7 +4,7 @@
 
 `web/viewer.js` is the application layer of the OFD online reader. Together with `viewer.html` / `viewer.css` it provides the full reading experience: lazily rendered pages, zoom/rotate, full-text search, thumbnail / outline / signature sidebars, seal placement, printing, download and PDF export.
 
-It does not reinvent the wheel: parsing and rendering are delegated to `build/ofd.js`, PDF export to `build/toPdf.js`; viewer.js itself owns state, DOM interaction and scheduling.
+It does not reinvent the wheel: parsing and rendering are delegated to `build/ofd/ofd.js`, PDF export to `build/ofd2pdf/ofd2pdf.js`; viewer.js itself owns state, DOM interaction and scheduling.
 
 ## Design
 
@@ -28,8 +28,8 @@ Only the viewport ± `lazyBuffer` (default 2) pages are rendered:
 
 | Layer | Responsibility | Owner |
 | --- | --- | --- |
-| Parsing / rendering | OFD → SVG | `build/ofd.js` |
-| Conversion | SVG → PDF | `build/toPdf.js` |
+| Parsing / rendering | OFD → SVG | `build/ofd/ofd.js` |
+| Conversion | SVG → PDF | `build/ofd2pdf/ofd2pdf.js` |
 | Application | state, interaction, scheduling | `web/viewer.js` |
 
 ### loadToken race protection
@@ -111,10 +111,12 @@ web/
 └─ images/       standalone SVG icons (referenced directly by viewer.css)
 
 Dependencies:
-├─ ../build/ofd.min.js  parsing and rendering (required; viewer.html loads the minified engine)
-├─ ../build/toPdf.js    PDF export (optional; the button reports "未加载 toPdf.js" if missing)
+├─ ../build/ofd/ofd.min.js        parsing and rendering (required; viewer.html loads the minified engine)
+├─ ../build/ofd2pdf/ofd2pdf.js   PDF export (optional; the button reports "未加载 ofd2pdf.js" if missing)
 └─ external fonts       optional; drop into <root>/font/ (created by `npm run build`, auto-detected from ofd.min.js) — the folder must be served with a directory listing
 ```
+
+> The release zip (`npm run build:viewer`) keeps the old flat layout `build/ofd.min.js` + `build/ofd2pdf.js`; `build-viewer.js` rewrites the script references in `viewer.html` while packaging.
 
 ## Startup and URL Parameters
 
@@ -181,7 +183,7 @@ In placement mode, clicking a page drops a seal; right-clicking a placed seal de
 | --- | --- |
 | Print | renders all pages into a hidden iframe and calls the browser print dialog |
 | Download | downloads the original `.ofd` (keeping the original file name) |
-| Export PDF | converts via `build/toPdf.js`, downloads `<name>.pdf` |
+| Export PDF | converts via `build/ofd2pdf/ofd2pdf.js`, downloads `<name>.pdf` |
 | Document properties | shows `OFD.getDocumentInfo` metadata |
 
 ## State Object
@@ -312,8 +314,8 @@ OFD.onPageChange((page, total) => {
 ## Full Integration Example
 
 ```html
-<script src="build/ofd.js"></script>
-<script src="build/toPdf.js"></script>
+<script src="build/ofd/ofd.js"></script>
+<script src="build/ofd2pdf/ofd2pdf.js"></script>
 <script src="web/viewer.js"></script>
 <script>
   // external font directory (optional; not shipped, degrades to embedded/system fonts)
@@ -477,7 +479,7 @@ No exploitable injection point was found in the render layer. But this relies on
 ## Notes
 
 1. The UI opens from `file://` (icons are external `images/*.svg`), but loading an OFD by URL needs HTTP; on `file://` use the **Open File** button
-2. PDF export is demo-grade; complex layouts should be checked visually. Missing `build/toPdf.js` reports "未加载 toPdf.js，无法转换"
+2. PDF export is demo-grade; complex layouts should be checked visually. Missing `build/ofd2pdf/ofd2pdf.js` reports "未加载 ofd2pdf.js，无法转换"
 3. External fonts are optional. `npm run build` creates `<root>/font/`, which the engine auto-detects (from `ofd.min.js`); drop `name.ttf|.otf|.woff2` there with no `setFontBase` call. The folder must be served with a **directory listing** (nginx autoindex, `serve`/`http-server`) or `fetchFontIndex()` returns `null` and external fonts won't load — in that case rendering still falls back to embedded / system-stack fonts (a declared-but-unloadable embedded font also falls back to the system stack). Use `OFD.setFontBase('your/path/')` only to point elsewhere
 4. Printing renders every page — watch memory and time on very large documents
 5. Searching does the same: `doSearch()` calls `renderAllPages()` first, so one query on a thousand-page document renders the whole thing
