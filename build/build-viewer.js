@@ -1,4 +1,4 @@
-// 打包 viewer 发行 zip：dist/<版本号>/ofdjs-<版本号>-dist.zip
+// 打包 viewer 发行 zip：dist/<版本号>/ofd-viewer-<版本号>-dist.zip
 // 会先执行 build-ofd.js 与 build-ofd2pdf.js，再按旧 zip 的扁平结构组装：
 //   build/ofd.min.js、build/ofd2pdf.js、web/*（已剥离测试文件选择器）、LICENSE、font/*
 // 用法：node build/build-viewer.js
@@ -18,7 +18,7 @@ const {
 const ofdBuild = require("./build-ofd");
 const ofd2pdfBuild = require("./build-ofd2pdf");
 
-const ZIP_NAME = `ofdjs-${VERSION}-dist.zip`;
+const ZIP_NAME = `ofd-viewer-${VERSION}-dist.zip`;
 
 async function build() {
   await ofdBuild.build();
