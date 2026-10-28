@@ -8,7 +8,7 @@
 //   本包只负责组装自身代码 + 转换器自身的元信息。
 const fs = require("fs");
 const path = require("path");
-const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5 } = require("./common");
+const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5, readmeFromDocs } = require("./common");
 
 const OUT = path.join(DIST, VERSION, "pdf2ofd");
 
@@ -178,88 +178,7 @@ function main(argv) {
 main(process.argv);
 `;
 
-// ---------------------------------------------------------------------------
-// README（npm 包页面的正文）
-// ---------------------------------------------------------------------------
-const README = `# pdf2ofd
-
-PDF → OFD 转换器。Node 环境，零运行时依赖。
-
-把 PDF 转成符合 **GB/T 33190**（电子文件存储与交换格式·版式文档）的 OFD 包，
-保留可搜索文字、内嵌子集字体与位图，图表以矢量路径、轴向渐变与虚线线型表达。
-
-> **beta**：不保证与 PDF 原件逐像素一致。正式归档前请人工核对产物。
-
-## 安装
-
-\`\`\`bash
-npm install pdf2ofd pdfjs-dist
-\`\`\`
-
-\`pdfjs-dist\` 是 peerDependency（版本 ≥ 4），需单独安装 ——
-它负责解析 PDF，本包只做 OFD 侧的输出。
-
-## 命令行
-
-\`\`\`bash
-pdf2ofd input.pdf                  # 输出 input.ofd
-pdf2ofd input.pdf out/result.ofd   # 指定输出
-pdf2ofd -q input.pdf out.ofd       # 静默
-pdf2ofd --help
-\`\`\`
-
-## 代码调用
-
-\`\`\`js
-const { convert } = require('pdf2ofd');
-
-const r = await convert('in.pdf', 'out.ofd', {
-  onProgress: (done, total) => console.log(\`\${done}/\${total}\`),
-  quiet: false,
-});
-console.log(r); // { pages, fonts, images, bytes }
-\`\`\`
-
-批量（顺序执行，避免大文件并发吃满内存）：
-
-\`\`\`js
-const { convertMany } = require('pdf2ofd');
-await convertMany(['a.pdf', 'b.pdf'], { quiet: true });
-await convertMany([
-  { from: 'a.pdf', to: 'out/a.ofd' },
-  { from: 'b.pdf', options: { quiet: true } },
-]);
-\`\`\`
-
-## 导出
-
-| 成员 | 说明 |
-| --- | --- |
-| \`convert(pdfPath, ofdPath?, options?)\` | 主转换函数，返回统计对象 |
-| \`convertMany(list, options?)\` | 批量转换，返回统计对象数组 |
-| \`ZipWriter\` | 最小 ZIP 写入器（deflate） |
-| \`encodePng(w, h, rgba)\` | RGBA → PNG 字节 |
-| \`PT_TO_MM\` | 点到毫米换算系数 \`25.4/72\` |
-| \`version\` | 包版本号 |
-
-## 环境要求
-
-- Node.js 18+
-- pdfjs-dist ≥ 4
-
-## 已知边界
-
-- 不支持表单域、注释、Type3 字体
-- 渐变以 OFD 轴向渐变（\`AxialShd\`）表达；径向渐变按轴向近似
-- Form XObject 内联展开为页面级图元，不输出 \`CompositeObject\` /
-  \`CompositeGraphicUnit\`（引擎不识别时会导致整块图表消失）
-- 页面层不输出裁剪（\`<ofd:Clips>\`），仅在生成阶段按裁剪区剔除图元 ——
-  部分引擎会因页面层裁剪导致整块内容不显示
-
-## License
-
-Apache-2.0
-`;
+const README = readmeFromDocs("pdf2ofd");
 
 function main() {
   rmrf(OUT);

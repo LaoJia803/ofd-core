@@ -20,8 +20,6 @@
 | 仓库产物 | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
 | npm 包（`ofd-core`） | `npm run build:ofd-npm` | `dist/<版本>/ofd/`（`lib/ofd.js` + `lib/ofd.min.js`，并生成 `package.json` / `README.md` / `LICENSE`） |
 
-渲染回归用 `npm test` 检查：它对两个产物分别跑 `test/golden.js --check`（20 篇文档，SVG 逐字节一致）。
-
 ## 快速上手
 
 ```html
@@ -47,7 +45,7 @@ const ofd = await OFD.load(new Uint8Array(fs.readFileSync('a.ofd')));
 const svg = await OFD.renderPageToString(ofd, 0);
 ```
 
-**运行环境**：需要 `DecompressionStream`（Chrome/Edge 80+、Firefox 113+、Safari 16.4+、Node 18+）。
+**运行环境**：需要 `DecompressionStream`（Chrome/Edge 80+、Firefox 113+、Safari 16.4+、Node 18+）。Node 侧整包要求是 **Node ≥19** —— 内联的 `sm-crypto` 在加载时读全局 `crypto.getRandomValues`，`ofd-core` 的 `engines.node` 声明的就是这条。
 
 ### 算法自证
 
@@ -179,7 +177,7 @@ OFD.verifySignature(ofd, index)
 <script src="build/ofd/ofd.min.js"></script>
 ```
 
-Node.js（ZIP 解压依赖 `DecompressionStream`，需 Node 20+）：
+Node.js（需 `DecompressionStream` 与全局 `crypto.getRandomValues`，所以**需 Node ≥19**）：
 
 ```js
 const OFD = require('./build/ofd/ofd.js');

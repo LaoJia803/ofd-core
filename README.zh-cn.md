@@ -97,6 +97,7 @@ pdf2ofd input.pdf output.ofd
 ```bash
 npm install               # 安装 esbuild / terser / pdfjs-dist
 npm run build             # pdf2ofd + viewer（viewer 会先构建 ofd / ofd2pdf）
+npm run build:all         # 四个模块产物按序全建：ofd、ofd2pdf、pdf2ofd、viewer zip
 npm run build:ofd         # → build/ofd/ofd.js、ofd.min.js
 npm run build:ofd2pdf     # → build/ofd2pdf/ofd2pdf.js、ofd2pdf.min.js
 npm run build:pdf2ofd     # → build/pdf2ofd/pdf2ofd.js、pdf2ofd.min.js
@@ -104,7 +105,7 @@ npm run build:viewer      # 先跑 build:ofd、build:ofd2pdf，再打 zip → di
 npm run build:ofd-npm     # → dist/<版本>/ofd/（包名 ofd-core）
 npm run build:ofd2pdf-npm # → dist/<版本>/ofd2pdf/（依赖 ofd-core）
 npm run build:pdf2ofd-npm # → dist/<版本>/pdf2ofd/
-npm test                  # golden 基线：两份引擎产物渲染结果必须逐字节一致
+npm run build:npm         # 先 build:all，再打好上面三个 npm 包
 ```
 
 `build/common.js` 读取 `package.json` 的 `version`，写入各产物头注释、`OFD.version`、发行 zip 名与 `dist/<版本>/` 目录名，始终同步。
@@ -311,7 +312,7 @@ Node.js 18+ 可用于 PDF → OFD 转换（需要 `DecompressionStream`，Node 1
 | [OFD → PDF](docs/ofd2pdf.zh-cn.md) | 转换能力、字体策略、图像支持、已知损失 |
 | [PDF → OFD](docs/pdf2ofd.zh-cn.md) | CLI / npm 包、转换原理、与数科产物的对齐情况 |
 
-可运行的示例页面在 `test/` 下：`example-intro.html`（入门）、`example-basic.html`（API 演示）、`example-seal.html`（盖章接入）、`example-ofd2pdf.html`（PDF 转换）、`benchmark.html`（性能剖析）。
+可运行的示例页面在 `test/` 下：`example-intro.html`（工具链介绍与本地演示）、`example-basic.html`（API 演示）、`example-seal.html`（盖章接入）、`example-ofd2pdf.html`（PDF 转换）、`benchmark.html`（性能剖析）。
 
 ### English
 

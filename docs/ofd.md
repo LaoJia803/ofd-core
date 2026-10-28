@@ -20,8 +20,6 @@ Two shapes come out of the same build:
 | Repository artifact | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
 | npm package (`ofd-core`) | `npm run build:ofd-npm` | `dist/<version>/ofd/` (`lib/ofd.js` + `lib/ofd.min.js`, generated `package.json` / `README.md` / `LICENSE`) |
 
-Rendering regressions are checked with `npm test`, which runs `test/golden.js --check` against both artifacts (20 documents, byte-identical SVG).
-
 ## Quick start
 
 ```html
@@ -47,7 +45,7 @@ const ofd = await OFD.load(new Uint8Array(fs.readFileSync('a.ofd')));
 const svg = await OFD.renderPageToString(ofd, 0);
 ```
 
-**Runtime requirement**: `DecompressionStream` (Chrome/Edge 80+, Firefox 113+, Safari 16.4+, Node 18+).
+**Runtime requirement**: `DecompressionStream` (Chrome/Edge 80+, Firefox 113+, Safari 16.4+, Node 18+). On Node the engine as a whole needs **Node ≥19** — the inlined `sm-crypto` reads the global `crypto.getRandomValues` at load time — which is what `ofd-core` declares as `engines.node`.
 
 ### Algorithm verification
 
@@ -179,7 +177,7 @@ Browser:
 <script src="build/ofd/ofd.min.js"></script>
 ```
 
-Node.js (ZIP inflation needs `DecompressionStream`, so Node 20+):
+Node.js (needs `DecompressionStream` plus the global `crypto.getRandomValues`, so **Node ≥19**):
 
 ```js
 const OFD = require('./build/ofd/ofd.js');

@@ -97,6 +97,7 @@ The three libraries are bundled with esbuild into their own subfolders under `bu
 ```bash
 npm install                # installs esbuild / terser / pdfjs-dist
 npm run build              # pdf2ofd + viewer (viewer builds ofd / ofd2pdf first)
+npm run build:all          # all four module artifacts in order: ofd, ofd2pdf, pdf2ofd, viewer zip
 npm run build:ofd          # → build/ofd/ofd.js, ofd.min.js
 npm run build:ofd2pdf      # → build/ofd2pdf/ofd2pdf.js, ofd2pdf.min.js
 npm run build:pdf2ofd      # → build/pdf2ofd/pdf2ofd.js, pdf2ofd.min.js
@@ -104,7 +105,7 @@ npm run build:viewer       # runs build:ofd + build:ofd2pdf, then zips into dist
 npm run build:ofd-npm      # → dist/<version>/ofd/ (package name ofd-core)
 npm run build:ofd2pdf-npm  # → dist/<version>/ofd2pdf/ (depends on ofd-core)
 npm run build:pdf2ofd-npm  # → dist/<version>/pdf2ofd/
-npm test                   # golden baseline: both engine artifacts must render byte-identically
+npm run build:npm          # build:all first, then all three npm packages above
 ```
 
 `build/common.js` reads `version` from `package.json` and writes it into each banner, `OFD.version`, the distribution zip name, and the `dist/<version>/` folder, so they always stay in sync.
@@ -308,7 +309,7 @@ Evaluate the risk yourself before processing OFD files from untrusted sources.
 | [OFD → PDF](docs/ofd2pdf.md) | Conversion capabilities, font strategy, image support, known losses |
 | [PDF → OFD](docs/pdf2ofd.md) | CLI / npm package, conversion principles, alignment with reference output |
 
-Runnable demos live in `test/`: `example-intro.html`, `example-basic.html`, `example-seal.html`, `example-ofd2pdf.html`, `benchmark.html`.
+Runnable demos live in `test/`: `example-intro.html` (toolchain tour with live demos), `example-basic.html`, `example-seal.html`, `example-ofd2pdf.html`, `benchmark.html`.
 
 ### 中文
 

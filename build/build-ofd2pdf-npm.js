@@ -2,7 +2,7 @@
 // 用法：node build/build-ofd2pdf-npm.js
 const fs = require("fs");
 const path = require("path");
-const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5 } = require("./common");
+const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5, readmeFromDocs } = require("./common");
 
 const OUT = path.join(DIST, VERSION, "ofd2pdf");
 
@@ -15,48 +15,12 @@ const PKG = {
   license: "Apache-2.0",
   main: "lib/ofd2pdf.js",
   unpkg: "lib/ofd2pdf.min.js",
+  engines: { node: ">=19" },
   files: ["lib", "README.md", "LICENSE"],
   dependencies: { "ofd-core": "^" + VERSION },
 };
 
-const README = `# ofd2pdf
-
-OFD → PDF 转换模块（演示级）。复用 [ofd-core](https://www.npmjs.com/package/ofd-core)
-的渲染能力，逐页把 SVG 映射为 PDF 内容流。
-
-> beta：不保证与 OFD 原版逐像素一致，导出结果请人工核对。
-
-## 安装
-
-\`\`\`bash
-npm install ofd2pdf ofd-core
-\`\`\`
-
-## 用法
-
-\`\`\`js
-const OFD = require("ofd-core");
-const TOPDF = require("ofd2pdf");
-
-const ofd = await OFD.load(data);          // data: ArrayBuffer / Uint8Array
-const pdf = await TOPDF.ofdToPdf(ofd);     // → Uint8Array
-\`\`\`
-
-单页调试：\`TOPDF.svgToPdf(svgString, pageWmm, pageHmm, opts)\`。
-
-## 浏览器
-
-\`\`\`html
-<script src="node_modules/ofd-core/lib/ofd.min.js"></script>
-<script src="node_modules/ofd2pdf/lib/ofd2pdf.min.js"></script>
-\`\`\`
-
-加载后挂载全局对象 \`TOPDF\`。
-
-## License
-
-Apache-2.0
-`;
+const README = readmeFromDocs("ofd2pdf");
 
 function write(rel, content) {
   const p = path.join(OUT, rel);

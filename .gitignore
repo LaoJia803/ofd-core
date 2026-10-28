@@ -1,6 +1,8 @@
 node_modules/
 dist/*
-test/golden/
+build/ofd/*
+build/ofd2pdf/*
+build/pdf2ofd/*
 *.tgz
 npm-debug.log*
 package-lock.json

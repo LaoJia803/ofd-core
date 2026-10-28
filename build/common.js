@@ -266,6 +266,17 @@ function ensureFontDir() {
   return fontDir;
 }
 
+// npm 包 README：直接取 docs/ 下同名文档的中英文两版（中文在前，分隔线后英文）。
+// 文档内无相对链接，可原样进包；去掉 BOM，否则会出现在 npm 页首行。
+function readmeFromDocs(name) {
+  const read = (suffix) => {
+    const file = path.join(ROOT, "docs", name + suffix);
+    if (!fs.existsSync(file)) throw new Error("缺少文档 " + file);
+    return fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim();
+  };
+  return read(".zh-cn.md") + "\n\n---\n\n" + read(".md") + "\n";
+}
+
 module.exports = {
   ROOT,
   BUILD,
@@ -282,4 +293,5 @@ module.exports = {
   distTransform,
   ensureFontDir,
   FONT_README,
+  readmeFromDocs,
 };

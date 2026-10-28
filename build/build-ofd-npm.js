@@ -2,7 +2,7 @@
 // 用法：node build/build-ofd-npm.js
 const fs = require("fs");
 const path = require("path");
-const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5 } = require("./common");
+const { ROOT, BUILD, DIST, VERSION, rmrf, walkFiles, md5, readmeFromDocs } = require("./common");
 
 const OUT = path.join(DIST, VERSION, "ofd");
 
@@ -10,46 +10,16 @@ const PKG = {
   name: "ofd-core",
   version: VERSION,
   private: false,
-  description: "OFD（GB/T 33190）解析与 SVG 渲染引擎，零运行时依赖，浏览器与 Node 通用",
+  description: "OFD（GB/T 33190）解析与 SVG 渲染引擎，零运行时依赖，浏览器与 Node（≥19）通用",
   keywords: ["ofd", "svg", "renderer", "gbt33190", "版式文档", "电子公文"],
   license: "Apache-2.0",
   main: "lib/ofd.js",
   unpkg: "lib/ofd.min.js",
+  engines: { node: ">=19" },
   files: ["lib", "README.md", "LICENSE"],
 };
 
-const README = `# ofd-core
-
-OFD（GB/T 33190）解析与 SVG 渲染引擎。零运行时依赖，浏览器与 Node 通用。
-
-## 浏览器
-
-\`\`\`html
-<script src="node_modules/ofd-core/lib/ofd.min.js"></script>
-\`\`\`
-
-加载后挂载全局对象 \`OFD\`。也可以直接用 CDN 指向 \`lib/ofd.min.js\`。
-
-## Node
-
-\`\`\`js
-const OFD = require("ofd-core");
-\`\`\`
-
-## API
-
-\`load\` / \`renderPage\` / \`renderPageToString\` / \`renderAll\` /
-\`getPageCount\` / \`getPageDimensions\` / \`getDocumentInfo\` /
-\`getSignatures\` / \`verifySignature\` / \`setFontBase\` /
-\`setProfiling\` / \`getLastProfile\`
-
-外部字体：默认从 \`ofd.min.js\` 所在目录的上一级 \`font/\` 读取，
-也可用 \`OFD.setFontBase("path/to/font/")\` 显式指定。
-
-## License
-
-Apache-2.0
-`;
+const README = readmeFromDocs("ofd");
 
 function write(rel, content) {
   const p = path.join(OUT, rel);

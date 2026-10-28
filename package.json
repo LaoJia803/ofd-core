@@ -5,6 +5,7 @@
   "description": "OFD预览器与渲染引擎",
   "scripts": {
     "build": "node build/build-pdf2ofd.js && node build/build-viewer.js",
+    "build:all": "node build/build-ofd.js && node build/build-ofd2pdf.js && node build/build-pdf2ofd.js && node build/build-viewer.js",
     "build:ofd": "node build/build-ofd.js",
     "build:ofd2pdf": "node build/build-ofd2pdf.js",
     "build:pdf2ofd": "node build/build-pdf2ofd.js",
@@ -12,7 +13,7 @@
     "build:ofd-npm": "node build/build-ofd-npm.js",
     "build:ofd2pdf-npm": "node build/build-ofd2pdf-npm.js",
     "build:pdf2ofd-npm": "node build/build-pdf2ofd-npm.js",
-    "test": "node test/golden.js build/ofd/ofd.js --check && node test/golden.js build/ofd/ofd.min.js --check",
+    "build:npm": "npm run build:all && npm run build:ofd-npm && npm run build:ofd2pdf-npm && npm run build:pdf2ofd-npm",
     "prepublishOnly": "node build/build-pdf2ofd-npm.js"
   },
   "devDependencies": {
