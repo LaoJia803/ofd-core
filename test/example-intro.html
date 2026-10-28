@@ -1149,7 +1149,8 @@ const bytes = zip.build();</code></pre>
     el.classList.toggle("error", !!isError);
   }
 
-  // 目录列表不输出时返回空数组，界面退回手填路径 / 本地文件。
+  // 目录列表不输出时回退到默认样本，与 viewer 的 999.ofd 默认行为一致。
+  var FALLBACK_SAMPLES = ["999.ofd"];
   function listSamples() {
     return fetch("./ofdFile/", { cache: "no-store" })
       .then(function (res) {
@@ -1168,9 +1169,10 @@ const bytes = zip.build();</code></pre>
           name = name.split("/").filter(Boolean).pop() || "";
           if (/\.ofd$/i.test(name) && names.indexOf(name) === -1) names.push(name);
         }
-        return names.sort(function (a, b) { return a.localeCompare(b, "zh"); });
+        names.sort(function (a, b) { return a.localeCompare(b, "zh"); });
+        return names.length ? names : FALLBACK_SAMPLES.slice();
       })
-      .catch(function () { return []; });
+      .catch(function () { return FALLBACK_SAMPLES.slice(); });
   }
 
   function fillSamples(select, names, preferred) {
