@@ -18,6 +18,7 @@ Two shapes come out of the same build:
 | | command | output |
 | --- | --- | --- |
 | Repository artifact | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
+| Module zip | `npm run build:zips` | `dist/<version>/ofd.zip` (contains `ofd/ofd.js` + `ofd/ofd.min.js`; builds all three modules first) |
 | npm package (`ofd-core`) | `npm run build:ofd-npm` | `dist/<version>/ofd/` (`lib/ofd.js` + `lib/ofd.min.js`, generated `package.json` / `README.md` / `LICENSE`) |
 
 ## Quick start
@@ -475,6 +476,7 @@ build/
 ├─ build-ofd2pdf.js     → build/ofd2pdf/ofd2pdf.js / .min.js
 ├─ build-pdf2ofd.js     → build/pdf2ofd/pdf2ofd.js / .min.js (CommonJS, Node)
 ├─ build-viewer.js      runs build-ofd + build-ofd2pdf, then zips the viewer → dist/<version>/
+├─ build-zips.js        builds the three modules, then one zip each → dist/<version>/<module>.zip
 ├─ build-*-npm.js       the three npm packagers → dist/<version>/<module>/
 ├─ ofd/                 engine artifacts
 ├─ ofd2pdf/             OFD → PDF artifacts

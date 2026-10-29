@@ -29,6 +29,7 @@ npm run build:ofd           # ofd/        → build/ofd/
 npm run build:ofd2pdf       # ofd2pdf/    → build/ofd2pdf/
 npm run build:pdf2ofd       # pdf2ofd/    → build/pdf2ofd/
 npm run build:viewer        # web/        → build/viewer/
+npm run build:zips          # 三个模块产物各自打 zip → dist/<版本号>/<模块>.zip
 npm run build:all           # 以上四个全构建
 npm run build:npm           # 构建 + npm 包形态产物
 ```

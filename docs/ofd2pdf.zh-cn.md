@@ -17,6 +17,7 @@
 | | 命令 | 输出 |
 | --- | --- | --- |
 | 仓库产物 | `npm run build:ofd2pdf` | `build/ofd2pdf/ofd2pdf.js` + `build/ofd2pdf/ofd2pdf.min.js` |
+| 模块 zip | `npm run build:zips` | `dist/<版本>/ofd2pdf.zip`（包内为 `ofd2pdf/ofd2pdf.js` + `ofd2pdf/ofd2pdf.min.js`；该命令会先构建三个模块） |
 | npm 包（`ofd2pdf`） | `npm run build:ofd2pdf-npm` | `dist/<版本>/ofd2pdf/`（`lib/ofd2pdf.js` + `lib/ofd2pdf.min.js`，并生成 `package.json` / `README.md` / `LICENSE`） |
 
 npm 包是依赖式的：它在 `dependencies` 里声明 `ofd-core`，**不**把引擎打进包内，所以安装时要一起装（`npm install ofd2pdf ofd-core`）。

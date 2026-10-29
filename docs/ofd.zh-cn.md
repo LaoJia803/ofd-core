@@ -18,6 +18,7 @@
 | | 命令 | 输出 |
 | --- | --- | --- |
 | 仓库产物 | `npm run build:ofd` | `build/ofd/ofd.js` + `build/ofd/ofd.min.js` |
+| 模块 zip | `npm run build:zips` | `dist/<版本>/ofd.zip`（包内为 `ofd/ofd.js` + `ofd/ofd.min.js`；该命令会先构建三个模块） |
 | npm 包（`ofd-core`） | `npm run build:ofd-npm` | `dist/<版本>/ofd/`（`lib/ofd.js` + `lib/ofd.min.js`，并生成 `package.json` / `README.md` / `LICENSE`） |
 
 ## 快速上手
@@ -486,6 +487,7 @@ build/
 ├─ build-ofd2pdf.js     → build/ofd2pdf/ofd2pdf.js / .min.js
 ├─ build-pdf2ofd.js     → build/pdf2ofd/pdf2ofd.js / .min.js（CommonJS，Node）
 ├─ build-viewer.js      先跑 build-ofd + build-ofd2pdf，再把 viewer 打成 zip → dist/<版本>/
+├─ build-zips.js        构建三个模块，再各自打 zip → dist/<版本>/<模块>.zip
 ├─ build-*-npm.js       三个 npm 打包脚本 → dist/<版本>/<模块>/
 ├─ ofd/                 引擎产物
 ├─ ofd2pdf/             OFD → PDF 产物

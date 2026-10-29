@@ -26,6 +26,7 @@ To assemble it from this repository:
 
 ```bash
 npm run build:pdf2ofd        # converter artifacts → build/pdf2ofd/ (pdf2ofd.js / pdf2ofd.min.js)
+npm run build:zips           # all three module zips → dist/<version>/, incl. pdf2ofd.zip
 npm run build:pdf2ofd-npm    # npm package → dist/<version>/pdf2ofd/
 ```
 

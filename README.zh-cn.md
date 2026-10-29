@@ -102,6 +102,7 @@ npm run build:ofd         # → build/ofd/ofd.js、ofd.min.js
 npm run build:ofd2pdf     # → build/ofd2pdf/ofd2pdf.js、ofd2pdf.min.js
 npm run build:pdf2ofd     # → build/pdf2ofd/pdf2ofd.js、pdf2ofd.min.js
 npm run build:viewer      # 先跑 build:ofd、build:ofd2pdf，再打 zip → dist/<版本>/
+npm run build:zips        # 三个模块产物各自打 zip → dist/<版本>/ofd.zip、ofd2pdf.zip、pdf2ofd.zip
 npm run build:ofd-npm     # → dist/<版本>/ofd/（包名 ofd-core）
 npm run build:ofd2pdf-npm # → dist/<版本>/ofd2pdf/（依赖 ofd-core）
 npm run build:pdf2ofd-npm # → dist/<版本>/pdf2ofd/
@@ -122,6 +123,7 @@ ofd-core/
 │   ├── build-ofd2pdf.js      # 打包 OFD → PDF
 │   ├── build-pdf2ofd.js      # 打包 PDF → OFD
 │   ├── build-viewer.js       # 先构建 ofd / ofd2pdf，再打发行 zip
+│   ├── build-zips.js         # 构建三个模块，再各自打 zip → dist/<版本>/<模块>.zip
 │   ├── build-ofd-npm.js      # 组装 ofd-core npm 包
 │   ├── build-ofd2pdf-npm.js  # 组装 ofd2pdf npm 包
 │   ├── build-pdf2ofd-npm.js  # 组装 pdf2ofd npm 包
@@ -147,7 +149,7 @@ ofd-core/
 ├── web/                      # 模块四：预览器（viewer.html / css / js + SVG 图标，~186 KB）
 ├── font/                     # 外部字体投放目录（`npm run build` 创建；需服务器输出目录列表才生效）
 ├── docs/                     # 详细文档（中英双语）
-├── dist/                     # 构建输出（<版本>/ 下：发行 zip + 三个 npm 包）
+├── dist/                     # 构建输出（<版本>/ 下：viewer 发行 zip + 三个模块 zip + 三个 npm 包）
 ├── test/                     # 测试页面与 OFD 样本
 ├── LICENSE                   # Apache-2.0
 └── 免责声明.md

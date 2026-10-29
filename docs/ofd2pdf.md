@@ -17,6 +17,7 @@ Two shapes come out of the same build:
 | | command | output |
 | --- | --- | --- |
 | Repository artifact | `npm run build:ofd2pdf` | `build/ofd2pdf/ofd2pdf.js` + `build/ofd2pdf/ofd2pdf.min.js` |
+| Module zip | `npm run build:zips` | `dist/<version>/ofd2pdf.zip` (contains `ofd2pdf/ofd2pdf.js` + `ofd2pdf/ofd2pdf.min.js`; builds all three modules first) |
 | npm package (`ofd2pdf`) | `npm run build:ofd2pdf-npm` | `dist/<version>/ofd2pdf/` (`lib/ofd2pdf.js` + `lib/ofd2pdf.min.js`, generated `package.json` / `README.md` / `LICENSE`) |
 
 The npm package is dependency-style: it declares `ofd-core` in `dependencies` and does **not** bundle the engine, so install both (`npm install ofd2pdf ofd-core`).

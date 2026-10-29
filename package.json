@@ -10,6 +10,7 @@
     "build:ofd2pdf": "node build/build-ofd2pdf.js",
     "build:pdf2ofd": "node build/build-pdf2ofd.js",
     "build:viewer": "node build/build-viewer.js",
+    "build:zips": "node build/build-zips.js",
     "build:ofd-npm": "node build/build-ofd-npm.js",
     "build:ofd2pdf-npm": "node build/build-ofd2pdf-npm.js",
     "build:pdf2ofd-npm": "node build/build-pdf2ofd-npm.js",

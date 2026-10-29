@@ -26,6 +26,7 @@ npm install pdf2ofd pdfjs-dist
 
 ```bash
 npm run build:pdf2ofd        # 转换器产物 → build/pdf2ofd/（pdf2ofd.js / pdf2ofd.min.js）
+npm run build:zips           # 三个模块各自打 zip → dist/<版本>/，含 pdf2ofd.zip
 npm run build:pdf2ofd-npm    # npm 包 → dist/<版本>/pdf2ofd/
 ```
 

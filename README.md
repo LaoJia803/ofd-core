@@ -102,6 +102,7 @@ npm run build:ofd          # → build/ofd/ofd.js, ofd.min.js
 npm run build:ofd2pdf      # → build/ofd2pdf/ofd2pdf.js, ofd2pdf.min.js
 npm run build:pdf2ofd      # → build/pdf2ofd/pdf2ofd.js, pdf2ofd.min.js
 npm run build:viewer       # runs build:ofd + build:ofd2pdf, then zips into dist/<version>/
+npm run build:zips         # per-module artifact zips → dist/<version>/ofd.zip, ofd2pdf.zip, pdf2ofd.zip
 npm run build:ofd-npm      # → dist/<version>/ofd/ (package name ofd-core)
 npm run build:ofd2pdf-npm  # → dist/<version>/ofd2pdf/ (depends on ofd-core)
 npm run build:pdf2ofd-npm  # → dist/<version>/pdf2ofd/
@@ -122,6 +123,7 @@ ofd-core/
 │   ├── build-ofd2pdf.js      # bundles OFD → PDF
 │   ├── build-pdf2ofd.js      # bundles PDF → OFD
 │   ├── build-viewer.js       # builds ofd / ofd2pdf first, then the distribution zip
+│   ├── build-zips.js         # builds the three modules, then dist/<version>/<module>.zip
 │   ├── build-ofd-npm.js      # assembles the ofd-core npm package
 │   ├── build-ofd2pdf-npm.js  # assembles the ofd2pdf npm package
 │   ├── build-pdf2ofd-npm.js  # assembles the pdf2ofd npm package
@@ -147,7 +149,7 @@ ofd-core/
 ├── web/                      # module 4: viewer (viewer.html / css / js + SVG icons, ~186 KB)
 ├── font/                     # external font drop-in (created by `npm run build`; needs a directory listing to serve)
 ├── docs/                     # detailed documentation (bilingual)
-├── dist/                     # build output (<version>/: distribution zip + three npm packages)
+├── dist/                     # build output (<version>/: viewer zip, three module zips, three npm packages)
 ├── test/                     # demo pages and OFD samples
 ├── LICENSE                   # Apache-2.0
 └── 免责声明.md# disclaimer (Chinese)
