@@ -59,6 +59,9 @@ export function emitText(st, ctx, glyphArr) {
 
   let text = '';
   const adv = []; // 逐字 Advance（字号空间），与 glyph 对齐
+  // 已绘宽度（pt，含 TJ 字距）。无 unicode 的字形也要计入 —— 它们同样占据宽度，
+  // 漏算会让后续内容整体左移。
+  let drawnWidth = 0;
   //
   // **一个 glyph 只产出一个字符**，codeList / text / adv 三者严格等长。
   //
@@ -78,9 +81,13 @@ export function emitText(st, ctx, glyphArr) {
   for (const g of glyphArr) {
     if (typeof g === 'number') {
       // TJ 字距：与 glyph.width 同单位（1/1000 em），按规范从当前坐标里减去
-      if (adv.length) adv[adv.length - 1] -= (g / 1000) * sizeTs;
+      const d = (g / 1000) * sizeTs;
+      drawnWidth -= d;
+      if (adv.length) adv[adv.length - 1] -= d;
       continue;
     }
+    const w = (g.width / 1000) * sizeTs;
+    drawnWidth += w;
     const u = g.unicode || '';
     if (!u) continue;
     const firstCp = u.codePointAt(0); // 首码点即该字形的可见字符
@@ -88,8 +95,15 @@ export function emitText(st, ctx, glyphArr) {
     const code = g.fontChar ? g.fontChar.codePointAt(0) : firstCp;
     text += String.fromCodePoint(firstCp);
     codeList.push(code);
-    adv.push((g.width / 1000) * sizeTs);
+    adv.push(w);
   }
+  // 文本矩阵推进：pdf.js 的 showText / showSpacedText 只交来字形列表，不更新 Tm，
+  // 调用方必须按已绘宽度**后乘**平移。旧实现不推进，同一行连续的 Tj/TJ
+  // 全部叠印在同一原点（整行文字糊成一团）。tm 的线性部分含 tmScale，
+  // 平移量要先折算回文本空间；这里必须在任何提前 return 之前执行 ——
+  // 文字被 visible() 剔掉时矩阵照样要往前走。
+  if (tmScale > 1e-9 && drawnWidth)
+    ts.tm = matMul(ts.tm, [1, 0, 0, 1, drawnWidth / tmScale, 0]);
   if (!text) return '';
 
   const fid = ensureFont(ctx, fontName);

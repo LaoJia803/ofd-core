@@ -35,14 +35,34 @@ export function imageToRgba(img) {
     return out;
   }
   if (img.kind === 1) {
-    if (src.length < n) return null;
+    // pdf.js 的 ImageKind.GRAYSCALE_1BPP 是**位打包**数据：每行 ceil(w/8) 字节、
+    // 每字节 8 像素、高位在前，1=白 0=黑（DeviceGray 默认 Decode）。旧实现按
+    // 8bit/像素处理并校验 src.length >= w*h，打包数据必然不满足 → 扫描件整块丢弃。
+    // 仍保留 8bit 分支：个别路径可能已把 1bpp 展开成每像素 1 字节。
+    if (src.length >= n) {
+      const out = Buffer.alloc(n * 4);
+      for (let i = 0, o = 0; i < n; i++) {
+        const v = src[i];
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = 255;
+      }
+      return out;
+    }
+    const stride = (img.width + 7) >> 3;
+    if (src.length < stride * img.height) return null;
     const out = Buffer.alloc(n * 4);
-    for (let i = 0, o = 0; i < n; i++) {
-      const v = src[i];
-      out[o++] = v;
-      out[o++] = v;
-      out[o++] = v;
-      out[o++] = 255;
+    let o = 0;
+    for (let y = 0; y < img.height; y++) {
+      const row = y * stride;
+      for (let x = 0; x < img.width; x++) {
+        const v = (src[row + (x >> 3)] >> (7 - (x & 7))) & 1 ? 255 : 0;
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = 255;
+      }
     }
     return out;
   }

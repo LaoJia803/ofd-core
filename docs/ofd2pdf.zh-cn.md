@@ -33,10 +33,11 @@ npm 包是依赖式的：它在 `dependencies` 里声明 `ofd-core`，**不**把
 | --- | --- |
 | `<path>` | `M/L/C/Q/A/Z` 直转 PDF 路径（Q 二次贝塞尔转三次、A 弧拆分为三次贝塞尔） |
 | `<rect>` / `<ellipse>` | 转为对应 PDF 绘制操作 |
-| `<text>` | Type0 字体（`/STSong-Light` + `/UniGB-UCS2-H`，依赖阅读器内置中文字体，不嵌入字体文件） |
-| `<image>` | JPEG 直嵌（`DCTDecode`）；PNG / BMP（1/4/8/24/32 位、RLE8/RLE4）/ GIF（透明、LZW、隔行）解码为 RGBA 后 Flate 压缩，透明通道保留（生成 `SMask`） |
-| `<g>` | `q`/`Q` 包裹，`transform` 映射为 PDF `cm` |
-| `clipPath` | 仅支持由 `<rect>` 组成的裁切路径，映射为 `re W n`；含其他形状时静默忽略 |
+| `<text>` | ASCII 用标准 14 字体（Helvetica / Times / Courier，含粗斜体变体）；中文用 Adobe-GB1 标准 CID 字体（宋体 `/STSong-Light`、黑体 `/STHeiti-*`、楷体 `/STKaiti`、仿宋 `/STFangsong-Light`）。均不嵌入字体文件 |
+| `<image>` | JPEG 直嵌（`DCTDecode`，按 SOF 通道数选 `DeviceGray`/`DeviceRGB`/`DeviceCMYK`）；PNG / BMP（1/4/8/24/32 位、RLE8/RLE4）/ GIF（透明、LZW、隔行）解码为 RGBA 后 Flate 压缩，透明通道保留（生成 `SMask`）；`opacity` 映射为 ExtGState |
+| `<g>` | `q`/`Q` 包裹，`transform` 映射为 PDF `cm`，`opacity` / `mix-blend-mode` 映射为 ExtGState，`clip-path` 生效 |
+| `clipPath` | 支持 `<rect>` / `<path>` / `<ellipse>` 组成的裁切路径，映射为 `W n`（evenodd 用 `W* n`）；`<g>` 与各图元的 `clip-path` 均生效 |
+| 渐变（`linearGradient` / `radialGradient`） | 映射为 PDF 着色字典（`/ShadingType 2` 轴向、`/ShadingType 3` 径向，`/FunctionType 3` 分段函数），路径先裁切再 `sh` 上色；渐变描边与渐变文字退化为中值纯色，色标透明度用平均 alpha 近似 |
 
 单位换算：1 mm = 72/25.4 pt，页面尺寸由 `getPageDimensions` 提供。
 
@@ -49,7 +50,7 @@ npm 包是依赖式的：它在 `dependencies` 里声明 `ofd-core`，**不**把
 图像解码分两条路径，输出统一为 RGBA：
 
 - **浏览器**：JPEG 直接嵌入（`/DCTDecode`，不解码）；PNG/BMP/GIF 交给 canvas 解码（Blob → Image → `getImageData`），浏览器能显示的图像形式都能处理（PNG 隔行、RLE、GIF 动画等），GIF 动画取首帧，透明通道由浏览器原生解析
-- **Node**：回退到内置纯 JS 解码器（`decodePng` / `decodeBmp` / `decodeGif`），支持 PNG（8/16 位、灰度/真彩/调色板/RGBA）、BMP（1/4/8/24/32 位、RLE8/RLE4）、GIF（87a/89a、透明、隔行）；**PNG 隔行扫描不支持**，会 `console.warn` 并跳过该图像
+- **Node**：回退到内置纯 JS 解码器（`decodePng` / `decodeBmp` / `decodeGif`），支持 PNG（8/16 位、灰度/真彩/调色板/RGBA、Adam7 隔行）、BMP（1/4/8/24/32 位、RLE8/RLE4）、GIF（87a/89a、透明、隔行）
 
 RGBA 数据经 deflate 压缩后写入 PDF；存在半透明像素时，额外生成一张 DeviceGray 灰度图作为 SMask 表达 alpha。
 
@@ -200,8 +201,8 @@ const TOPDF = require('./build/ofd2pdf/ofd2pdf.js');
 
 - **依赖顺序**：`ofd2pdf.js` 必须后于 `ofd.js` 加载，否则 `ofdToPdf` 抛出「需要先加载 ofd.js」
 - **压缩能力**：浏览器优先用 `CompressionStream`，Node 用内置 `zlib`；两者都不可用时 deflate 失败
-- **中文字体**：文本使用 `/STSong-Light` + `/UniGB-UCS2-H`，依赖阅读器内置中文字体，不嵌入字体文件；楷体、黑体等字体会以宋体呈现
+- **字体**：ASCII 走标准 14 字体（Helvetica / Times / Courier，粗体与斜体用对应的 -Bold / -Italic 变体），中文走 Adobe-GB1 标准 CID 字体（宋体 `/STSong-Light`、黑体 `/STHeiti-Light` 与 `/STHeiti-Regular`、楷体 `/STKaiti`、仿宋 `/STFangsong-Light`）；都不嵌入字体文件，字形由阅读器决定（非黑体字体的粗体用描画两遍近似）
 - **图像格式**：支持 JPEG（直嵌）、PNG、BMP（1/4/8/24/32 位，含 RLE 压缩）、GIF（87a/89a，含透明与隔行）；TIFF 由 `ofd.js` 预先转换为 BMP 数据源后一并支持；不支持的格式或解码失败会 `console.warn` 并跳过该图像（页面其余内容不受影响）
-- **透明通道**：浏览器经 canvas 原生解码、Node 经纯 JS 解码为 RGBA，保留 alpha 并生成 SMask；Node 路径不支持 PNG 隔行扫描，GIF 多帧动画仅取首帧
-- **已知与原件可能存在差异**：中文字体统一以宋体呈现（不嵌入字体文件）、注释与印章显示可能不完整、Node 路径不支持 PNG 隔行扫描
+- **透明通道**：浏览器经 canvas 原生解码、Node 经纯 JS 解码为 RGBA，保留 alpha 并生成 SMask；GIF 多帧动画仅取首帧
+- **已知与原件可能存在差异**：字形由阅读器内置字体决定（不嵌入字体文件，个别字可能缺字）、注释与印章显示可能不完整、渐变描边与文字只能用纯色近似
 

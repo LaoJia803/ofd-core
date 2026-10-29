@@ -20,7 +20,7 @@ export function parseSvgXml(str) {
     skipWs();
     let tag = '';
     while (pos < len && !/[\s/>]/.test(str[pos])) tag += str[pos++];
-    const el = { tag: tag.toLowerCase(), attrs: {}, children: [], text: '' };
+    const el = { tag: tag.toLowerCase(), attrs: {}, children: [], text: '', rawText: '' };
     skipWs();
     // 属性
     for (;;) {
@@ -64,7 +64,11 @@ export function parseSvgXml(str) {
         text += str[pos++];
       }
     }
-    if (text) el.text = unescapeXml(text).trim();
+    if (text) {
+      // text 去掉首尾空白（元素间排版）；rawText 原样保留，供 tspan 逐字定位使用
+      el.rawText = unescapeXml(text);
+      el.text = el.rawText.trim();
+    }
     return el;
   }
   return parseEl();

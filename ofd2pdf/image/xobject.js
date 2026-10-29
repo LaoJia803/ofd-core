@@ -66,8 +66,12 @@ export async function addImage(dataUrl, ctx) {
   let im;
   try {
     if (/jpe?g$/i.test(mime)) {
+      // DCTDecode 直嵌：只读尺寸/通道数，不重新编码；通道数决定颜色空间
       const d = parseJpegDims(bytes);
-      im = { w: d.w, h: d.h, data: bytes, filter: 'DCTDecode' };
+      const cs = d.comps === 1 ? 'DeviceGray' : d.comps === 4 ? 'DeviceCMYK' : 'DeviceRGB';
+      im = { w: d.w, h: d.h, data: bytes, filter: 'DCTDecode', colorSpace: cs };
+      // Adobe 写出的 CMYK JPEG 是反相的，靠 Decode 反相回来
+      if (cs === 'DeviceCMYK' && d.adobe) im.decode = [1, 0, 1, 0, 1, 0, 1, 0];
     } else if (/png$/i.test(mime)) {
       im = await decodeToXObject(bytes, 'image/png', decodePng);
     } else if (/bmp$/i.test(mime)) {

@@ -105,8 +105,19 @@
   }
 
   // ofd2pdf/pdf/writer.js
-  function assemblePdf(pages, imageReg, alphaReg, opts) {
-    opts = opts || {};
+  function assemblePdf(pages, a, b, c) {
+    let regs, opts;
+    if (a && (a.imageReg || a.fontReg || a.shadingReg || a.alphaReg)) {
+      regs = a;
+      opts = b || {};
+    } else {
+      regs = { imageReg: a, alphaReg: b };
+      opts = c || {};
+    }
+    const imageReg = regs.imageReg || /* @__PURE__ */ new Map();
+    const alphaReg = regs.alphaReg || /* @__PURE__ */ new Map();
+    const shadingReg = regs.shadingReg || /* @__PURE__ */ new Map();
+    const fontReg = regs.fontReg || /* @__PURE__ */ new Map();
     const enc = new TextEncoder();
     const chunks = [];
     const offsets = [];
@@ -120,20 +131,28 @@
       pageObjs.push(obj++);
       contentObjs.push(obj++);
     }
-    const fontObj = obj++;
-    const cidObj = obj++;
-    const fdObj = obj++;
-    const gsObjs = {}, imgObjs = {}, smaskObjs = {};
-    for (const a of alphaReg.keys()) gsObjs[alphaReg.get(a).name] = obj++;
+    const fontObjs = {};
+    for (const f of fontReg.values()) {
+      const objs = { kind: f.kind, base: f.base };
+      if (f.kind === "cid") {
+        objs.type0 = obj++;
+        objs.cid = obj++;
+        objs.fd = obj++;
+      } else objs.type1 = obj++;
+      fontObjs[f.name] = objs;
+    }
+    const gsObjs = {}, shadingObjs = {}, imgObjs = {}, smaskObjs = {};
+    for (const a2 of alphaReg.keys()) gsObjs[alphaReg.get(a2).name] = obj++;
+    for (const s of shadingReg.values()) shadingObjs[s.name] = obj++;
     for (const key of imageReg.keys()) {
       const im = imageReg.get(key);
       imgObjs[im.name] = obj++;
       if (im.smask) smaskObjs[im.name] = obj++;
     }
     const size = obj;
-    const pushBytes = (b) => {
-      chunks.push(b);
-      byteOff += b.length;
+    const pushBytes = (b2) => {
+      chunks.push(b2);
+      byteOff += b2.length;
     };
     const emit = (s) => {
       offsets.push(byteOff);
@@ -150,32 +169,55 @@
     for (let i = 0; i < pages.length; i++) {
       const p = pages[i];
       const media = "[0 0 " + fmtNum(p.w * MM_TO_PT) + " " + fmtNum(p.h * MM_TO_PT) + "]";
-      let ext = "";
+      let fontRes = "";
+      if (p.fonts && p.fonts.length) {
+        fontRes = " /Font << " + p.fonts.map((n) => {
+          const o = fontObjs[n];
+          return "/" + n + " " + (o.kind === "cid" ? o.type0 : o.type1) + " 0 R";
+        }).join(" ") + " >>";
+      }
+      let gsRes = "";
       if (p.alphas && p.alphas.length) {
-        ext = " /ExtGState << " + p.alphas.map((n) => "/" + n + " " + gsObjs[n] + " 0 R").join(" ") + " >>";
+        gsRes = " /ExtGState << " + p.alphas.map((n) => "/" + n + " " + gsObjs[n] + " 0 R").join(" ") + " >>";
       }
-      let xo = "";
+      let patRes = "";
+      if (p.shadings && p.shadings.length) {
+        patRes = " /Shading << " + p.shadings.map((n) => "/" + n + " " + shadingObjs[n] + " 0 R").join(" ") + " >>";
+      }
+      let xoRes = "";
       if (p.images && p.images.length) {
-        xo = " /XObject << " + p.images.map((n) => "/" + n + " " + imgObjs[n] + " 0 R").join(" ") + " >>";
+        xoRes = " /XObject << " + p.images.map((n) => "/" + n + " " + imgObjs[n] + " 0 R").join(" ") + " >>";
       }
-      const resources = "<< /Font << /F1 " + fontObj + " 0 R >>" + ext + xo + " >>";
+      const resources = "<< /ProcSet [/PDF /Text /ImageB /ImageC /ImageI]" + fontRes + gsRes + patRes + xoRes + " >>";
       emit(pageObjs[i] + " 0 obj\n<< /Type /Page /Parent " + pagesObj + " 0 R /MediaBox " + media + " /Resources " + resources + " /Contents " + contentObjs[i] + " 0 R >>\nendobj\n");
       const contentBytes = enc.encode(p.content);
       emit(contentObjs[i] + " 0 obj\n<< /Length " + contentBytes.length + " >>\nstream\n");
       pushBytes(contentBytes);
       pushBytes(streamEnd());
     }
-    emit(fontObj + " 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [" + cidObj + " 0 R] >>\nendobj\n");
-    emit(cidObj + " 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor " + fdObj + " 0 R >>\nendobj\n");
-    emit(fdObj + " 0 obj\n<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [-241 -260 1120 932] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 762 /StemV 80 >>\nendobj\n");
-    for (const a of alphaReg.keys()) {
-      const g = alphaReg.get(a);
+    for (const name of Object.keys(fontObjs)) {
+      const f = fontObjs[name];
+      if (f.kind === "cid") {
+        emit(f.type0 + " 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /" + f.base + " /Encoding /UniGB-UCS2-H /DescendantFonts [" + f.cid + " 0 R] >>\nendobj\n");
+        emit(f.cid + " 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /" + f.base + " /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor " + f.fd + " 0 R >>\nendobj\n");
+        emit(f.fd + " 0 obj\n<< /Type /FontDescriptor /FontName /" + f.base + " /Flags 4 /FontBBox [-241 -260 1120 932] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 762 /StemV 80 >>\nendobj\n");
+      } else {
+        emit(f.type1 + " 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /" + f.base + " /Encoding /WinAnsiEncoding >>\nendobj\n");
+      }
+    }
+    for (const a2 of alphaReg.keys()) {
+      const g = alphaReg.get(a2);
       const dict = "/Type /ExtGState" + (g.a < 1 ? " /ca " + g.a + " /CA " + g.a + " /AIS false" : "") + (g.blend ? " /BM /" + g.blend.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join("") : "");
       emit(gsObjs[g.name] + " 0 obj\n<< " + dict + " >>\nendobj\n");
     }
+    for (const s of shadingReg.values()) {
+      emit(shadingObjs[s.name] + " 0 obj\n" + s.dict + "\nendobj\n");
+    }
     for (const key of imageReg.keys()) {
       const im = imageReg.get(key);
-      let dict = "<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /" + im.filter + " /Length " + im.data.length;
+      const cs = im.colorSpace || "DeviceRGB";
+      let dict = "<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h + " /ColorSpace /" + cs + " /BitsPerComponent 8 /Filter /" + im.filter + " /Length " + im.data.length;
+      if (im.decode) dict += " /Decode [" + im.decode.join(" ") + "]";
       if (im.smask) dict += " /SMask " + smaskObjs[im.name] + " 0 R";
       dict += " >>";
       emit(imgObjs[im.name] + " 0 obj\n" + dict + "\nstream\n");
@@ -196,9 +238,9 @@
     const total = xrefPos + xrefBytes.length;
     const out = new Uint8Array(total);
     let off2 = 0;
-    for (const c of chunks) {
-      out.set(c, off2);
-      off2 += c.length;
+    for (const c2 of chunks) {
+      out.set(c2, off2);
+      off2 += c2.length;
     }
     return out;
   }
@@ -597,6 +639,7 @@
   // ofd2pdf/image/jpeg.js
   function parseJpegDims(bytes) {
     let pos = 2;
+    let adobe = false;
     while (pos + 9 < bytes.length) {
       if (bytes[pos] !== 255) {
         pos++;
@@ -608,10 +651,15 @@
       if (marker === 216 || marker === 217 || marker >= 208 && marker <= 215) continue;
       const segLen = bytes[pos] << 8 | bytes[pos + 1];
       if (segLen < 2 || pos + segLen > bytes.length) break;
+      if (marker === 238 && segLen >= 7 && bytes[pos + 2] === 65 && bytes[pos + 3] === 100 && bytes[pos + 4] === 111 && bytes[pos + 5] === 98 && bytes[pos + 6] === 101) {
+        adobe = true;
+      }
       if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
         return {
           h: bytes[pos + 3] << 8 | bytes[pos + 4],
-          w: bytes[pos + 5] << 8 | bytes[pos + 6]
+          w: bytes[pos + 5] << 8 | bytes[pos + 6],
+          comps: bytes[pos + 7] || 3,
+          adobe
         };
       }
       pos += segLen;
@@ -648,7 +696,7 @@
         break;
       }
     }
-    if (interlace !== 0) throw new Error("PNG 隔行扫描不支持");
+    if (interlace !== 0 && interlace !== 1) throw new Error("PNG 隔行方式 " + interlace + " 不支持");
     if (bitDepth !== 8 && bitDepth !== 16) throw new Error("PNG 位深 " + bitDepth + " 不支持");
     if ([0, 2, 3, 4, 6].indexOf(colorType) < 0) throw new Error("PNG 颜色类型 " + colorType + " 不支持");
     checkImageSize(w, h);
@@ -664,27 +712,54 @@
     const bpp = ch * depthBytes;
     const rowBytes = w * ch * depthBytes;
     const recon = new Uint8Array(h * rowBytes);
-    let prev = new Uint8Array(rowBytes);
-    let src = 0;
-    for (let y = 0; y < h; y++) {
-      const f = all[src++];
-      const row = recon.subarray(y * rowBytes, (y + 1) * rowBytes);
-      for (let x = 0; x < rowBytes; x++) {
-        const left = x >= bpp ? row[x - bpp] : 0;
-        const up = prev[x];
-        const ul = x >= bpp ? prev[x - bpp] : 0;
-        let v = all[src++];
-        if (f === 1) v += left;
-        else if (f === 2) v += up;
-        else if (f === 3) v += left + up >> 1;
-        else if (f === 4) {
-          const p = left + up - ul;
-          const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - ul);
-          v += pa <= pb && pa <= pc ? left : pb <= pc ? up : ul;
+    const readScanlines = (src, pw, ph, passRowBytes) => {
+      const buf = new Uint8Array(ph * passRowBytes);
+      let prev = new Uint8Array(passRowBytes);
+      for (let y = 0; y < ph; y++) {
+        const f = all[src++];
+        const row = buf.subarray(y * passRowBytes, (y + 1) * passRowBytes);
+        for (let x = 0; x < passRowBytes; x++) {
+          const left = x >= bpp ? row[x - bpp] : 0;
+          const up = prev[x];
+          const ul = x >= bpp ? prev[x - bpp] : 0;
+          let v = all[src++];
+          if (f === 1) v += left;
+          else if (f === 2) v += up;
+          else if (f === 3) v += left + up >> 1;
+          else if (f === 4) {
+            const p = left + up - ul;
+            const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - ul);
+            v += pa <= pb && pa <= pc ? left : pb <= pc ? up : ul;
+          }
+          row[x] = v & 255;
         }
-        row[x] = v & 255;
+        prev = row;
       }
-      prev = row;
+      return { buf, next: src };
+    };
+    if (interlace === 0) {
+      const r = readScanlines(0, w, h, rowBytes);
+      recon.set(r.buf);
+    } else {
+      const PASSES = [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]];
+      let src = 0;
+      for (const ps of PASSES) {
+        const x0 = ps[0], y0 = ps[1], dx = ps[2], dy = ps[3];
+        const pw = Math.ceil((w - x0) / dx), ph = Math.ceil((h - y0) / dy);
+        if (pw <= 0 || ph <= 0) continue;
+        const passRowBytes = pw * bpp;
+        const r = readScanlines(src, pw, ph, passRowBytes);
+        src = r.next;
+        for (let py = 0; py < ph; py++) {
+          const rowOff = (y0 + py * dy) * rowBytes;
+          const pOff = py * passRowBytes;
+          for (let px = 0; px < pw; px++) {
+            const o2 = rowOff + (x0 + px * dx) * bpp;
+            const po = pOff + px * bpp;
+            for (let k = 0; k < bpp; k++) recon[o2 + k] = r.buf[po + k];
+          }
+        }
+      }
     }
     const rgba = new Uint8Array(w * h * 4);
     let hasAlpha = false;
@@ -785,7 +860,9 @@
     try {
       if (/jpe?g$/i.test(mime)) {
         const d = parseJpegDims(bytes);
-        im = { w: d.w, h: d.h, data: bytes, filter: "DCTDecode" };
+        const cs = d.comps === 1 ? "DeviceGray" : d.comps === 4 ? "DeviceCMYK" : "DeviceRGB";
+        im = { w: d.w, h: d.h, data: bytes, filter: "DCTDecode", colorSpace: cs };
+        if (cs === "DeviceCMYK" && d.adobe) im.decode = [1, 0, 1, 0, 1, 0, 1, 0];
       } else if (/png$/i.test(mime)) {
         im = await decodeToXObject(bytes, "image/png", decodePng);
       } else if (/bmp$/i.test(mime)) {
@@ -823,7 +900,7 @@
       skipWs();
       let tag = "";
       while (pos < len && !/[\s/>]/.test(str[pos])) tag += str[pos++];
-      const el = { tag: tag.toLowerCase(), attrs: {}, children: [], text: "" };
+      const el = { tag: tag.toLowerCase(), attrs: {}, children: [], text: "", rawText: "" };
       skipWs();
       for (; ; ) {
         if (pos >= len) break;
@@ -873,7 +950,10 @@
           text += str[pos++];
         }
       }
-      if (text) el.text = unescapeXml(text).trim();
+      if (text) {
+        el.rawText = unescapeXml(text);
+        el.text = el.rawText.trim();
+      }
       return el;
     }
     return parseEl();
@@ -1061,6 +1141,173 @@
     return m ? m[1] : null;
   }
 
+  // ofd2pdf/pdf/font.js
+  function familyKind(fam) {
+    const s = String(fam || "").toLowerCase();
+    if (/wingdings|webdings|dingbat|symbol|cmsy|cmex/.test(s)) return "symbol";
+    if (/courier|monospace|consolas|menlo|cmtt|mono\b/.test(s)) return "mono";
+    if (/楷|kai/.test(s)) return "kai";
+    if (/仿宋|fangsong/.test(s)) return "fangsong";
+    if (/黑|hei|yahei|雅黑|sans|arial|helvetica|verdana|calibri|segoe|tahoma|cmss/.test(s)) return "sans";
+    return "serif";
+  }
+  var TYPE1 = {
+    mono: ["Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique"],
+    sans: ["Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"],
+    serif: ["Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic"]
+  };
+  var CJK = {
+    serif: { regular: "STSong-Light" },
+    sans: { regular: "STHeiti-Light", bold: "STHeiti-Regular" },
+    kai: { regular: "STKaiti" },
+    fangsong: { regular: "STFangsong-Light" },
+    symbol: { regular: "STSong-Light" },
+    mono: { regular: "STSong-Light" }
+  };
+  function resolveFont(attrs, cidOnly) {
+    attrs = attrs || {};
+    const kind = familyKind(unescapeXml(attrs["font-family"] || ""));
+    const weight = String(attrs["font-weight"] || "normal").toLowerCase();
+    const style = String(attrs["font-style"] || "normal").toLowerCase();
+    const bold = weight === "bold" || weight === "bolder" || (parseInt(weight, 10) || 0) >= 600;
+    const italic = style === "italic" || style === "oblique";
+    if (!cidOnly && TYPE1[kind]) {
+      const names = TYPE1[kind];
+      return {
+        kind: "type1",
+        base: names[(bold ? 1 : 0) + (italic ? 2 : 0)],
+        bold,
+        italic,
+        syntheticBold: false
+      };
+    }
+    const fam = CJK[kind] || CJK.serif;
+    let base = fam.regular;
+    let syntheticBold = false;
+    if (bold) {
+      if (fam.bold) base = fam.bold;
+      else syntheticBold = true;
+    }
+    return { kind: "cid", base, bold, italic, syntheticBold };
+  }
+  function ensureFont(font, ctx) {
+    const key = font.kind + "|" + font.base;
+    let e = ctx.fontReg.get(key);
+    if (!e) {
+      e = { name: "F" + (ctx.fontReg.size + 1), kind: font.kind, base: font.base };
+      ctx.fontReg.set(key, e);
+    }
+    ctx.fonts.add(e.name);
+    return e.name;
+  }
+  function encodeChar(font, ch) {
+    if (font.kind === "type1") {
+      return ch.codePointAt(0).toString(16).padStart(2, "0");
+    }
+    return utf16beHex(ch);
+  }
+  function isType1Safe(text) {
+    for (const ch of String(text)) {
+      const c = ch.codePointAt(0);
+      if (c < 32 || c > 126) return false;
+    }
+    return true;
+  }
+
+  // ofd2pdf/pdf/shading.js
+  var clamp01 = (v) => Math.max(0, Math.min(1, v));
+  function parseGradient(el) {
+    const stops = [];
+    for (const c of el.children) {
+      if (c.tag !== "stop") continue;
+      const raw = String(c.attrs.offset == null ? "0" : c.attrs.offset);
+      let off = parseFloat(raw);
+      if (!isFinite(off)) off = 0;
+      if (/%$/.test(raw)) off /= 100;
+      const col = parseCssColor(c.attrs["stop-color"]) || { r: 0, g: 0, b: 0 };
+      const op = parseFloat(c.attrs["stop-opacity"]);
+      stops.push({
+        offset: clamp01(off),
+        r: col.r,
+        g: col.g,
+        b: col.b,
+        a: isFinite(op) ? clamp01(op) : 1
+      });
+    }
+    if (!stops.length) return null;
+    stops.sort((x, y) => x.offset - y.offset);
+    if (stops.length === 1) stops.push(Object.assign({}, stops[0], { offset: 1 }));
+    const extend = [true, true];
+    const num = (k) => {
+      const v = parseFloat(el.attrs[k]);
+      return isFinite(v) ? v : 0;
+    };
+    if (el.tag === "lineargradient") {
+      const coords = [num("x1"), num("y1"), num("x2"), num("y2")];
+      if (Math.abs(coords[0] - coords[2]) < 1e-9 && Math.abs(coords[1] - coords[3]) < 1e-9) return null;
+      return { type: 2, coords, stops, extend };
+    }
+    const r = num("r");
+    if (!(r > 0)) return null;
+    return { type: 3, coords: [num("cx"), num("cy"), 0, num("cx"), num("cy"), r], stops, extend };
+  }
+  var rgb = (c) => [fmtNum(c.r / 255), fmtNum(c.g / 255), fmtNum(c.b / 255)].join(" ");
+  var segmentFn = (c0, c1) => "<< /FunctionType 2 /Domain [0 1] /C0 [" + rgb(c0) + "] /C1 [" + rgb(c1) + "] /N 1 >>";
+  function stitchFunction(stops) {
+    const fns = [], bounds = [], enc = [];
+    for (let i = 0; i < stops.length - 1; i++) {
+      fns.push(segmentFn(stops[i], stops[i + 1]));
+      enc.push("0 1");
+      if (i < stops.length - 2) bounds.push(fmtNum(stops[i + 1].offset));
+    }
+    return "<< /FunctionType 3 /Domain [0 1] /Functions [" + fns.join(" ") + "] /Bounds [" + bounds.join(" ") + "] /Encode [" + enc.join(" ") + "] >>";
+  }
+  function normalizeStops(stops) {
+    const out = [];
+    for (const s of stops) {
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.offset - s.offset) < 1e-6) out[out.length - 1] = s;
+      else out.push(s);
+    }
+    if (out[0].offset > 1e-6) out.unshift(Object.assign({}, out[0], { offset: 0 }));
+    const tail = out[out.length - 1];
+    if (tail.offset < 1 - 1e-6) out.push(Object.assign({}, tail, { offset: 1 }));
+    return out;
+  }
+  function buildShadingDict(g) {
+    const stops = normalizeStops(g.stops);
+    const ext = g.extend && g.extend[0] && g.extend[1] ? "true true" : g.extend && g.extend[0] ? "true false" : "false false";
+    return "<< /ShadingType " + g.type + " /ColorSpace /DeviceRGB /Coords [" + g.coords.map(fmtNum).join(" ") + "] /Function " + stitchFunction(stops) + " /Extend [" + ext + "] >>";
+  }
+  function gradientAlpha(g) {
+    if (!g || !g.stops || !g.stops.length) return null;
+    let sum = 0;
+    for (const s of g.stops) sum += s.a;
+    const a = sum / g.stops.length;
+    return a < 1 ? a : null;
+  }
+  function gradientColorAt(g, t) {
+    const stops = g && g.stops;
+    if (!stops || !stops.length) return { r: 0, g: 0, b: 0 };
+    t = clamp01(t == null ? 0.5 : t);
+    if (t <= stops[0].offset) return { r: stops[0].r, g: stops[0].g, b: stops[0].b };
+    for (let i = 1; i < stops.length; i++) {
+      const s1 = stops[i];
+      if (t <= s1.offset) {
+        const s0 = stops[i - 1];
+        const span = s1.offset - s0.offset;
+        const k = span > 1e-9 ? (t - s0.offset) / span : 0;
+        return {
+          r: Math.round(s0.r + (s1.r - s0.r) * k),
+          g: Math.round(s0.g + (s1.g - s0.g) * k),
+          b: Math.round(s0.b + (s1.b - s0.b) * k)
+        };
+      }
+    }
+    const last = stops[stops.length - 1];
+    return { r: last.r, g: last.g, b: last.b };
+  }
+
   // ofd2pdf/pdf/render.js
   function blendOf(el) {
     const m = /mix-blend-mode\s*:\s*([a-zA-Z]+)/.exec(el.attrs.style || "");
@@ -1079,22 +1326,153 @@
     ctx.alphas.add(g.name);
     return g.name;
   }
-  function paintAttrs(el, ctx, parts) {
-    const fill = el.attrs.fill && el.attrs.fill !== "none" ? parseCssColor(el.attrs.fill) : null;
-    const stroke = el.attrs.stroke && el.attrs.stroke !== "none" ? parseCssColor(el.attrs.stroke) : null;
-    const alpha = fill && fill.a != null && fill.a < 1 ? fill.a : stroke && stroke.a != null && stroke.a < 1 ? stroke.a : null;
-    const gs = ensureGState(alpha, blendOf(el), ctx);
-    if (gs) parts.push("/" + gs + " gs");
-    if (stroke) {
-      if (el.attrs["stroke-width"]) parts.push(fmtNum(parseFloat(el.attrs["stroke-width"])) + " w");
-      const da = numList(el.attrs["stroke-dasharray"]);
-      if (da.length) parts.push("[" + da.map(fmtNum).join(" ") + "] 0 d");
+  function ensureShading(id, ctx) {
+    const g = ctx.gradientDefs.get(id);
+    if (!g) return null;
+    const dict = buildShadingDict(g);
+    let e = ctx.shadingReg.get(dict);
+    if (!e) {
+      e = { name: "Sh" + ctx.shadingReg.size, dict };
+      ctx.shadingReg.set(dict, e);
     }
-    if (fill) parts.push(fmtNum(fill.r / 255) + " " + fmtNum(fill.g / 255) + " " + fmtNum(fill.b / 255) + " rg");
-    if (stroke) parts.push(fmtNum(stroke.r / 255) + " " + fmtNum(stroke.g / 255) + " " + fmtNum(stroke.b / 255) + " RG");
-    if (fill && stroke) parts.push("B");
-    else if (fill) parts.push("f");
-    else if (stroke) parts.push("S");
+    ctx.shadings.add(e.name);
+    return e.name;
+  }
+  function paintSource(raw, ctx) {
+    if (!raw || raw === "none") return null;
+    const c = parseCssColor(raw);
+    if (c) return { color: c };
+    const id = parseClipRef(raw);
+    if (!id) return null;
+    const g = ctx.gradientDefs.get(id);
+    if (!g) return null;
+    const name = ensureShading(id, ctx);
+    return name ? { gradient: g, shading: name } : null;
+  }
+  var alphaOf = (c) => c && c.a != null && c.a < 1 ? c.a : null;
+  function colorOp(c, isStroke) {
+    return fmtNum(c.r / 255) + " " + fmtNum(c.g / 255) + " " + fmtNum(c.b / 255) + (isStroke ? " RG" : " rg");
+  }
+  function strokeStyle(el, parts) {
+    const w = parseFloat(el.attrs["stroke-width"]);
+    if (isFinite(w)) parts.push(fmtNum(w) + " w");
+    const da = numList(el.attrs["stroke-dasharray"]);
+    if (da.length) parts.push("[" + da.map(fmtNum).join(" ") + "] 0 d");
+  }
+  function paintShape(el, ctx, parts, pathOps, evenodd) {
+    const fill = paintSource(el.attrs.fill, ctx);
+    const stroke = paintSource(el.attrs.stroke, ctx);
+    if (!fill && !stroke) return;
+    const blend = blendOf(el);
+    parts.push("q");
+    if (fill && fill.color && stroke && stroke.color) {
+      const fa = alphaOf(fill.color), sa = alphaOf(stroke.color);
+      const gs = ensureGState(fa == null ? sa : sa == null ? fa : Math.min(fa, sa), blend, ctx);
+      if (gs) parts.push("/" + gs + " gs");
+      strokeStyle(el, parts);
+      parts.push(pathOps);
+      parts.push(colorOp(fill.color, false), colorOp(stroke.color, true));
+      parts.push(evenodd ? "B*" : "B");
+    } else {
+      if (fill) {
+        const gs = ensureGState(fill.color ? alphaOf(fill.color) : gradientAlpha(fill.gradient), blend, ctx);
+        parts.push("q");
+        if (gs) parts.push("/" + gs + " gs");
+        parts.push(pathOps);
+        if (fill.shading) {
+          parts.push(evenodd ? "W* n" : "W n");
+          parts.push("/" + fill.shading + " sh");
+        } else {
+          parts.push(colorOp(fill.color, false));
+          parts.push(evenodd ? "f*" : "f");
+        }
+        parts.push("Q");
+      }
+      if (stroke) {
+        const col = stroke.color || gradientColorAt(stroke.gradient, 0.5);
+        const gs = ensureGState(stroke.color ? alphaOf(stroke.color) : gradientAlpha(stroke.gradient), blend, ctx);
+        parts.push("q");
+        if (gs) parts.push("/" + gs + " gs");
+        strokeStyle(el, parts);
+        parts.push(pathOps);
+        parts.push(colorOp(col, true));
+        parts.push("S");
+        parts.push("Q");
+      }
+    }
+    parts.push("Q");
+  }
+  function registerClip(el, ctx) {
+    const id = el.attrs.id;
+    if (!id) return;
+    const shapes = [];
+    for (const c of el.children) {
+      const rule = c.attrs["clip-rule"] || c.attrs["fill-rule"] || "";
+      const tm = c.attrs.transform ? parseTransform(c.attrs.transform) : null;
+      if (c.tag === "rect") {
+        shapes.push({
+          kind: "rect",
+          x: parseFloat(c.attrs.x) || 0,
+          y: parseFloat(c.attrs.y) || 0,
+          w: parseFloat(c.attrs.width) || 0,
+          h: parseFloat(c.attrs.height) || 0,
+          tm,
+          rule
+        });
+      } else if (c.tag === "path") {
+        if (c.attrs.d) shapes.push({ kind: "path", d: c.attrs.d, tm, rule });
+      } else if (c.tag === "ellipse" || c.tag === "circle") {
+        const cx = parseFloat(c.attrs.cx) || 0, cy = parseFloat(c.attrs.cy) || 0;
+        const rx = c.tag === "circle" ? parseFloat(c.attrs.r) || 0 : parseFloat(c.attrs.rx) || 0;
+        const ry = c.tag === "circle" ? parseFloat(c.attrs.r) || 0 : parseFloat(c.attrs.ry) || 0;
+        if (rx && ry) shapes.push({ kind: "ellipse", cx, cy, rx, ry, tm, rule });
+      }
+    }
+    ctx.clips.set(id, shapes);
+  }
+  function collectClips(root, ctx) {
+    (function walk(el) {
+      for (const c of el.children) {
+        if (c.tag === "clippath") registerClip(c, ctx);
+        walk(c);
+      }
+    })(root);
+  }
+  function ellipsePath(cx, cy, rx, ry) {
+    const out = [fmtNum(cx + rx) + " " + fmtNum(cy) + " m"];
+    for (const s of ellipseToCubics(cx, cy, rx, ry)) {
+      out.push(fmtNum(s.c1[0]) + " " + fmtNum(s.c1[1]) + " " + fmtNum(s.c2[0]) + " " + fmtNum(s.c2[1]) + " " + fmtNum(s.p[0]) + " " + fmtNum(s.p[1]) + " c");
+    }
+    out.push("h");
+    return out.join("\n");
+  }
+  function rectPath(s) {
+    const x = s.x, y = s.y, w = s.w, h = s.h;
+    if (!w || !h) return null;
+    if (!s.tm) return fmtNum(x) + " " + fmtNum(y) + " " + fmtNum(w) + " " + fmtNum(h) + " re";
+    const m = s.tm;
+    const pt = (px, py) => [fmtNum(m[0] * px + m[2] * py + m[4]), fmtNum(m[1] * px + m[3] * py + m[5])];
+    const p = [pt(x, y), pt(x + w, y), pt(x + w, y + h), pt(x, y + h)];
+    return p[0].join(" ") + " m\n" + p.slice(1).map((q) => q.join(" ") + " l").join("\n") + "\nh";
+  }
+  function emitClip(id, ctx, parts) {
+    const shapes = ctx.clips.get(id);
+    if (!shapes || !shapes.length) return false;
+    let evenodd = false, n = 0;
+    for (const s of shapes) {
+      if (s.rule === "evenodd") evenodd = true;
+      let ops = null;
+      if (s.kind === "rect") ops = rectPath(s);
+      else if (s.kind === "path") ops = pathToPdf(s.d, s.tm);
+      else if (s.kind === "ellipse") ops = ellipsePath(s.cx, s.cy, s.rx, s.ry);
+      if (ops) {
+        parts.push(ops);
+        n++;
+      }
+    }
+    if (!n) return false;
+    parts.push(evenodd ? "W* n" : "W n");
+    return true;
   }
   function renderRect(el, ctx, parts) {
     const x = parseFloat(el.attrs.x) || 0;
@@ -1102,38 +1480,22 @@
     const w = parseFloat(el.attrs.width) || 0;
     const h = parseFloat(el.attrs.height) || 0;
     if (!w || !h) return;
-    const fill = el.attrs.fill ? parseCssColor(el.attrs.fill) : null;
-    if (fill && fill.r === 255 && fill.g === 255 && fill.b === 255 && !el.attrs.stroke) return;
+    const fillColor = el.attrs.fill ? parseCssColor(el.attrs.fill) : null;
+    if (fillColor && fillColor.r === 255 && fillColor.g === 255 && fillColor.b === 255 && !el.attrs.stroke && x <= 0.01 && y <= 0.01 && x + w >= (ctx.pageW || 0) - 0.01 && y + h >= (ctx.pageH || 0) - 0.01) return;
+    const tm = el.attrs.transform ? parseTransform(el.attrs.transform) : null;
     parts.push("q");
-    parts.push(fmtNum(x) + " " + fmtNum(y) + " " + fmtNum(w) + " " + fmtNum(h) + " re");
-    paintAttrs(el, ctx, parts);
+    if (tm) parts.push(tm.map(fmtNum).join(" ") + " cm");
+    paintShape(el, ctx, parts, fmtNum(x) + " " + fmtNum(y) + " " + fmtNum(w) + " " + fmtNum(h) + " re", false);
     parts.push("Q");
   }
   function renderPath(el, ctx, parts) {
+    if (!el.attrs.d) return;
     const tm = el.attrs.transform ? parseTransform(el.attrs.transform) : null;
-    const path = pathToPdf(el.attrs.d, tm);
+    const path = pathToPdf(el.attrs.d, null);
     if (!path) return;
     parts.push("q");
-    parts.push(path);
-    if (el.attrs["fill-rule"] === "evenodd") {
-      const fill = el.attrs.fill && el.attrs.fill !== "none" ? parseCssColor(el.attrs.fill) : null;
-      const stroke = el.attrs.stroke && el.attrs.stroke !== "none" ? parseCssColor(el.attrs.stroke) : null;
-      const alpha = fill && fill.a != null && fill.a < 1 ? fill.a : stroke && stroke.a != null && stroke.a < 1 ? stroke.a : null;
-      const gs = ensureGState(alpha, blendOf(el), ctx);
-      if (gs) parts.push("/" + gs + " gs");
-      if (stroke) {
-        if (el.attrs["stroke-width"]) parts.push(fmtNum(parseFloat(el.attrs["stroke-width"])) + " w");
-        const da = numList(el.attrs["stroke-dasharray"]);
-        if (da.length) parts.push("[" + da.map(fmtNum).join(" ") + "] 0 d");
-      }
-      if (fill) parts.push(fmtNum(fill.r / 255) + " " + fmtNum(fill.g / 255) + " " + fmtNum(fill.b / 255) + " rg");
-      if (stroke) parts.push(fmtNum(stroke.r / 255) + " " + fmtNum(stroke.g / 255) + " " + fmtNum(stroke.b / 255) + " RG");
-      if (fill && stroke) parts.push("B*");
-      else if (fill) parts.push("f*");
-      else if (stroke) parts.push("S");
-    } else {
-      paintAttrs(el, ctx, parts);
-    }
+    if (tm) parts.push(tm.map(fmtNum).join(" ") + " cm");
+    paintShape(el, ctx, parts, path, el.attrs["fill-rule"] === "evenodd");
     parts.push("Q");
   }
   function renderEllipse(el, ctx, parts) {
@@ -1147,40 +1509,80 @@
       ry = parseFloat(el.attrs.ry) || 0;
     }
     if (!rx || !ry) return;
-    const segs = ellipseToCubics(cx, cy, rx, ry);
+    const tm = el.attrs.transform ? parseTransform(el.attrs.transform) : null;
     parts.push("q");
-    parts.push(fmtNum(cx + rx) + " " + fmtNum(cy) + " m");
-    for (const s of segs) {
-      parts.push(fmtNum(s.c1[0]) + " " + fmtNum(s.c1[1]) + " " + fmtNum(s.c2[0]) + " " + fmtNum(s.c2[1]) + " " + fmtNum(s.p[0]) + " " + fmtNum(s.p[1]) + " c");
-    }
-    parts.push("h");
-    paintAttrs(el, ctx, parts);
+    if (tm) parts.push(tm.map(fmtNum).join(" ") + " cm");
+    paintShape(el, ctx, parts, ellipsePath(cx, cy, rx, ry), false);
     parts.push("Q");
+  }
+  function tspanText(ts) {
+    const raw = ts.rawText != null ? ts.rawText : ts.text;
+    if (!raw) return "";
+    return /[\r\n]/.test(raw) ? raw.trim() : raw;
+  }
+  function glyphMatrix(m, x, y, font, rot) {
+    let tm;
+    if (rot) {
+      const c = Math.cos(rot.ang), s = Math.sin(rot.ang);
+      const s0 = m[0];
+      tm = [s0 * c, s0 * s, s, -c, s0 * rot.cx, rot.cy];
+    } else {
+      tm = [m[0], m[1], -m[2], -m[3], m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+    }
+    if (font.italic && font.kind === "cid" && !rot) {
+      const t = Math.tan(12 * Math.PI / 180);
+      tm = [tm[0], tm[1], tm[0] * t + tm[2], tm[1] * t + tm[3], tm[4], tm[5]];
+    }
+    return tm;
+  }
+  function pushGlyph(parts, font, ch, tm, size) {
+    const hex = encodeChar(font, ch);
+    parts.push(tm.map(fmtNum).join(" ") + " Tm");
+    parts.push("<" + hex + "> Tj");
+    if (font.syntheticBold) {
+      const dx = tm[0] * size * 0.025, dy = tm[1] * size * 0.025;
+      parts.push([tm[0], tm[1], tm[2], tm[3], tm[4] + dx, tm[5] + dy].map(fmtNum).join(" ") + " Tm");
+      parts.push("<" + hex + "> Tj");
+    }
   }
   function renderText(el, ctx, parts) {
     const fillAttr = el.attrs.fill;
     if (fillAttr === "none") return;
-    const fill = parseCssColor(fillAttr) || { r: 0, g: 0, b: 0 };
+    const fillSrc = paintSource(fillAttr, ctx);
+    const fill = fillSrc ? fillSrc.color || gradientColorAt(fillSrc.gradient, 0.5) : { r: 0, g: 0, b: 0 };
+    const fillAlpha = fillSrc ? fillSrc.color ? alphaOf(fillSrc.color) : gradientAlpha(fillSrc.gradient) : null;
     const m = parseTransform(el.attrs.transform || "");
     const fontSize = parseFloat(el.attrs["font-size"]) || 3;
-    const gs = ensureGState(fill.a, blendOf(el), ctx);
-    if (gs) {
-      parts.push("q");
-      parts.push("/" + gs + " gs");
-    }
-    parts.push("BT");
-    parts.push("/F1 " + fmtNum(fontSize) + " Tf");
-    parts.push(fmtNum(fill.r / 255) + " " + fmtNum(fill.g / 255) + " " + fmtNum(fill.b / 255) + " rg");
     const textRuns = [];
     const hasTspan = el.children.some((c) => c.tag === "tspan");
     if (hasTspan) {
       for (const ts of el.children) {
         if (ts.tag !== "tspan") continue;
-        if (ts.text) textRuns.push({ text: ts.text, x: ts.attrs.x, y: ts.attrs.y, transform: ts.attrs.transform });
+        const body = tspanText(ts);
+        if (body) textRuns.push({ text: body, x: ts.attrs.x, y: ts.attrs.y, transform: ts.attrs.transform });
       }
     } else if (el.text) {
       textRuns.push({ text: el.text, x: el.attrs.x, y: el.attrs.y, transform: null });
     }
+    if (!textRuns.length) return;
+    let font = resolveFont(el.attrs);
+    if (font.kind === "type1") {
+      for (const r of textRuns) {
+        if (!isType1Safe(r.text)) {
+          font = resolveFont(el.attrs, true);
+          break;
+        }
+      }
+    }
+    const fname = ensureFont(font, ctx);
+    const gs = ensureGState(fillAlpha, blendOf(el), ctx);
+    if (gs) {
+      parts.push("q");
+      parts.push("/" + gs + " gs");
+    }
+    parts.push("BT");
+    parts.push("/" + fname + " " + fmtNum(fontSize) + " Tf");
+    parts.push(fmtNum(fill.r / 255) + " " + fmtNum(fill.g / 255) + " " + fmtNum(fill.b / 255) + " rg");
     for (let ti = 0; ti < textRuns.length; ti++) {
       const ts = textRuns[ti];
       const chars = Array.from(ts.text);
@@ -1192,44 +1594,14 @@
       if (isDirect) {
         const x0 = xs[0] || 0;
         const y0 = ys[0] || 0;
-        let tm;
-        if (rot) {
-          const c = Math.cos(rot.ang), s = Math.sin(rot.ang);
-          const s0 = m[0];
-          tm = [s0 * c, s0 * s, s, -c, s0 * rot.cx, rot.cy];
-        } else {
-          tm = [
-            m[0],
-            m[1],
-            -m[2],
-            -m[3],
-            m[0] * x0 + m[2] * y0 + m[4],
-            m[1] * x0 + m[3] * y0 + m[5]
-          ];
-        }
+        const tm = glyphMatrix(m, x0, y0, font, rot);
         parts.push(tm.map(fmtNum).join(" ") + " Tm");
-        parts.push("<" + chars.map((c) => utf16beHex(c)).join("") + "> Tj");
+        parts.push("<" + chars.map((c) => encodeChar(font, c)).join("") + "> Tj");
       } else {
         for (let i = 0; i < chars.length; i++) {
-          const x = i < xs.length ? xs[i] : xs[xs.length - 1] || 0;
-          const y = i < ys.length ? ys[i] : ys[ys.length - 1] || 0;
-          let tm;
-          if (rot) {
-            const c = Math.cos(rot.ang), s = Math.sin(rot.ang);
-            const s0 = m[0];
-            tm = [s0 * c, s0 * s, s, -c, s0 * rot.cx, rot.cy];
-          } else {
-            tm = [
-              m[0],
-              m[1],
-              -m[2],
-              -m[3],
-              m[0] * x + m[2] * y + m[4],
-              m[1] * x + m[3] * y + m[5]
-            ];
-          }
-          parts.push(tm.map(fmtNum).join(" ") + " Tm");
-          parts.push("<" + utf16beHex(chars[i]) + "> Tj");
+          const x = i < xs.length ? xs[i] : xs.length ? xs[xs.length - 1] : 0;
+          const y = i < ys.length ? ys[i] : ys.length ? ys[ys.length - 1] : 0;
+          pushGlyph(parts, font, chars[i], glyphMatrix(m, x, y, font, rot), fontSize);
         }
       }
     }
@@ -1246,16 +1618,12 @@
     if (!href) return;
     const name = await addImage(href, ctx);
     if (!name) return;
+    const op = parseFloat(el.attrs.opacity);
+    const gs = ensureGState(op && op < 1 ? op : null, blendOf(el), ctx);
     parts.push("q");
+    if (gs) parts.push("/" + gs + " gs");
     const clipId = parseClipRef(el.attrs["clip-path"]);
-    if (clipId) {
-      const rects = ctx.clips.get(clipId);
-      if (rects && rects.length) {
-        for (const r of rects) {
-          parts.push(fmtNum(r.x) + " " + fmtNum(r.y) + " " + fmtNum(r.w) + " " + fmtNum(r.h) + " re W n");
-        }
-      }
-    }
+    if (clipId) emitClip(clipId, ctx, parts);
     parts.push(fmtNum(w) + " 0 0 " + fmtNum(-h) + " " + fmtNum(x) + " " + fmtNum(y + h) + " cm");
     parts.push("/" + name + " Do");
     parts.push("Q");
@@ -1265,37 +1633,15 @@
     const op = parseFloat(el.attrs.opacity);
     const gs = ensureGState(op && op < 1 ? op : null, blendOf(el), ctx);
     const hasM = m[0] !== 1 || m[1] !== 0 || m[2] !== 0 || m[3] !== 1 || m[4] !== 0 || m[5] !== 0;
+    const clipId = parseClipRef(el.attrs["clip-path"]);
     parts.push("q");
     if (hasM) parts.push(m.map(fmtNum).join(" ") + " cm");
+    if (clipId) emitClip(clipId, ctx, parts);
     if (gs) parts.push("/" + gs + " gs");
     for (const child of el.children) await renderElement(child, ctx, parts);
     parts.push("Q");
   }
-  function registerClip(el, ctx) {
-    const id = el.attrs.id;
-    if (!id) return;
-    const rects = [];
-    for (const child of el.children) {
-      if (child.tag === "rect") {
-        rects.push({
-          x: parseFloat(child.attrs.x) || 0,
-          y: parseFloat(child.attrs.y) || 0,
-          w: parseFloat(child.attrs.width) || 0,
-          h: parseFloat(child.attrs.height) || 0
-        });
-      }
-    }
-    ctx.clips.set(id, rects);
-  }
-  function collectClips(root, ctx) {
-    (function walk(el) {
-      for (const c of el.children) {
-        if (c.tag === "clippath") registerClip(c, ctx);
-        walk(c);
-      }
-    })(root);
-  }
-  async function renderElement(el, ctx, parts) {
+  function renderShape(el, ctx, parts) {
     switch (el.tag) {
       case "rect":
         renderRect(el, ctx, parts);
@@ -1310,19 +1656,61 @@
       case "text":
         renderText(el, ctx, parts);
         break;
-      case "image":
-        await renderImage(el, ctx, parts);
-        break;
-      case "g":
-        await renderGroup(el, ctx, parts);
-        break;
       default:
         break;
     }
   }
+  async function renderElement(el, ctx, parts) {
+    if (el.tag === "g") {
+      await renderGroup(el, ctx, parts);
+      return;
+    }
+    if (el.tag === "image") {
+      await renderImage(el, ctx, parts);
+      return;
+    }
+    const clipId = parseClipRef(el.attrs["clip-path"]);
+    if (clipId && ctx.clips && ctx.clips.has(clipId)) {
+      const probe = [];
+      if (emitClip(clipId, ctx, probe)) {
+        parts.push("q", ...probe);
+        renderShape(el, ctx, parts);
+        parts.push("Q");
+        return;
+      }
+    }
+    renderShape(el, ctx, parts);
+  }
+  function collectGradients(root, ctx) {
+    (function walk(el) {
+      if (el.tag === "lineargradient" || el.tag === "radialgradient") {
+        const id = el.attrs.id;
+        if (id && !ctx.gradientDefs.has(id)) {
+          const g = parseGradient(el);
+          if (g) ctx.gradientDefs.set(id, g);
+        }
+        return;
+      }
+      for (const c of el.children) walk(c);
+    })(root);
+  }
   async function svgToContentStream(svgStr, pageWmm, pageHmm, ctx) {
+    ctx = ctx || {};
+    ctx.images = ctx.images || /* @__PURE__ */ new Set();
+    ctx.alphas = ctx.alphas || /* @__PURE__ */ new Set();
+    ctx.clips = ctx.clips || /* @__PURE__ */ new Map();
+    ctx.shadings = ctx.shadings || /* @__PURE__ */ new Set();
+    ctx.fonts = ctx.fonts || /* @__PURE__ */ new Set();
+    ctx.imageReg = ctx.imageReg || /* @__PURE__ */ new Map();
+    ctx.alphaReg = ctx.alphaReg || /* @__PURE__ */ new Map();
+    ctx.shadingReg = ctx.shadingReg || /* @__PURE__ */ new Map();
+    ctx.fontReg = ctx.fontReg || /* @__PURE__ */ new Map();
+    ctx.gradientDefs = ctx.gradientDefs || /* @__PURE__ */ new Map();
+    ctx.pageW = pageWmm;
+    ctx.pageH = pageHmm;
     const root = parseSvgXml(svgStr);
     collectClips(root, ctx);
+    collectGradients(root, ctx);
     const parts = [];
     const pageHpt = pageHmm * MM_TO_PT;
     parts.push("q");
@@ -1333,45 +1721,53 @@
   }
 
   // ofd2pdf/index.js
+  function pageContext(regs) {
+    return {
+      imageReg: regs.imageReg,
+      alphaReg: regs.alphaReg,
+      shadingReg: regs.shadingReg,
+      fontReg: regs.fontReg
+    };
+  }
+  function pdfRegs() {
+    return { imageReg: /* @__PURE__ */ new Map(), alphaReg: /* @__PURE__ */ new Map(), shadingReg: /* @__PURE__ */ new Map(), fontReg: /* @__PURE__ */ new Map() };
+  }
+  function pageEntry(ctx, dims, content) {
+    return {
+      w: dims.width,
+      h: dims.height,
+      content,
+      images: Array.from(ctx.images),
+      alphas: Array.from(ctx.alphas),
+      shadings: Array.from(ctx.shadings),
+      fonts: Array.from(ctx.fonts)
+    };
+  }
   async function ofdToPdf(ofd, opts) {
     const coreFn = getCore();
     if (!coreFn || typeof coreFn.renderPageToString !== "function") {
       throw new Error("ofd2pdf.js 需要先加载 ofd.js");
     }
     opts = opts || {};
-    const imageReg = /* @__PURE__ */ new Map();
-    const alphaReg = /* @__PURE__ */ new Map();
+    const regs = pdfRegs();
     const pages = [];
     const count = coreFn.getPageCount(ofd);
     for (let i = 0; i < count; i++) {
       const svg = await coreFn.renderPageToString(ofd, i, opts.renderOpts);
       const dims = await coreFn.getPageDimensions(ofd, i);
-      const ctx = { imageReg, alphaReg, images: /* @__PURE__ */ new Set(), alphas: /* @__PURE__ */ new Set(), clips: /* @__PURE__ */ new Map() };
+      const ctx = pageContext(regs);
       const content = await svgToContentStream(svg, dims.width, dims.height, ctx);
-      pages.push({
-        w: dims.width,
-        h: dims.height,
-        content,
-        images: Array.from(ctx.images),
-        alphas: Array.from(ctx.alphas)
-      });
+      pages.push(pageEntry(ctx, dims, content));
       if (opts.onProgress) opts.onProgress(i + 1, count);
     }
-    return assemblePdf(pages, imageReg, alphaReg, opts);
+    return assemblePdf(pages, regs, opts);
   }
   async function svgToPdf(svgString, pageWmm, pageHmm, opts) {
-    const imageReg = /* @__PURE__ */ new Map();
-    const alphaReg = /* @__PURE__ */ new Map();
-    const ctx = { imageReg, alphaReg, images: /* @__PURE__ */ new Set(), alphas: /* @__PURE__ */ new Set(), clips: /* @__PURE__ */ new Map() };
+    const regs = pdfRegs();
+    const ctx = pageContext(regs);
     const content = await svgToContentStream(svgString, pageWmm, pageHmm, ctx);
-    const pages = [{
-      w: pageWmm,
-      h: pageHmm,
-      content,
-      images: Array.from(ctx.images),
-      alphas: Array.from(ctx.alphas)
-    }];
-    return assemblePdf(pages, imageReg, alphaReg, opts);
+    const pages = [pageEntry(ctx, { width: pageWmm, height: pageHmm }, content)];
+    return assemblePdf(pages, regs, opts);
   }
   var TOPDF = {
     ofdToPdf,

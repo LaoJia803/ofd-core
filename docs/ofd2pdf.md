@@ -33,10 +33,11 @@ It does not re-parse OFD itself; it relies on `renderPageToString` / `getPageDim
 | --- | --- |
 | `<path>` | `M/L/C/Q/A/Z` converted directly to PDF paths (quadratic `Q` becomes cubic, arcs `A` are split into cubic beziers) |
 | `<rect>` / `<ellipse>` | converted to the corresponding PDF drawing operations |
-| `<text>` | Type0 font (`/STSong-Light` + `/UniGB-UCS2-H`, relying on the reader's built-in Chinese fonts, no font embedding) |
-| `<image>` | JPEG embedded directly (`DCTDecode`); PNG / BMP (1/4/8/24/32-bit, RLE8/RLE4) / GIF (transparency, LZW, interlaced) decoded to RGBA then Flate-compressed, transparency preserved via `SMask` |
-| `<g>` | wrapped in `q`/`Q`, `transform` mapped to PDF `cm` |
-| `clipPath` | only clip paths made of `<rect>` children are supported, mapped to `re W n`; other shapes are silently ignored |
+| `<text>` | ASCII uses the standard 14 fonts (Helvetica / Times / Courier, including bold/italic variants); CJK uses Adobe-GB1 standard CID fonts (SongTi `/STSong-Light`, HeiTi `/STHeiti-*`, KaiTi `/STKaiti`, FangSong `/STFangsong-Light`). No font files are embedded |
+| `<image>` | JPEG embedded directly (`DCTDecode`, `DeviceGray`/`DeviceRGB`/`DeviceCMYK` chosen from the SOF component count); PNG / BMP (1/4/8/24/32-bit, RLE8/RLE4) / GIF (transparency, LZW, interlacing) decoded to RGBA then Flate-compressed, transparency preserved via `SMask`; `opacity` is mapped to an ExtGState |
+| `<g>` | wrapped in `q`/`Q`, `transform` mapped to PDF `cm`, `opacity` / `mix-blend-mode` mapped to ExtGState, `clip-path` honoured |
+| `clipPath` | clip paths made of `<rect>` / `<path>` / `<ellipse>` are supported, mapped to `W n` (`W* n` for evenodd); both `<g clip-path>` and per-element `clip-path` are honoured |
+| Gradients (`linearGradient` / `radialGradient`) | mapped to PDF shading dictionaries (`/ShadingType 2` axial, `/ShadingType 3` radial, `/FunctionType 3` stitched function); the path is clipped first and then painted with `sh`. Gradient strokes and gradient text degrade to a flat mid-point colour, stop opacity is approximated by the average alpha |
 
 Unit conversion: 1 mm = 72/25.4 pt; page size comes from `getPageDimensions`.
 
@@ -49,7 +50,7 @@ During conversion the module keeps `imageReg` / `alphaReg` registries. Each imag
 Image decoding follows two paths, both producing RGBA:
 
 - **Browser**: JPEG is embedded directly (`/DCTDecode`, no decoding); PNG/BMP/GIF are decoded by `canvas` (Blob → Image → `getImageData`), so anything the browser can display works (interlaced PNG, RLE, animated GIF — first frame only); alpha is parsed natively by the browser
-- **Node**: falls back to the built-in pure-JS decoders (`decodePng` / `decodeBmp` / `decodeGif`) supporting PNG (8/16-bit, gray/truecolor/palette/RGBA), BMP (1/4/8/24/32-bit, RLE8/RLE4), GIF (87a/89a, transparency, interlacing); **interlaced PNG is not supported** — such an image is skipped with a `console.warn`
+- **Node**: falls back to the built-in pure-JS decoders (`decodePng` / `decodeBmp` / `decodeGif`) supporting PNG (8/16-bit, gray/truecolor/palette/RGBA, Adam7 interlacing), BMP (1/4/8/24/32-bit, RLE8/RLE4), GIF (87a/89a, transparency, interlacing)
 
 RGBA data is deflate-compressed into the PDF; when semi-transparent pixels exist, an extra DeviceGray image is emitted as the `SMask` to express alpha.
 
@@ -200,8 +201,8 @@ The pixel cap is **essential**: image headers declare their own width and height
 
 - **Load order**: `ofd2pdf.js` must be loaded after `ofd.js`; otherwise `ofdToPdf` throws "ofd2pdf.js 需要先加载 ofd.js"
 - **Compression**: browsers prefer `CompressionStream`, Node uses the built-in `zlib`; deflate fails if neither is available
-- **Chinese fonts**: text uses `/STSong-Light` + `/UniGB-UCS2-H`, relying on the reader's built-in Chinese fonts; no font files are embedded. KaiTi, HeiTi, etc. will render as SongTi
+- **Fonts**: ASCII text uses the standard 14 fonts (Helvetica / Times / Courier, with the matching -Bold / -Italic variants); CJK text uses Adobe-GB1 standard CID fonts (`/STSong-Light`, `/STHeiti-Light` and `/STHeiti-Regular`, `/STKaiti`, `/STFangsong-Light`). No font files are embedded — glyph shapes are up to the reader (synthetic bold is faked by drawing twice for fonts without a bold face)
 - **Image formats**: JPEG (embedded directly), PNG, BMP (1/4/8/24/32-bit, incl. RLE compression) and GIF (87a/89a, incl. transparency and interlacing) are supported; TIFF is pre-converted by `ofd.js` into a BMP data source and thereby also supported; unsupported formats or decode failures emit a `console.warn` and the image is skipped (the rest of the page is unaffected)
-- **Transparency**: PNG/BMP/GIF are decoded to RGBA — via `canvas` in browsers, via pure JS in Node — preserving alpha through an `SMask`; interlaced PNG is not supported on the Node path, and only the first frame of an animated GIF is taken
-- **Known differences from the original**: Chinese fonts are uniformly rendered as SongTi (no font files embedded), annotations and seals may be displayed incompletely, and the Node path does not support interlaced PNG
+- **Transparency**: PNG/BMP/GIF are decoded to RGBA — via `canvas` in browsers, via pure JS in Node — preserving alpha through an `SMask`; only the first frame of an animated GIF is taken
+- **Known differences from the original**: glyph shapes depend on the reader's built-in fonts (no font files embedded, individual characters may be missing), annotations and seals may be displayed incompletely, and gradient strokes/text can only be approximated with a flat colour
 

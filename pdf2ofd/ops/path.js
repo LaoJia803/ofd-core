@@ -100,13 +100,14 @@ export function emitPath(st, ctx, rev, args) {
     return '';
   }
 
-  const fill = paintOp.includes('fill') || paintOp === 'fill' || paintOp === 'eoFill' || paintOp.includes('Fill');
-  const stroke = paintOp.includes('stroke') || paintOp === 'stroke';
-  const evenOdd =
-    paintOp.includes('eoFill') ||
-    paintOp === 'eoFill' ||
-    paintOp === 'eoFillStroke' ||
-    paintOp === 'closeEOFillStroke';
+  // pdf.js 的 paintOp 是驼峰命名：fill / eoFill / stroke / fillStroke / eoFillStroke /
+  // closeStroke / closeFillStroke / closeEOFillStroke。旧实现用小写 'stroke' 匹配，
+  // 而 'fillStroke'/'closeStroke' 里是大写 S，被判成「只填充不描边」——
+  // 表格框线、下划线、连线整片消失。统一忽略大小写判定。
+  const opName = String(paintOp);
+  const fill = /fill/i.test(opName);
+  const stroke = /stroke/i.test(opName);
+  const evenOdd = /eoFill/i.test(opName);
 
   // 描边线（表格框线/分隔线/下划线）豁免裁剪区，只有纯填充块按裁剪区剔。
   // 见visible() 上方注释：框线常横跨多个单元格裁剪区，按裁剪区剔会只剩零星几段。

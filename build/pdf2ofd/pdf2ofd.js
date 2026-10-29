@@ -539,14 +539,30 @@ function imageToRgba(img) {
     return out;
   }
   if (img.kind === 1) {
-    if (src.length < n) return null;
+    if (src.length >= n) {
+      const out2 = Buffer.alloc(n * 4);
+      for (let i = 0, o2 = 0; i < n; i++) {
+        const v = src[i];
+        out2[o2++] = v;
+        out2[o2++] = v;
+        out2[o2++] = v;
+        out2[o2++] = 255;
+      }
+      return out2;
+    }
+    const stride = img.width + 7 >> 3;
+    if (src.length < stride * img.height) return null;
     const out = Buffer.alloc(n * 4);
-    for (let i = 0, o = 0; i < n; i++) {
-      const v = src[i];
-      out[o++] = v;
-      out[o++] = v;
-      out[o++] = v;
-      out[o++] = 255;
+    let o = 0;
+    for (let y = 0; y < img.height; y++) {
+      const row = y * stride;
+      for (let x = 0; x < img.width; x++) {
+        const v = src[row + (x >> 3)] >> 7 - (x & 7) & 1 ? 255 : 0;
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = v;
+        out[o++] = 255;
+      }
     }
     return out;
   }
@@ -844,20 +860,27 @@ function emitText(st, ctx, glyphArr) {
   const Mdev = matMul(ctm, tmUnit);
   let text = "";
   const adv = [];
+  let drawnWidth = 0;
   const codeList = [];
   for (const g of glyphArr) {
     if (typeof g === "number") {
-      if (adv.length) adv[adv.length - 1] -= g / 1e3 * sizeTs;
+      const d = g / 1e3 * sizeTs;
+      drawnWidth -= d;
+      if (adv.length) adv[adv.length - 1] -= d;
       continue;
     }
+    const w = g.width / 1e3 * sizeTs;
+    drawnWidth += w;
     const u = g.unicode || "";
     if (!u) continue;
     const firstCp = u.codePointAt(0);
     const code = g.fontChar ? g.fontChar.codePointAt(0) : firstCp;
     text += String.fromCodePoint(firstCp);
     codeList.push(code);
-    adv.push(g.width / 1e3 * sizeTs);
+    adv.push(w);
   }
+  if (tmScale > 1e-9 && drawnWidth)
+    ts.tm = matMul(ts.tm, [1, 0, 0, 1, drawnWidth / tmScale, 0]);
   if (!text) return "";
   const fid = ensureFont(ctx, fontName);
   const f = fonts.get(fontName);
@@ -974,9 +997,10 @@ function emitPath(st, ctx, rev, args) {
     sink.pendingPath = { d: abs, bounds: g.box };
     return "";
   }
-  const fill = paintOp.includes("fill") || paintOp === "fill" || paintOp === "eoFill" || paintOp.includes("Fill");
-  const stroke = paintOp.includes("stroke") || paintOp === "stroke";
-  const evenOdd = paintOp.includes("eoFill") || paintOp === "eoFill" || paintOp === "eoFillStroke" || paintOp === "closeEOFillStroke";
+  const opName = String(paintOp);
+  const fill = /fill/i.test(opName);
+  const stroke = /stroke/i.test(opName);
+  const evenOdd = /eoFill/i.test(opName);
   if (!visible(st, g.box, stroke ? "page" : "clip")) return "";
   if (fill && !stroke && isOversizedRect(st, d, g.box)) return "";
   const dOut = d;
@@ -1270,9 +1294,13 @@ function collectImages(imageStore) {
   return { mmEntries, resFiles };
 }
 function buildPackage(outPath, opts) {
-  const { pageContents, pageWpt, pageHpt, maxUnitId, fontResMap, fonts, imageStore, compositeUnits } = opts;
-  const Wmm = pageWpt * PT_TO_MM;
-  const Hmm = pageHpt * PT_TO_MM;
+  const { pageContents, pageSizes, pageWpt, pageHpt, maxUnitId, fontResMap, fonts, imageStore, compositeUnits } = opts;
+  const fallback = [pageWpt * PT_TO_MM, pageHpt * PT_TO_MM];
+  const pages = pageContents.map((_, i) => {
+    const s = pageSizes && pageSizes[i];
+    return s ? [s[0] * PT_TO_MM, s[1] * PT_TO_MM] : fallback;
+  });
+  const [Wmm, Hmm] = pages[0] || fallback;
   const { fontEntries, fontFiles } = collectFonts(fontResMap, fonts);
   const { mmEntries, resFiles } = collectImages(imageStore);
   const { date: today, stamp: nowStamp } = nowOfd();
@@ -1306,10 +1334,11 @@ function buildPackage(outPath, opts) {
   for (const ff of fontFiles) zip.add(ff.name, ff.data);
   for (const rf of resFiles) zip.add(rf.name, rf.data);
   for (let i = 0; i < pageContents.length; i++) {
+    const [pw, ph] = pages[i] || fallback;
     zip.add(
       `Doc_0/Pages/Page_${i}/Content.xml`,
       `<?xml version="1.0" encoding="UTF-8"?>
-<ofd:Page xmlns:ofd="http://www.ofdspec.org/2016"><ofd:Area><ofd:PhysicalBox>0 0 ${fmt(Wmm)} ${fmt(Hmm)}</ofd:PhysicalBox></ofd:Area><ofd:Content><ofd:Layer ID="1">${pageContents[i]}</ofd:Layer></ofd:Content></ofd:Page>`
+<ofd:Page xmlns:ofd="http://www.ofdspec.org/2016"><ofd:Area><ofd:PhysicalBox>0 0 ${fmt(pw)} ${fmt(ph)}</ofd:PhysicalBox></ofd:Area><ofd:Content><ofd:Layer ID="1">${pageContents[i]}</ofd:Layer></ofd:Content></ofd:Page>`
     );
   }
   const outBytes = zip.build();
@@ -1368,6 +1397,7 @@ async function convert(pdfPath, ofdPath, options) {
     true
   );
   const pageContents = [];
+  const pageSizes = [];
   const imageStore = /* @__PURE__ */ new Map();
   const fontResMap = /* @__PURE__ */ new Map();
   const compositeUnits = [];
@@ -1378,6 +1408,7 @@ async function convert(pdfPath, ofdPath, options) {
     const vp = page.getViewport({ scale: 1 });
     pageWpt = vp.width;
     pageHpt = vp.height;
+    pageSizes.push([vp.width, vp.height]);
     const tc = await page.getOperatorList();
     await waitImages(page, tc, OPS, imageStore);
     const gradShades = await prefetchGradients(page, tc, OPS);
@@ -1400,6 +1431,7 @@ async function convert(pdfPath, ofdPath, options) {
   }
   const outBytes = buildPackage(ofdPath, {
     pageContents,
+    pageSizes,
     pageWpt,
     pageHpt,
     maxUnitId,

@@ -69,6 +69,7 @@ async function convert(pdfPath, ofdPath, options) {
   );
 
   const pageContents = [];
+  const pageSizes = []; // 逐页 [w, h]（pt）：混合页尺寸文档不能共用一个值
   const imageStore = new Map(); // objId -> {png, w, h}
   const fontResMap = new Map(); // loadedName -> ofdFontId
   const compositeUnits = []; // Form XObject → CompositeGraphicUnit XML
@@ -81,6 +82,7 @@ async function convert(pdfPath, ofdPath, options) {
     const vp = page.getViewport({ scale: 1 });
     pageWpt = vp.width;
     pageHpt = vp.height;
+    pageSizes.push([vp.width, vp.height]);
     const tc = await page.getOperatorList();
     // 等待图像对象异步解码
     await waitImages(page, tc, OPS, imageStore);
@@ -108,6 +110,7 @@ async function convert(pdfPath, ofdPath, options) {
   // ---- 组装 OFD ----
   const outBytes = buildPackage(ofdPath, {
     pageContents,
+    pageSizes,
     pageWpt,
     pageHpt,
     maxUnitId,

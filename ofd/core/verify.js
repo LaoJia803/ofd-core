@@ -3,6 +3,7 @@ import { asn1TimeToMs, extractCertPublicKey, parseSesSignBlocks } from "./asn1.j
 import { hashBytes } from "./md.js";
 import { oidDotStr } from "./seal.js";
 import { base64ToBytes, digestMatches, readEntry } from "./zip.js";
+import { resolvePath } from "../shared/path.js";
 
 // ==================== 签名验证（签名值 + 摘要 + 有效期） ====================
 // 已实现：① 签名值验证——GB/T 38540 SES 的 toSign 原始 DER，用签章人证书 SM2 公钥验签；
@@ -44,7 +45,13 @@ function checkPeriods(sig) {
 async function verifySigValue(ofd, sig) {
   if (!sig.signedValuePath)
     return { state: "unknown", message: "缺少签名值路径" };
-  const raw = await readEntry(ofd.zip, sig.signedValuePath.replace(/^\//, ""));
+  // SignedValue 是**相对签名文件**解析的（签名文件通常在 Doc_0/Signs/Sign_0/ 下）。
+  // 旧实现按包根直接读，路径对不上就恒报「签名值文件缺失」→ 验签永远降级 unknown。
+  const svPath = resolvePath(
+    String(sig.signaturePath || "").replace(/^\//, ""),
+    sig.signedValuePath,
+  );
+  const raw = await readEntry(ofd.zip, svPath);
   if (!raw) return { state: "unknown", message: "签名值文件缺失" };
   const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
   const blocks = parseSesSignBlocks(bytes);

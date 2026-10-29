@@ -55,9 +55,15 @@ function collectImages(imageStore) {
 
 // 组装整个 OFD 并写盘。
 export function buildPackage(outPath, opts) {
-  const { pageContents, pageWpt, pageHpt, maxUnitId, fontResMap, fonts, imageStore, compositeUnits } = opts;
-  const Wmm = pageWpt * PT_TO_MM;
-  const Hmm = pageHpt * PT_TO_MM;
+  const { pageContents, pageSizes, pageWpt, pageHpt, maxUnitId, fontResMap, fonts, imageStore, compositeUnits } = opts;
+  // 逐页尺寸（mm）。CommonData/PageArea 只是默认值，每页 Area/PhysicalBox 才最终生效。
+  // 旧实现用循环结束时最后一页的尺寸写死全部页，混合尺寸 PDF 除末页外整体错位。
+  const fallback = [pageWpt * PT_TO_MM, pageHpt * PT_TO_MM];
+  const pages = pageContents.map((_, i) => {
+    const s = pageSizes && pageSizes[i];
+    return s ? [s[0] * PT_TO_MM, s[1] * PT_TO_MM] : fallback;
+  });
+  const [Wmm, Hmm] = pages[0] || fallback;
   const { fontEntries, fontFiles } = collectFonts(fontResMap, fonts);
   const { mmEntries, resFiles } = collectImages(imageStore);
   const { date: today, stamp: nowStamp } = nowOfd();
@@ -90,9 +96,10 @@ export function buildPackage(outPath, opts) {
   for (const rf of resFiles) zip.add(rf.name, rf.data);
 
   for (let i = 0; i < pageContents.length; i++) {
+    const [pw, ph] = pages[i] || fallback;
     zip.add(
       `Doc_0/Pages/Page_${i}/Content.xml`,
-      `<?xml version="1.0" encoding="UTF-8"?>\n<ofd:Page xmlns:ofd="http://www.ofdspec.org/2016"><ofd:Area><ofd:PhysicalBox>0 0 ${fmt(Wmm)} ${fmt(Hmm)}</ofd:PhysicalBox></ofd:Area><ofd:Content><ofd:Layer ID="1">${pageContents[i]}</ofd:Layer></ofd:Content></ofd:Page>`,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<ofd:Page xmlns:ofd="http://www.ofdspec.org/2016"><ofd:Area><ofd:PhysicalBox>0 0 ${fmt(pw)} ${fmt(ph)}</ofd:PhysicalBox></ofd:Area><ofd:Content><ofd:Layer ID="1">${pageContents[i]}</ofd:Layer></ofd:Content></ofd:Page>`,
     );
   }
 

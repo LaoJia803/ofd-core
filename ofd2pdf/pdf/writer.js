@@ -3,10 +3,27 @@ import { MM_TO_PT } from "../core/constants.js";
 import { fmtNum } from "../core/util.js";
 import { buildInfo, pdfTextString } from "./docstring.js";
 
-// pages: [{ w, h, content, images: string[], alphas: string[] }]
-// imageReg: Map dataUrl → { name, w, h, data, filter }; alphaReg: Map a → { name, a }
-export function assemblePdf(pages, imageReg, alphaReg, opts) {
-  opts = opts || {};
+// pages: [{ w, h, content, images, alphas, shadings, fonts }]
+// regs: { imageReg, alphaReg, shadingReg, fontReg }
+//   imageReg: Map dataUrl → { name, w, h, data, filter, colorSpace?, smask? }
+//   alphaReg: Map key → { name, a, blend }
+//   shadingReg: Map id → { name, dict }
+//   fontReg: Map key → { name, kind: 'cid'|'type1', base }
+// 为兼容旧调用（pages, imageReg, alphaReg, opts）保留一种参数形态。
+export function assemblePdf(pages, a, b, c) {
+  let regs, opts;
+  if (a && (a.imageReg || a.fontReg || a.shadingReg || a.alphaReg)) {
+    regs = a;
+    opts = b || {};
+  } else {
+    regs = { imageReg: a, alphaReg: b };
+    opts = c || {};
+  }
+  const imageReg = regs.imageReg || new Map();
+  const alphaReg = regs.alphaReg || new Map();
+  const shadingReg = regs.shadingReg || new Map();
+  const fontReg = regs.fontReg || new Map();
+
   const enc = new TextEncoder();
   const chunks = [];
   const offsets = [];
@@ -17,11 +34,17 @@ export function assemblePdf(pages, imageReg, alphaReg, opts) {
   const infoObj = obj++;
   const pageObjs = [], contentObjs = [];
   for (let i = 0; i < pages.length; i++) { pageObjs.push(obj++); contentObjs.push(obj++); }
-  const fontObj = obj++;
-  const cidObj = obj++;
-  const fdObj = obj++;
-  const gsObjs = {}, imgObjs = {}, smaskObjs = {};
+  // 字体：CID 字体需要 3 个对象（Type0 / CIDFont / FontDescriptor），标准 14 字体只要 1 个
+  const fontObjs = {};
+  for (const f of fontReg.values()) {
+    const objs = { kind: f.kind, base: f.base };
+    if (f.kind === 'cid') { objs.type0 = obj++; objs.cid = obj++; objs.fd = obj++; }
+    else objs.type1 = obj++;
+    fontObjs[f.name] = objs;
+  }
+  const gsObjs = {}, shadingObjs = {}, imgObjs = {}, smaskObjs = {};
   for (const a of alphaReg.keys()) gsObjs[alphaReg.get(a).name] = obj++;
+  for (const s of shadingReg.values()) shadingObjs[s.name] = obj++;
   for (const key of imageReg.keys()) {
     const im = imageReg.get(key);
     imgObjs[im.name] = obj++;
@@ -46,15 +69,27 @@ export function assemblePdf(pages, imageReg, alphaReg, opts) {
   for (let i = 0; i < pages.length; i++) {
     const p = pages[i];
     const media = '[0 0 ' + fmtNum(p.w * MM_TO_PT) + ' ' + fmtNum(p.h * MM_TO_PT) + ']';
-    let ext = '';
+    let fontRes = '';
+    if (p.fonts && p.fonts.length) {
+      fontRes = ' /Font << ' + p.fonts.map(n => {
+        const o = fontObjs[n];
+        return '/' + n + ' ' + (o.kind === 'cid' ? o.type0 : o.type1) + ' 0 R';
+      }).join(' ') + ' >>';
+    }
+    let gsRes = '';
     if (p.alphas && p.alphas.length) {
-      ext = ' /ExtGState << ' + p.alphas.map(n => '/' + n + ' ' + gsObjs[n] + ' 0 R').join(' ') + ' >>';
+      gsRes = ' /ExtGState << ' + p.alphas.map(n => '/' + n + ' ' + gsObjs[n] + ' 0 R').join(' ') + ' >>';
     }
-    let xo = '';
+    let patRes = '';
+    if (p.shadings && p.shadings.length) {
+      patRes = ' /Shading << ' + p.shadings.map(n => '/' + n + ' ' + shadingObjs[n] + ' 0 R').join(' ') + ' >>';
+    }
+    let xoRes = '';
     if (p.images && p.images.length) {
-      xo = ' /XObject << ' + p.images.map(n => '/' + n + ' ' + imgObjs[n] + ' 0 R').join(' ') + ' >>';
+      xoRes = ' /XObject << ' + p.images.map(n => '/' + n + ' ' + imgObjs[n] + ' 0 R').join(' ') + ' >>';
     }
-    const resources = '<< /Font << /F1 ' + fontObj + ' 0 R >>' + ext + xo + ' >>';
+    const resources = '<< /ProcSet [/PDF /Text /ImageB /ImageC /ImageI]' +
+      fontRes + gsRes + patRes + xoRes + ' >>';
     emit(pageObjs[i] + ' 0 obj\n<< /Type /Page /Parent ' + pagesObj + ' 0 R /MediaBox ' + media +
       ' /Resources ' + resources + ' /Contents ' + contentObjs[i] + ' 0 R >>\nendobj\n');
     const contentBytes = enc.encode(p.content);
@@ -62,13 +97,22 @@ export function assemblePdf(pages, imageReg, alphaReg, opts) {
     pushBytes(contentBytes);
     pushBytes(streamEnd());
   }
-  // 字体（Type0 + UniGB-UCS2-H，STSong-Light，依赖阅读器内置中文字体）
-  emit(fontObj + ' 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light ' +
-    '/Encoding /UniGB-UCS2-H /DescendantFonts [' + cidObj + ' 0 R] >>\nendobj\n');
-  emit(cidObj + ' 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light ' +
-    '/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ' + fdObj + ' 0 R >>\nendobj\n');
-  emit(fdObj + ' 0 obj\n<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 ' +
-    '/FontBBox [-241 -260 1120 932] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 762 /StemV 80 >>\nendobj\n');
+  // 字体：标准 14 字体走 Type1；中文走 Type0 + UniGB-UCS2-H 的 CID 字体（依赖阅读器内置字体）
+  for (const name of Object.keys(fontObjs)) {
+    const f = fontObjs[name];
+    if (f.kind === 'cid') {
+      emit(f.type0 + ' 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /' + f.base +
+        ' /Encoding /UniGB-UCS2-H /DescendantFonts [' + f.cid + ' 0 R] >>\nendobj\n');
+      emit(f.cid + ' 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /' + f.base +
+        ' /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ' +
+        f.fd + ' 0 R >>\nendobj\n');
+      emit(f.fd + ' 0 obj\n<< /Type /FontDescriptor /FontName /' + f.base + ' /Flags 4 ' +
+        '/FontBBox [-241 -260 1120 932] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 762 /StemV 80 >>\nendobj\n');
+    } else {
+      emit(f.type1 + ' 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /' + f.base +
+        ' /Encoding /WinAnsiEncoding >>\nendobj\n');
+    }
+  }
   // ExtGState（透明度 + 混合模式）
   for (const a of alphaReg.keys()) {
     const g = alphaReg.get(a);
@@ -77,11 +121,18 @@ export function assemblePdf(pages, imageReg, alphaReg, opts) {
       (g.blend ? ' /BM /' + g.blend.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('') : '');
     emit(gsObjs[g.name] + ' 0 obj\n<< ' + dict + ' >>\nendobj\n');
   }
+  // 渐变着色字典（供内容流的 sh 算子引用）
+  for (const s of shadingReg.values()) {
+    emit(shadingObjs[s.name] + ' 0 obj\n' + s.dict + '\nendobj\n');
+  }
   // 图像 XObject（带透明通道时附加 SMask 灰度图）
   for (const key of imageReg.keys()) {
     const im = imageReg.get(key);
+    const cs = im.colorSpace || 'DeviceRGB';
     let dict = '<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h +
-      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /' + im.filter + ' /Length ' + im.data.length;
+      ' /ColorSpace /' + cs + ' /BitsPerComponent 8 /Filter /' + im.filter + ' /Length ' + im.data.length;
+    // CMYK JPEG 的 Decode 反相（按需，由解码层决定）
+    if (im.decode) dict += ' /Decode [' + im.decode.join(' ') + ']';
     if (im.smask) dict += ' /SMask ' + smaskObjs[im.name] + ' 0 R';
     dict += ' >>';
     emit(imgObjs[im.name] + ' 0 obj\n' + dict + '\nstream\n');

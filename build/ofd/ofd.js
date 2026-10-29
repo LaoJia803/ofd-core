@@ -4396,7 +4396,11 @@
   async function verifySigValue(ofd, sig) {
     if (!sig.signedValuePath)
       return { state: "unknown", message: "缺少签名值路径" };
-    const raw = await readEntry(ofd.zip, sig.signedValuePath.replace(/^\//, ""));
+    const svPath = resolvePath(
+      String(sig.signaturePath || "").replace(/^\//, ""),
+      sig.signedValuePath
+    );
+    const raw = await readEntry(ofd.zip, svPath);
     if (!raw) return { state: "unknown", message: "签名值文件缺失" };
     const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     const blocks = parseSesSignBlocks(bytes);
