@@ -1,5 +1,5 @@
-import { attr } from "./xml.js";
-
+import { attr } from "./xml.js";
+
 // ==================== 颜色 ====================
 // "156 82 35" | "#9C5223" | "#ee #20 #25" | "255"(灰度)
 // ColorSpace 支持 GRAY / RGB / CMYK，以及调色板（<Color Index="n">）。

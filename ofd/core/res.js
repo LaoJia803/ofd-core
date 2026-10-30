@@ -1,16 +1,16 @@
-import { parseGradient } from "./page.js";
-import { parseXml } from "./parser.js";
-import { readEntryText } from "./zip.js";
-import { parseColor, parseColorComponents } from "../shared/color.js";
-import { dirOf, resolvePath } from "../shared/path.js";
-import {
-  attr,
-  child,
-  children,
-  num,
-  text,
-} from "../shared/xml.js";
-
+import { parseGradient } from "./page.js";
+import { parseXml } from "./parser.js";
+import { readEntryText } from "./zip.js";
+import { parseColor, parseColorComponents } from "../shared/color.js";
+import { dirOf, resolvePath } from "../shared/path.js";
+import {
+  attr,
+  child,
+  children,
+  num,
+  text,
+} from "../shared/xml.js";
+
 // ==================== OFD 资源解析 ====================
 export function mergeRes(target, src) {
   Object.assign(target.fonts, src.fonts);

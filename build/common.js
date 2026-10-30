@@ -1,4 +1,4 @@
-// 构建公共层：路径常量、esbuild/terser、CRLF、最小 ZIP 打包、发行包改写。
+// 构建公共层：路径常量、esbuild/terser、最小 ZIP 打包、发行包改写。
 // 各 build-*.js 只保留自己的 banner / 收尾段与产物清单。
 const fs = require("fs");
 const path = require("path");
@@ -10,7 +10,6 @@ const BUILD = path.join(ROOT, "build");
 const DIST = path.join(ROOT, "dist");
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 
-const crlf = (s) => s.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
 
 function md5(content) {
   return crypto.createHash("md5").update(content).digest("hex");
@@ -282,7 +281,6 @@ module.exports = {
   BUILD,
   DIST,
   VERSION,
-  crlf,
   md5,
   rmrf,
   writeArtifact,

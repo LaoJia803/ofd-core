@@ -1,17 +1,17 @@
-import { parseObjectEl } from "./page.js";
-import { parseXml } from "./parser.js";
-import { readEntryText } from "./zip.js";
-import { resolvePath } from "../shared/path.js";
-import {
-  attr,
-  bool,
-  child,
-  children,
-  parseBox,
-  stripNs,
-  text,
-} from "../shared/xml.js";
-
+import { parseObjectEl } from "./page.js";
+import { parseXml } from "./parser.js";
+import { readEntryText } from "./zip.js";
+import { resolvePath } from "../shared/path.js";
+import {
+  attr,
+  bool,
+  child,
+  children,
+  parseBox,
+  stripNs,
+  text,
+} from "../shared/xml.js";
+
 // ==================== 注解解析 ====================
 // Appearance 是完整页块：可以包含 PathObject / TextObject / ImageObject / CompositeObject，
 // 不能只认 PathObject（Watermark 常见文字/图片外观）。

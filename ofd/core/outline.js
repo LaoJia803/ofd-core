@@ -1,6 +1,6 @@
-import { parseXml } from "./parser.js";
-import { attr, child, children, text } from "../shared/xml.js";
-
+import { parseXml } from "./parser.js";
+import { attr, child, children, text } from "../shared/xml.js";
+
 // ==================== 目录解析 ====================
 export function parseOutline(outlinesEl, pages) {
   if (!outlinesEl) return [];

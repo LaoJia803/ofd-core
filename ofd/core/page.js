@@ -1,20 +1,20 @@
-import { parseXml } from "./parser.js";
-import { parseRes } from "./res.js";
-import { readEntryText, readZip } from "./zip.js";
-import { parseColor } from "../shared/color.js";
-import { resolvePath } from "../shared/path.js";
-import {
-  attr,
-  bool,
-  child,
-  children,
-  num,
-  parseBox,
-  parseMatrix,
-  stripNs,
-  text,
-} from "../shared/xml.js";
-
+import { parseXml } from "./parser.js";
+import { parseRes } from "./res.js";
+import { readEntryText, readZip } from "./zip.js";
+import { parseColor } from "../shared/color.js";
+import { resolvePath } from "../shared/path.js";
+import {
+  attr,
+  bool,
+  child,
+  children,
+  num,
+  parseBox,
+  parseMatrix,
+  stripNs,
+  text,
+} from "../shared/xml.js";
+
 // ==================== OFD 页面解析 ====================
 // 解析上下文：文档版本（决定 Clips 的 TransFlag 默认值）、资源表（颜色空间）、默认颜色空间
 function normalizeCtx(ctx) {

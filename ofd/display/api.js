@@ -1,29 +1,29 @@
-import { asn1TimeToMs, oidName } from "../core/asn1.js";
-import { parseOFD } from "../core/document.js";
-import { ensureImageDataUrl } from "../core/image.js";
-import { readZip } from "../core/zip.js";
-import {
-  builtinFontStack,
-  ensureFontLoaded,
-  fetchFontIndex,
-  hasEmbeddedFont,
-  localFontAvailable,
-  registerEmbeddedFonts,
-  splitFontVariant,
-  uniqueFamily,
-} from "./font.js";
-import {
-  collectObjectResources,
-  ensurePageParsed,
-  getTemplateLayers,
-  renderAnnot,
-  renderObject,
-  renderStamp,
-  sealToSvgString,
-} from "./svg.js";
-import { LRUCache } from "../shared/lru.js";
-import { _profiling, flushProfile, mark } from "../shared/util.js";
-
+import { asn1TimeToMs, oidName } from "../core/asn1.js";
+import { parseOFD } from "../core/document.js";
+import { ensureImageDataUrl } from "../core/image.js";
+import { readZip } from "../core/zip.js";
+import {
+  builtinFontStack,
+  ensureFontLoaded,
+  fetchFontIndex,
+  hasEmbeddedFont,
+  localFontAvailable,
+  registerEmbeddedFonts,
+  splitFontVariant,
+  uniqueFamily,
+} from "./font.js";
+import {
+  collectObjectResources,
+  ensurePageParsed,
+  getTemplateLayers,
+  renderAnnot,
+  renderObject,
+  renderStamp,
+  sealToSvgString,
+} from "./svg.js";
+import { LRUCache } from "../shared/lru.js";
+import { _profiling, flushProfile, mark } from "../shared/util.js";
+
 // ==================== SVG 缓存 ====================
 const SVG_CACHE_MAX = 256;
 function svgCacheKey(pageIndex) {

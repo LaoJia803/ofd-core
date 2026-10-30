@@ -1,30 +1,30 @@
-import {
-  extractCertValidity,
-  extractSealAttrs,
-  extractSignatureValue,
-  extractSignerName,
-  parseTlvTree,
-} from "./asn1.js";
-import { hashBytes } from "./md.js";
-import { parseSealOfd } from "./page.js";
-import { parseXml } from "./parser.js";
-import {
-  collectCerts,
-  decodeAscii,
-  extractSealName,
-  extractSealPicture,
-  oidDotStr,
-} from "./seal.js";
-import { bytesToBase64, readEntry, readEntryText } from "./zip.js";
-import { resolvePath } from "../shared/path.js";
-import {
-  attr,
-  child,
-  children,
-  parseBox,
-  text,
-} from "../shared/xml.js";
-
+import {
+  extractCertValidity,
+  extractSealAttrs,
+  extractSignatureValue,
+  extractSignerName,
+  parseTlvTree,
+} from "./asn1.js";
+import { hashBytes } from "./md.js";
+import { parseSealOfd } from "./page.js";
+import { parseXml } from "./parser.js";
+import {
+  collectCerts,
+  decodeAscii,
+  extractSealName,
+  extractSealPicture,
+  oidDotStr,
+} from "./seal.js";
+import { bytesToBase64, readEntry, readEntryText } from "./zip.js";
+import { resolvePath } from "../shared/path.js";
+import {
+  attr,
+  child,
+  children,
+  parseBox,
+  text,
+} from "../shared/xml.js";
+
 // ==================== 签名解析 ====================
 export async function parseSignatures(signaturesPath, zip) {
   const stamps = [];

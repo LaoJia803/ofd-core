@@ -1,0 +1,19 @@
+# 行尾统一：仓库内一律 LF，Windows 检出也不转换。
+# 目的：避免 CRLF 被二次转换产生 \r\r\n（引擎会把每行算成两个换行，堆栈行号偏大），
+# 以及避免 core.autocrlf 让同一份代码在不同机器上显示为「已修改」。
+* text=auto eol=lf
+
+# 二进制：禁止行尾转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.zip   binary
+*.ofd   binary
+*.pdf   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.esl   binary

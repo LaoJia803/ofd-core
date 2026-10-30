@@ -1,11 +1,11 @@
-import { ensureImageDataUrl } from "../core/image.js";
-import { parsePage } from "../core/page.js";
-import { escapeXml, expandDelta } from "../core/parser.js";
-import { hasGlyphFor, mapFontFamily } from "./font.js";
-import { colorToCss } from "../shared/color.js";
-import { LRUCache } from "../shared/lru.js";
-import { child } from "../shared/xml.js";
-
+import { ensureImageDataUrl } from "../core/image.js";
+import { parsePage } from "../core/page.js";
+import { escapeXml, expandDelta } from "../core/parser.js";
+import { hasGlyphFor, mapFontFamily } from "./font.js";
+import { colorToCss } from "../shared/color.js";
+import { LRUCache } from "../shared/lru.js";
+import { child } from "../shared/xml.js";
+
 // ==================== SVG 元素渲染 ====================
 // 把解析后的页面图元（路径 / 文字 / 图像 / 印章 / 注解）转成 SVG 片段。
 const ABBR_PATH_CACHE_MAX = 4096;

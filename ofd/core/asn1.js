@@ -1,6 +1,6 @@
-import { certSubjectAttrs, collectCerts, decodeAscii } from "./seal.js";
-import { child } from "../shared/xml.js";
-
+import { certSubjectAttrs, collectCerts, decodeAscii } from "./seal.js";
+import { child } from "../shared/xml.js";
+
 export function extractSignerName(bytes, sealName) {
   if (!bytes || bytes.length < 20) return null;
   let certs;

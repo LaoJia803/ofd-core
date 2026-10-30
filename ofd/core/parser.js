@@ -1,5 +1,5 @@
-import { stripNs } from "../shared/xml.js";
-
+import { stripNs } from "../shared/xml.js";
+
 // ==================== XML 解析器 ====================
 // 节点 { tag, attrs, children, text }，无 DOM 中间产物，浏览器/Node 通用
 export function parseXml(str) {

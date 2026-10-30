@@ -1,6 +1,6 @@
-import { bytesToBase64, readEntry } from "./zip.js";
-import { resolvePath } from "../shared/path.js";
-
+import { bytesToBase64, readEntry } from "./zip.js";
+import { resolvePath } from "../shared/path.js";
+
 // ==================== 图像解码 ====================
 const TIFF_TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
 // TIFF 宽高来自文件标签，必须先限制再分配内存；32MP 可覆盖约 400dpi 的 A4 扫描件

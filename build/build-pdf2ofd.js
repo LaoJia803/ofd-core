@@ -1,7 +1,7 @@
 // 打包 PDF → OFD 转换器：build/pdf2ofd/pdf2ofd.js + build/pdf2ofd/pdf2ofd.min.js
 // 用法：node build/build-pdf2ofd.js
 const path = require("path");
-const { ROOT, BUILD, VERSION, crlf, esbuildBuild, minify, writeArtifact } = require("./common");
+const { ROOT, BUILD, VERSION, esbuildBuild, minify, writeArtifact } = require("./common");
 
 const OUT_DIR = path.join(BUILD, "pdf2ofd");
 const OUT = path.join(OUT_DIR, "pdf2ofd.js");
@@ -38,7 +38,7 @@ async function build() {
     // pdf.js 是 peerDependency，运行时按调用方环境解析，不能打进 bundle。
     external: ["pdfjs-dist", "pdfjs-dist/*"],
   });
-  const code = crlf(HEAD + bundled + TAIL).replace(/__OFD_VERSION__/g, VERSION);
+  const code = (HEAD + bundled + TAIL).replace(/__OFD_VERSION__/g, VERSION);
 
   writeArtifact(OUT, code);
   writeArtifact(OUT_MIN, await minify(code));

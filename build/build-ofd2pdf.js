@@ -1,7 +1,7 @@
 // 打包 OFD → PDF 模块：build/ofd2pdf/ofd2pdf.js + build/ofd2pdf/ofd2pdf.min.js
 // 用法：node build/build-ofd2pdf.js
 const path = require("path");
-const { ROOT, BUILD, VERSION, crlf, esbuildBuild, minify, writeArtifact } = require("./common");
+const { ROOT, BUILD, VERSION, esbuildBuild, minify, writeArtifact } = require("./common");
 
 const OUT_DIR = path.join(BUILD, "ofd2pdf");
 const OUT = path.join(OUT_DIR, "ofd2pdf.js");
@@ -42,7 +42,7 @@ if (typeof module !== "undefined" && module.exports) {
 
 async function build() {
   const bundled = await esbuildBuild(path.join(ROOT, "ofd2pdf", "index.js"));
-  const code = crlf(HEAD + bundled + TAIL).replace(/__OFD_VERSION__/g, VERSION);
+  const code = (HEAD + bundled + TAIL).replace(/__OFD_VERSION__/g, VERSION);
 
   writeArtifact(OUT, code);
   writeArtifact(OUT_MIN, await minify(code));
