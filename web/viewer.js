@@ -564,9 +564,9 @@
     els.sigModalStatus.textContent = '未验证';
     els.sigModalStatus.classList.remove('ok', 'bad');
 
-    // 生成一行信息（label + value）
+    // 生成一行信息（label + value）。标签列定宽后不再需要冒号，冒号会把 5 字标签挤出列宽
     function sigRow(label, value) {
-      return '<div class="sig-row"><span class="sig-label">' + label + '：</span><span class="sig-value">' + value + '</span></div>';
+      return '<div class="sig-row"><span class="sig-label">' + label + '</span><span class="sig-value">' + value + '</span></div>';
     }
     // 生成折叠分组：标题 + 详情按钮 + 默认显示核心行，extraHtml 展开后显示
     function sigGroup(title, coreHtml, extraHtml, toggleLabel) {

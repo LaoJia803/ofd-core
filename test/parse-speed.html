@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OFD 解析速度实测</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.6 "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #f7f8fa;
+    color: #1f2937;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }
+  header { margin-bottom: 20px; }
+  h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: .2px; }
+  .sub { color: #6b7280; font-size: 13px; }
+  .tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    font-size: 12px; color: #374151; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 4px; padding: 2px 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px; margin: 18px 0; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px;
+  }
+  .card .k { font-size: 12px; color: #6b7280; }
+  .card .v { font-size: 20px; font-weight: 600; color: #0b57d0; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .card .v small { font-size: 12px; font-weight: 400; color: #6b7280; margin-left: 2px; }
+  .card .n { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+  section { margin-top: 22px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; color: #111827; }
+  h2 span { font-weight: 400; color: #9ca3af; font-size: 12px; margin-left: 6px; }
+  .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 940px; }
+  th, td { padding: 8px 10px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    position: sticky; top: 0; background: #fafbfc; color: #6b7280; font-weight: 500;
+    border-bottom: 1px solid #e5e7eb; cursor: pointer; user-select: none;
+  }
+  thead th:hover { color: #0b57d0; }
+  thead th.sorted { color: #0b57d0; }
+  thead th.sorted::after { content: " ↓"; font-size: 10px; }
+  thead th.sorted.asc::after { content: " ↑"; }
+  tbody td { border-bottom: 1px solid #f1f3f5; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #fafcff; }
+  .name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  .dim { color: #9ca3af; }
+  .hot { color: #c2410c; font-weight: 600; }
+  .cell-bar { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; width: 100%; }
+  .bar { position: relative; width: 76px; height: 8px; background: #f1f3f6; border-radius: 2px; overflow: hidden; flex: none; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; min-width: 2px; background: #0b57d0; border-radius: 2px; }
+  .bar.warm i { background: #f59e0b; }
+  .legend { display: flex; gap: 16px; align-items: center; font-size: 12px; color: #6b7280; margin-bottom: 8px; flex-wrap: wrap; }
+  .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+  .note { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; }
+  .note h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #111827; }
+  .note ul { margin: 0; padding-left: 18px; color: #4b5563; font-size: 12.5px; }
+  .note li { margin: 3px 0; }
+  .note code { background: #f3f4f6; border-radius: 3px; padding: 0 4px; font-family: Consolas, Monaco, monospace; font-size: 12px; }
+  .concl { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 16px; }
+  .concl p { margin: 6px 0; color: #374151; font-size: 13px; }
+  .concl b { color: #0b57d0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  footer { margin-top: 26px; color: #9ca3af; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>OFD 解析速度实测</h1>
+    <div class="sub">本引擎冷路径耗时：ZIP 解压、XML 解析、页面对象模型、SVG 生成。每个样本重复 5 次取中位数。</div>
+    <div class="tags">
+      <span class="tag" id="tagEnv">Node</span>
+      <span class="tag" id="tagCount">样本</span>
+      <span class="tag">5 次中位数</span>
+      <span class="tag">冷路径，无缓存</span>
+      <span class="tag">渲染 = SVG 字符串</span>
+    </div>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <section>
+    <h2>逐样本耗时 <span>单位 ms（另有标注除外），点击表头排序</span></h2>
+    <div class="legend">
+      <span><span class="swatch" style="background:#0b57d0"></span>解析（加载 + 全页对象模型）</span>
+      <span><span class="swatch" style="background:#f59e0b"></span>首屏（加载 + 首页 SVG）</span>
+    </div>
+    <div class="panel table-scroll">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th data-key="name" data-type="str">样本</th>
+            <th data-key="bytes">大小</th>
+            <th data-key="pages">页数</th>
+            <th data-key="objects">对象</th>
+            <th data-key="loadMs">加载</th>
+            <th data-key="parseAllMs">页面解析</th>
+            <th data-key="parseAllMs" data-bar="parse">解析对比</th>
+            <th data-key="firstMs">首屏</th>
+            <th data-key="allMs">全文档</th>
+            <th data-key="parseRate" title="按原始文件大小 ÷ 解析总耗时计算">解析吞吐</th>
+            <th data-key="perPage">每页渲染</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>口径说明</h2>
+    <div class="notes">
+      <div class="note">
+        <h3>四个指标</h3>
+        <ul>
+          <li><b>加载</b>：读字节 + ZIP 解压 + 文档结构（Document.xml）解析。</li>
+          <li><b>页面解析</b>：加载 + 逐页解析 Page XML 为图形对象模型，不含 SVG。</li>
+          <li><b>首屏</b>：加载 + 首页解析 + 首页 SVG 生成，即打开文档看到第一页的耗时。</li>
+          <li><b>全文档</b>：加载 + 所有页解析 + 所有页 SVG 生成。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>测量方式</h3>
+        <ul>
+          <li>每个指标都使用全新的文档实例，避免 SVG 缓存和页面解析缓存混入。</li>
+          <li>每个样本独立跑 5 次，取中位数，降低 JIT 与系统抖动影响。</li>
+          <li>Node 环境不涉及 DOM 挂载、字体栅格化和浏览器绘制，因此数字低于浏览器里的完整渲染。</li>
+          <li>样本来自 <code>test/ofdFile/</code>，覆盖国标结构样例、发票、大页数文档与文字密集型文档。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>结论</h2>
+    <div class="concl" id="concl"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = [
+  { name: "2.ofd", bytes: 4278691, pages: 89, objects: 5879, loadMs: 2.08, parseAllMs: 86.97, firstMs: 9.34, allMs: 265.53 },
+  { name: "6.1.001 Entry全部不压缩.ofd", bytes: 865405, pages: 2, objects: 69, loadMs: 0.44, parseAllMs: 1.28, firstMs: 34.77, allMs: 39.43 },
+  { name: "6.1.002 Entry全部压缩.ofd", bytes: 721210, pages: 2, objects: 69, loadMs: 0.91, parseAllMs: 1.37, firstMs: 42.99, allMs: 44.66 },
+  { name: "6.1.003 Entry合理压缩.ofd", bytes: 748482, pages: 2, objects: 69, loadMs: 0.82, parseAllMs: 1.70, firstMs: 35.62, allMs: 39.21 },
+  { name: "6.1.004 Entry不合理压缩.ofd", bytes: 847687, pages: 2, objects: 69, loadMs: 0.38, parseAllMs: 0.96, firstMs: 34.09, allMs: 36.86 },
+  { name: "6.1.005 OFD和Document在ZIP流后部.ofd", bytes: 748470, pages: 2, objects: 69, loadMs: 0.85, parseAllMs: 1.63, firstMs: 33.74, allMs: 44.38 },
+  { name: "6.2.001 正常文件结构-导出注释.ofd", bytes: 4832, pages: 2, objects: 0, loadMs: 0.69, parseAllMs: 0.88, firstMs: 0.70, allMs: 0.91 },
+  { name: "6.2.001 正常文件结构.ofd", bytes: 723414, pages: 2, objects: 69, loadMs: 1.19, parseAllMs: 2.02, firstMs: 36.74, allMs: 45.48 },
+  { name: "6.2.002 平行结构文件.ofd", bytes: 719475, pages: 2, objects: 69, loadMs: 1.06, parseAllMs: 1.65, firstMs: 35.11, allMs: 42.00 },
+  { name: "6.2.003 使用相对路径.ofd", bytes: 720454, pages: 2, objects: 69, loadMs: 0.78, parseAllMs: 1.68, firstMs: 34.52, allMs: 39.97 },
+  { name: "6.2.004_1 文件目录结构与推荐的不符.ofd", bytes: 720379, pages: 2, objects: 69, loadMs: 0.71, parseAllMs: 1.87, firstMs: 33.31, allMs: 37.29 },
+  { name: "6.2.004_2 路径中含有空格.ofd", bytes: 720363, pages: 2, objects: 69, loadMs: 1.04, parseAllMs: 1.84, firstMs: 36.52, allMs: 39.20 },
+  { name: "6.2.004_3 路径中含有转义字符.ofd", bytes: 720384, pages: 2, objects: 69, loadMs: 0.64, parseAllMs: 1.35, firstMs: 34.16, allMs: 39.08 },
+  { name: "6.2.005 文件目录结构乱序.ofd", bytes: 720436, pages: 2, objects: 69, loadMs: 0.87, parseAllMs: 1.49, firstMs: 35.18, allMs: 40.14 },
+  { name: "6.2.006 各级目录下有无用内容.ofd", bytes: 1533892, pages: 2, objects: 69, loadMs: 0.81, parseAllMs: 1.47, firstMs: 35.86, allMs: 40.28 },
+  { name: "999.ofd", bytes: 29752, pages: 5, objects: 561, loadMs: 8.85, parseAllMs: 11.54, firstMs: 7.33, allMs: 20.83 },
+  { name: "compressed.tracemonkey-pldi-09.ofd", bytes: 875625, pages: 14, objects: 2970, loadMs: 2.93, parseAllMs: 50.50, firstMs: 6.76, allMs: 113.63 },
+  { name: "h.ofd", bytes: 73148, pages: 5, objects: 78, loadMs: 3.24, parseAllMs: 4.11, firstMs: 3.51, allMs: 4.94 },
+  { name: "n.ofd", bytes: 39835, pages: 2, objects: 22, loadMs: 2.62, parseAllMs: 2.62, firstMs: 2.85, allMs: 3.42 },
+  { name: "sk-compressed.tracemonkey-pldi-09.ofd", bytes: 911662, pages: 14, objects: 2967, loadMs: 10.86, parseAllMs: 52.59, firstMs: 16.80, allMs: 122.00 }
+];
+
+const META = { generatedAt: "2026-11-13", node: "v24.9.0", repeats: 5 };
+
+DATA.forEach((d) => {
+  d.parseRate = d.parseAllMs > 0 ? (d.bytes / 1048576) / (d.parseAllMs / 1000) : 0;
+  d.renderRate = d.allMs > 0 ? d.pages / (d.allMs / 1000) : 0;
+  d.perPage = d.pages > 0 ? d.allMs / d.pages : 0;
+});
+
+const fmtBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(2) + " MB" : (n / 1024).toFixed(0) + " KB";
+const fmtMs = (n) => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let sortKey = "bytes", sortAsc = false;
+
+function renderTable() {
+  const rows = [...DATA].sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    const r = typeof x === "string" ? x.localeCompare(y, "zh-CN") : x - y;
+    return sortAsc ? r : -r;
+  });
+  const maxParse = Math.max(...DATA.map((d) => d.parseAllMs));
+  const tbody = document.querySelector("#tbl tbody");
+  tbody.innerHTML = rows.map((d) => {
+    const pct = Math.max(1, Math.round(d.parseAllMs / maxParse * 100));
+    return `<tr>
+      <td class="name" title="${esc(d.name)}">${esc(d.name)}</td>
+      <td>${fmtBytes(d.bytes)}</td>
+      <td>${d.pages}</td>
+      <td class="dim">${d.objects}</td>
+      <td>${d.loadMs.toFixed(2)}</td>
+      <td>${fmtMs(d.parseAllMs)}</td>
+      <td><span class="cell-bar"><span class="bar"><i style="width:${pct}%"></i></span><span>${fmtMs(d.parseAllMs)} ms</span></span></td>
+      <td>${fmtMs(d.firstMs)}</td>
+      <td>${fmtMs(d.allMs)}</td>
+      <td>${d.parseRate.toFixed(1)} MB/s</td>
+      <td>${d.perPage.toFixed(1)} ms/页</td>
+    </tr>`;
+  }).join("");
+  document.querySelectorAll("#tbl thead th").forEach((th) => {
+    th.classList.toggle("sorted", th.dataset.key === sortKey);
+    th.classList.toggle("asc", th.dataset.key === sortKey && sortAsc);
+  });
+}
+
+function renderCards() {
+  const totalPages = DATA.reduce((n, d) => n + d.pages, 0);
+  const totalBytes = DATA.reduce((n, d) => n + d.bytes, 0);
+  const totalParse = DATA.reduce((n, d) => n + d.parseAllMs, 0);
+  const big = DATA.find((d) => d.name === "2.ofd");
+  const invoice = DATA.find((d) => d.name === "999.ofd");
+  const smallest = Math.min(...DATA.map((d) => d.parseAllMs));
+  const cards = [
+    { k: "样本 / 总页数", v: `${DATA.length} <small>个</small>`, n: `${totalPages} 页 · ${fmtBytes(totalBytes)}` },
+    { k: "解析吞吐（加权）", v: `${(totalBytes / 1048576 / (totalParse / 1000)).toFixed(0)} <small>MB/s</small>`, n: `总解析耗时 ${totalParse.toFixed(0)} ms` },
+    { k: "大文档 2.ofd", v: `${big.parseAllMs.toFixed(0)} <small>ms</small>`, n: `4.2 MB · 89 页` },
+    { k: "首屏（2.ofd）", v: `${big.firstMs.toFixed(1)} <small>ms</small>`, n: `只解析并渲染第 1 页` },
+    { k: "最小解析耗时", v: `${smallest.toFixed(2)} <small>ms</small>`, n: "空内容国标样例" },
+    { k: "999.ofd", v: `${invoice.parseAllMs.toFixed(1)} <small>ms</small>`, n: `5 页 · 首屏 ${invoice.firstMs.toFixed(1)} ms` }
+  ];
+  document.getElementById("cards").innerHTML = cards.map((c) =>
+    `<div class="card"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="n">${c.n}</div></div>`
+  ).join("");
+}
+
+function renderConcl() {
+  const big = DATA.find((d) => d.name === "2.ofd");
+  const doc = DATA.find((d) => d.name === "6.1.003 Entry合理压缩.ofd");
+  const text = DATA.find((d) => d.name === "compressed.tracemonkey-pldi-09.ofd");
+  document.getElementById("concl").innerHTML = `
+    <p>解析本身是轻量阶段：4.2 MB / 89 页的文档，加载 <b>${big.loadMs.toFixed(2)} ms</b>、全页对象模型 <b>${big.parseAllMs.toFixed(0)} ms</b>；百 KB 以内的文档，加载 + 解析在 <b>2-12 ms</b> 量级。</p>
+    <p>首屏只看第一页：大文档 <b>${big.firstMs.toFixed(1)} ms</b>，文字密集型文档 <b>${text.firstMs.toFixed(1)} ms</b>，不需要等待整册解析。</p>
+    <p>耗时大头在 SVG 生成：国标样例单页输出约 1.4 MB SVG，两页全文档约 <b>${doc.allMs.toFixed(0)} ms</b>；解析只占其中的 <b>${Math.round(doc.parseAllMs / doc.allMs * 100)}%</b>。</p>
+    <p>按页平均，2.ofd 全文档 <b>${big.perPage.toFixed(1)} ms/页</b>，文字密集型的 tracemonkey <b>${(text.allMs / text.pages).toFixed(1)} ms/页</b>。</p>
+  `;
+}
+
+document.querySelectorAll("#tbl thead th").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) sortAsc = !sortAsc;
+    else { sortKey = key; sortAsc = false; }
+    renderTable();
+  });
+});
+
+document.getElementById("tagEnv").textContent = `Node ${META.node}`;
+document.getElementById("tagCount").textContent = `${DATA.length} 个样本`;
+document.getElementById("foot").textContent = `生成于 ${META.generatedAt} · 每指标 ${META.repeats} 次中位数 · 渲染为 SVG 字符串生成，不含 DOM 挂载与浏览器绘制`;
+
+renderCards();
+renderTable();
+renderConcl();
+</script>
+</body>
+</html>

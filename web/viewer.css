@@ -1483,36 +1483,197 @@ html, body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(15, 23, 42, 0.42);
   z-index: 1000000;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
 }
 #sigModalOverlay.hidden {
   display: none;
 }
 #sigModal {
+  /* 模态框自带的语义色，浅色/深色各一套，避免与侧栏共用变量后被误改 */
+  --sig-line: var(--separator-color);
+  --sig-ok-bg: #e4f5ef;
+  --sig-ok-line: #a7e0cd;
+  --sig-ok-fg: #0b7a5c;
+  --sig-bad-bg: #fdf5f2;
+  --sig-bad-line: #f0cdc0;
+  --sig-bad-fg: #b23c17;
   background: var(--doorhanger-bg);
-  border: 1px solid var(--doorhanger-border);
-  border-radius: 8px;
-  box-shadow: var(--doorhanger-shadow);
-  padding: 16px 20px;
-  width: 440px;
-  max-width: 90vw;
-  max-height: 80vh;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 0;
+  width: 448px;
+  max-width: 100%;
+  max-height: 82vh;
   overflow-y: auto;
   position: relative;
+  font-size: 13px;
+  color: var(--toolbar-fg);
 }
-.sig-group-head {
+@media (prefers-color-scheme: dark) {
+  #sigModal {
+    --sig-line: rgba(255, 255, 255, 0.12);
+    --sig-ok-bg: rgba(46, 211, 163, 0.12);
+    --sig-ok-line: #2a6f5b;
+    --sig-ok-fg: #2ed3a3;
+    --sig-bad-bg: rgba(255, 138, 112, 0.12);
+    --sig-bad-line: #7a3a2a;
+    --sig-bad-fg: #ff8a70;
+  }
+}
+#sigModal:focus-visible,
+#sigModal :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+#sigModal::-webkit-scrollbar {
+  width: 10px;
+}
+#sigModal::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+/* 头部：印章缩略图 + 标题与状态 + 动作，滚动时固定 */
+.sig-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  margin: 0;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+#sigModal .sig-seal {
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  background: #ffffff;
+}
+/* 头部信息列：标题 + 状态与验证 */
+.sig-modal-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+.sig-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+.sig-modal-meta {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 状态徽章：描边胶囊，颜色只在已验证/校验失败时出现 */
+#sigModal .sig-status {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--toolbar-border);
+  background: transparent;
+  color: var(--toolbar-muted);
+  white-space: nowrap;
+}
+#sigModal .sig-status.ok {
+  background: var(--sig-ok-bg);
+  border-color: var(--sig-ok-line);
+  color: var(--sig-ok-fg);
+}
+#sigModal .sig-status.bad {
+  background: var(--sig-bad-bg);
+  border-color: var(--sig-bad-line);
+  color: var(--sig-bad-fg);
+}
+#sigModal .sig-status.unknown {
+  background: transparent;
+  border-color: var(--toolbar-border);
+  color: var(--toolbar-muted);
+}
+#sigModal .sig-verify {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+#sigModal .sig-verify:hover {
+  background: var(--accent-hover, #0250bb);
+  border-color: var(--accent-hover, #0250bb);
+}
+#sigModal .sig-verify:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.sig-modal-close {
+  position: static;
+  flex: none;
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--toolbar-muted);
+}
+.sig-modal-close svg {
+  display: block;
+}
+.sig-modal-close:hover {
+  background: var(--button-bg-hover);
+  color: var(--toolbar-fg);
+}
+/* 签名框的关闭按钮贴右上角，不参与头部布局；PDF 框仍留在头行内 */
+#sigModal .sig-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  margin-left: 0;
+}
+
+/* 分区：一段一行标题，靠 1px 上边线分段 */
+.sig-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 .sig-group-title {
-  font-size: 14px;
-  font-weight: normal;
-  color: var(--toolbar-muted);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--toolbar-fg);
 }
 .sig-group-toggle {
   margin-left: auto;
@@ -1521,7 +1682,7 @@ html, body {
   line-height: 1;
   border: none;
   background: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: normal;
   color: var(--accent);
   cursor: pointer;
@@ -1533,73 +1694,71 @@ html, body {
 .sig-group-body.collapsed .sig-extra {
   display: none;
 }
-.sig-section:first-of-type {
-  margin-top: 0;
-}
 #sigModalSignInfo {
-  margin-top: 16px;
+  padding: 16px 20px;
 }
 #sigModalSealInfo {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  padding: 16px 20px;
+  border-top: 1px solid var(--sig-line);
 }
+
+/* 信息行：标签列定宽，值的基线在各行之间对齐 */
 .sig-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 8px 0;
-  font-size: 13px;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+  padding: 6px 0;
+  font-size: 12.5px;
   line-height: 1.6;
+  font-variant-numeric: tabular-nums;
 }
 #sigModal .sig-label {
-  flex: 0 0 6em;
   color: var(--toolbar-muted);
 }
 .sig-value {
-  flex: 1 1 auto;
-  word-break: break-all;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--toolbar-fg);
 }
-.sig-value code {
+/* 摘要 / 签名值这类长串用等宽块，避免把整行拉成一片字墙 */
+#sigModal .sig-value code {
+  display: block;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--sig-line);
+  border-radius: 4px;
+  background: var(--body-bg-color);
   font-family: Consolas, Menlo, monospace;
   font-size: 12px;
+  line-height: 1.55;
   color: var(--toolbar-fg);
   word-break: break-all;
 }
-/* 模态框头部：印章图 + 信息列 + 关闭按钮 */
-.sig-modal-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.sig-modal-close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
+
+/* 验证结果：空态不占位，有内容时与上方分区用细线隔开 */
+#sigModalMsg {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--toolbar-muted);
-  padding: 2px 6px;
 }
-.sig-modal-close:hover {
-  color: var(--toolbar-fg);
+#sigModalMsg:empty {
+  display: none;
 }
-/* 头部信息列（标题 + 状态徽章）左对齐 */
-.sig-modal-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+#sigModalMsg:not(:empty) {
+  padding: 20px;
+  border-top: 1px solid var(--sig-line);
 }
-.sig-modal-actions {
-  margin-top: 4px;
-  display: flex;
-  justify-content: flex-start;
+#sigModalMsg.ok {
+  color: var(--sig-ok-fg);
+}
+#sigModalMsg.bad {
+  color: var(--sig-bad-fg);
+}
+#sigModalMsg.unknown {
+  color: var(--toolbar-muted);
 }
 
 /* ----------------------------- PDF 转换模态框 ----------------------------- */
