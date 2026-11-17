@@ -17,147 +17,123 @@
 <style>
   :root {
     color-scheme: light;
-    --bg: #f6f8fb;
+    --bg: #f7f8fa;
     --panel: #ffffff;
-    --line: #dde3ea;
-    --line-strong: #cfd7e2;
-    --text: #18212c;
-    --muted: #667080;
+    --strip: #fafbfc;
+    --line: #e5e7eb;
+    --line-soft: #f1f3f5;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --faint: #9ca3af;
     --accent: #0b57d0;
-    --accent-weak: #e8f0fe;
+    --accent-weak: #eef4ff;
     --btn-bg: #0b57d0;
     --btn-hover: #0842a0;
     --btn-text: #ffffff;
-    --danger: #b42318;
-    --danger-weak: #fdecea;
+    --hot: #c2410c;
+    --hot-weak: #fdf5f2;
+    --ok: #0f9d77;
+    --ok-weak: #e4f5ef;
     --code-bg: #0f172a;
     --code-text: #dce5f0;
-    --strip: #fbfcfe;
-    --surface: #eef1f5;
-    --surface-line: #d7dee8;
     --page-bg: #ffffff;
-    --control-bg: #ffffff;
-    --control-hover: #f3f6fa;
-    --disabled-bg: #f4f6f9;
-    --disabled-text: #8a94a3;
-    --chip-bg: #eef2f7;
-    --chip-text: #3f4b5b;
-    --arrow: #9aa5b4;
-    --topbar-bg: rgba(255, 255, 255, .72);
-    --topbar-solid: #ffffff;
-    --glass-bg: rgba(248, 250, 252, .62);
-    --glass-solid: rgba(248, 250, 252, .95);
-    --accent-ring: rgba(11, 87, 208, .14);
-    --spinner-track: rgba(11, 87, 208, .2);
-    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --surface: #f2f4f7;
+    --glass-bg: rgba(255, 255, 255, 0.84);
+    --mono: Consolas, "SFMono-Regular", "Liberation Mono", Menlo, monospace;
   }
   [data-theme="dark"] {
     color-scheme: dark;
     --bg: #0d1117;
     --panel: #151b23;
-    --line: #2a333f;
-    --line-strong: #3a4655;
+    --strip: #111820;
+    --line: #263141;
+    --line-soft: #1b2532;
     --text: #e6edf3;
     --muted: #9aa7b6;
+    --faint: #6e7e96;
     --accent: #79b0ff;
     --accent-weak: #17263d;
     --btn-bg: #1f6feb;
     --btn-hover: #388bfd;
     --btn-text: #ffffff;
-    --danger: #ff8a80;
-    --danger-weak: #3a1d1c;
+    --hot: #ff8a70;
+    --hot-weak: #2a1712;
+    --ok: #2ed3a3;
+    --ok-weak: #0e2a24;
     --code-bg: #0a0f16;
     --code-text: #d6e2f0;
-    --strip: #111820;
-    --surface: #0b1017;
-    --surface-line: #2a333f;
     --page-bg: #ffffff;
-    --control-bg: #111820;
-    --control-hover: #1b2430;
-    --disabled-bg: #1a222c;
-    --disabled-text: #8b98a8;
-    --chip-bg: #1d2733;
-    --chip-text: #b7c3d2;
-    --arrow: #667586;
-    --topbar-bg: rgba(13, 17, 23, .72);
-    --topbar-solid: #0d1117;
-    --glass-bg: rgba(13, 17, 23, .62);
-    --glass-solid: rgba(13, 17, 23, .95);
-    --accent-ring: rgba(121, 176, 255, .22);
-    --spinner-track: rgba(121, 176, 255, .22);
+    --surface: #0b1017;
+    --glass-bg: rgba(21, 27, 35, 0.86);
   }
+
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.7 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font: 14px/1.6 "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   a { color: var(--accent); }
+  ::selection { background: var(--accent-weak); color: var(--text); }
   code, pre, .mono { font-family: var(--mono); }
-  button, input, select { font: inherit; }
-  a:focus-visible, button:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+  button, input, select { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   [hidden] { display: none !important; }
 
+  /* ---------- 顶栏 ---------- */
   .topbar {
     position: sticky;
     top: 0;
     z-index: 50;
-    background: var(--topbar-bg);
-    backdrop-filter: blur(16px) saturate(1.7);
-    -webkit-backdrop-filter: blur(16px) saturate(1.7);
+    background: var(--panel);
     border-bottom: 1px solid var(--line);
   }
-  @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
-    .topbar { background: var(--topbar-solid); }
-  }
   .topbar-inner {
-    max-width: 1080px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: 0 20px;
     height: 52px;
     display: flex;
     align-items: center;
-    gap: 40px;
+    gap: 28px;
   }
   .brand {
     flex: none;
     color: var(--text);
     text-decoration: none;
-    font: 600 16px/1 var(--mono);
-    letter-spacing: -.02em;
+    font: 600 14px/1 var(--mono);
+    letter-spacing: -0.2px;
   }
   .brand span { color: var(--accent); }
   .topnav {
     display: flex;
-    gap: 22px;
+    gap: 20px;
+    height: 52px;
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
   }
   .topnav::-webkit-scrollbar { display: none; }
   .topnav a {
-    padding: 16px 0;
+    display: inline-flex;
+    align-items: center;
     color: var(--muted);
     text-decoration: none;
     font-size: 13px;
     white-space: nowrap;
+    border-bottom: 2px solid transparent;
   }
   .topnav a:hover { color: var(--text); }
-  .topnav a.active { color: var(--accent); }
+  .topnav a.active { color: var(--accent); border-bottom-color: var(--accent); }
   .top-actions {
     display: flex;
     align-items: center;
     gap: 14px;
     flex: none;
     margin-left: auto;
-    padding-left: 14px;
-    border-left: 1px solid var(--line);
   }
   .top-actions a {
     display: inline-flex;
@@ -169,15 +145,15 @@
     white-space: nowrap;
   }
   .top-actions a:hover { color: var(--accent); }
-  .source-icon { display: none; width: 16px; height: 16px; flex: none; }
+  .source-icon { display: none; width: 15px; height: 15px; flex: none; }
   .theme-toggle {
     width: 28px;
     height: 28px;
     flex: none;
     padding: 0;
-    border: 1px solid var(--line-strong);
-    border-radius: 5px;
-    background: var(--control-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
     color: var(--muted);
     display: inline-flex;
     align-items: center;
@@ -190,37 +166,40 @@
   [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
   [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
   @media (max-width: 760px) {
-    .topbar-inner { gap: 32px; }
-    .topnav { gap: 20px; }
-    .top-actions { gap: 8px; padding-left: 8px; }
+    .topbar-inner { gap: 16px; }
+    /* 窄屏放不下六个栏目，横向滚动又不好点：直接隐藏，靠滚动定位 */
+    .topnav { display: none; }
+    .top-actions { gap: 10px; }
     .top-actions a { font-size: 12px; }
     .source-label { display: none; }
     .source-icon { display: block; }
   }
 
+  /* ---------- 页面骨架 ---------- */
   main {
-    max-width: 1080px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: 0 20px 48px;
   }
-  section { scroll-margin-top: 68px; }
+  section { scroll-margin-top: 64px; }
 
-  .overview { padding: 52px 0 34px; }
+  .overview { padding: 44px 0 32px; }
   .overview h1 {
-    margin: 0 0 12px;
-    font-size: clamp(26px, 4vw, 34px);
+    margin: 0 0 10px;
+    font-size: clamp(24px, 3.4vw, 30px);
     line-height: 1.25;
-    letter-spacing: -.02em;
+    font-weight: 600;
+    letter-spacing: 0.2px;
   }
   .overview .lede {
-    max-width: 780px;
+    max-width: 820px;
     margin: 0;
     color: var(--muted);
-    font-size: 15.5px;
+    font-size: 14px;
   }
   .flow {
-    margin-top: 24px;
-    padding: 12px 16px;
+    margin-top: 22px;
+    padding: 14px 16px;
     border: 1px solid var(--line);
     border-radius: 6px;
     background: var(--panel);
@@ -233,43 +212,50 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 10px;
-    font-size: 13px;
+    font-size: 12.5px;
   }
-  .flow-node { font-family: var(--mono); color: var(--text); }
+  .flow-node { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
   .flow-node.end { color: var(--accent); font-weight: 600; }
-  .flow-arrow { color: var(--arrow); font-family: var(--mono); }
+  .flow-arrow { color: var(--faint); font-family: var(--mono); font-size: 12.5px; }
 
   .section {
-    padding: 38px 0 44px;
+    padding: 28px 0 36px;
     border-top: 1px solid var(--line);
   }
   .mod-head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
+  }
+  .mod-head .idx {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
   }
   .mod-head h2 {
     margin: 0;
-    font-size: 21px;
+    font-size: 17px;
+    font-weight: 600;
     line-height: 1.3;
   }
-  .mod-head h2 .mono { font-size: 19px; }
+  .mod-head h2 .mono { font-size: 16px; }
   .mod-head .tag {
     font-family: var(--mono);
     font-size: 12px;
     color: var(--accent);
   }
   .lede {
-    max-width: 840px;
+    max-width: 820px;
     margin: 8px 0 18px;
     color: var(--muted);
+    font-size: 13px;
   }
 
+  /* ---------- 事实行 ---------- */
   .facts {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-rows: 1fr;
     border: 1px solid var(--line);
     border-radius: 6px;
     background: var(--panel);
@@ -277,14 +263,14 @@
   }
   .fact {
     min-width: 0;
-    padding: 10px 14px;
+    padding: 11px 14px;
     border-left: 1px solid var(--line);
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
   .fact:first-child { border-left: 0; }
-  .fact .k { font-size: 11.5px; color: var(--muted); }
+  .fact .k { font-size: 12px; color: var(--muted); }
   .fact .v {
     font-family: var(--mono);
     font-size: 12.5px;
@@ -303,24 +289,21 @@
   }
 
   .npm-note {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 6px 10px;
     margin: 10px 0 0;
-    padding: 9px 12px;
+    padding: 9px 14px;
     border: 1px solid var(--line);
     border-radius: 6px;
     background: var(--panel);
     color: var(--muted);
     font-size: 12.5px;
   }
-  .npm-note .mono { color: var(--text); font-size: 11.5px; }
+  .npm-note .mono { color: var(--text); font-size: 12px; margin-right: 6px; }
 
+  /* ---------- 演示 ---------- */
   .demo {
     margin-top: 16px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--panel);
     overflow: hidden;
     min-width: 0;
@@ -330,13 +313,13 @@
     align-items: baseline;
     gap: 10px;
     flex-wrap: wrap;
-    padding: 10px 16px;
+    padding: 8px 14px;
     background: var(--strip);
     border-bottom: 1px solid var(--line);
   }
   .demo-head .t { font-size: 13px; font-weight: 600; }
-  .demo-head .n { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-  .demo-body { padding: 14px 16px 16px; min-width: 0; }
+  .demo-head .n { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .demo-body { padding: 14px; min-width: 0; }
 
   .row {
     display: flex;
@@ -350,33 +333,30 @@
     gap: 4px;
     min-width: 0;
   }
-  .field > span { font-size: 11.5px; color: var(--muted); }
+  .field > span { font-size: 12px; color: var(--muted); }
   .field-sample { width: 230px; max-width: 100%; }
   .field-path { flex: 1 1 220px; }
 
   input[type="text"], select {
-    height: 32px;
+    height: 30px;
     padding: 0 9px;
-    border: 1px solid var(--line-strong);
-    border-radius: 5px;
-    background: var(--control-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
     color: var(--text);
     font-size: 13px;
     min-width: 0;
   }
-  input[type="text"]::placeholder { color: var(--disabled-text); opacity: 1; }
+  input[type="text"]::placeholder { color: var(--faint); opacity: 1; }
   select option { background: var(--panel); color: var(--text); }
-  input[type="text"]:focus, select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-ring);
-  }
-  select:disabled { color: var(--disabled-text); background: var(--disabled-bg); }
+  input[type="text"]:focus, select:focus { outline: none; border-color: var(--accent); }
+  select:disabled { color: var(--faint); background: var(--strip); }
+
   .btn {
-    height: 32px;
-    padding: 0 14px;
+    height: 30px;
+    padding: 0 13px;
     border: 1px solid var(--btn-bg);
-    border-radius: 5px;
+    border-radius: 4px;
     background: var(--btn-bg);
     color: var(--btn-text);
     font-size: 13px;
@@ -384,19 +364,19 @@
     cursor: pointer;
   }
   .btn:hover { background: var(--btn-hover); border-color: var(--btn-hover); }
-  .btn:disabled { opacity: .55; cursor: default; }
-  .btn.ghost { background: var(--control-bg); color: var(--text); border-color: var(--line-strong); }
-  .btn.ghost:hover { background: var(--control-hover); border-color: var(--line-strong); }
-  .btn.small { height: 28px; padding: 0 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.ghost { background: var(--panel); color: var(--text); border-color: var(--line); }
+  .btn.ghost:hover { background: var(--strip); border-color: var(--faint); }
+  .btn.small { height: 26px; padding: 0 9px; font-size: 12px; }
 
   .preview {
     position: relative;
     margin-top: 12px;
     min-height: 420px;
-    padding: 16px;
+    padding: 14px;
     border: 1px solid var(--line);
     border-radius: 6px;
-    background: var(--surface);
+    background: var(--bg);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -407,14 +387,14 @@
     max-width: 100%;
     height: auto;
     background: var(--page-bg);
-    border: 1px solid var(--surface-line);
+    border: 1px solid var(--line);
     display: inline-block;
   }
   .empty {
     margin: 0;
     padding: 120px 16px;
-    color: var(--muted);
-    font-size: 13.5px;
+    color: var(--faint);
+    font-size: 13px;
     text-align: center;
     overflow-wrap: anywhere;
   }
@@ -425,15 +405,20 @@
     gap: 10px;
     margin-top: 10px;
   }
-  .page-meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .page-meta {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
   .result {
     min-height: 20px;
-    margin: 12px 0 0;
+    margin: 10px 0 0;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 12.5px;
     overflow-wrap: anywhere;
   }
-  .result.error { color: var(--danger); }
+  .result.error { color: var(--hot); }
 
   .frame-wrap {
     position: relative;
@@ -441,15 +426,23 @@
     margin-top: 12px;
     border: 1px solid var(--line);
     border-radius: 6px;
-    background: var(--surface);
+    background: var(--bg);
     overflow: hidden;
   }
-  .frame-wrap iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--page-bg); }
+  .frame-wrap iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--page-bg);
+  }
   @media (max-width: 720px) { .frame-wrap { height: 520px; } }
   @media (max-width: 760px) {
     .field-sample { width: 100%; flex: 1 1 100%; }
     .field-path { flex: 1 1 100%; }
     .row .btn { flex: 1 1 120px; }
+    /* 窄屏上页面按宽度缩放后高度很小，420px 的最小高度会留出大片空白 */
+    .preview { min-height: 320px; }
   }
 
   .glass {
@@ -462,75 +455,66 @@
     gap: 10px;
     padding: 16px;
     background: var(--glass-bg);
-    backdrop-filter: blur(10px) saturate(1.5);
-    -webkit-backdrop-filter: blur(10px) saturate(1.5);
     color: var(--muted);
     font-size: 13px;
     text-align: center;
   }
-  @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
-    .glass { background: var(--glass-solid); }
-  }
   .spinner {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     flex: none;
-    border: 2px solid var(--spinner-track);
+    border: 2px solid var(--line);
     border-top-color: var(--accent);
     border-radius: 50%;
-    animation: spin .8s linear infinite;
+    animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .spinner { animation: none; }
-  }
 
+  /* ---------- 代码 ---------- */
   .codes-label {
-    margin: 22px 0 0;
-    font-family: var(--mono);
+    margin: 20px 0 0;
     font-size: 12px;
     color: var(--muted);
   }
-  .codes { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+  .codes { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
   .code {
     min-width: 0;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 6px;
     background: var(--panel);
     overflow: hidden;
   }
   .code-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
     gap: 8px 14px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     background: var(--strip);
     border-bottom: 1px solid var(--line);
   }
-  .code-title { font-size: 13px; font-weight: 600; }
+  .code-title { font-size: 13px; font-weight: 600; flex: none; }
   .ifaces {
     flex: 1 1 260px;
     min-width: 0;
     font-family: var(--mono);
-    font-size: 11.5px;
-    color: var(--muted);
+    font-size: 12px;
+    color: var(--faint);
     overflow-wrap: anywhere;
   }
   .copy {
     margin-left: auto;
-    height: 28px;
+    height: 26px;
     padding: 0 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: 5px;
-    background: var(--control-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
     color: var(--text);
     font-size: 12px;
     white-space: nowrap;
     cursor: pointer;
   }
-  .copy:hover { background: var(--control-hover); }
+  .copy:hover { background: var(--strip); border-color: var(--faint); }
   .code pre {
     margin: 0;
     padding: 14px 16px;
@@ -542,46 +526,54 @@
   }
   .code pre code { font: inherit; }
 
-  .speclist { margin-top: 8px; border-top: 1px solid var(--line); }
+  /* ---------- 限制表 ---------- */
+  .speclist { margin-top: 14px; border-top: 1px solid var(--line); }
   .spec-row {
     display: grid;
     grid-template-columns: 148px minmax(0, 1fr);
     gap: 16px;
     padding: 14px 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--line-soft);
   }
-  .spec-name { font-family: var(--mono); font-size: 12.5px; padding-top: 2px; }
+  .spec-name { font-family: var(--mono); font-size: 12.5px; padding-top: 1px; }
   .spec-body { min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip {
     display: inline-block;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     line-height: 18px;
-    padding: 0 6px;
-    border-radius: 3px;
-    background: var(--chip-bg);
-    color: var(--chip-text);
+    padding: 0 7px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
     white-space: nowrap;
   }
-  .chip.on { background: var(--accent-weak); color: var(--accent); }
-  .chip.off { background: var(--danger-weak); color: var(--danger); }
-  .spec-body p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+  .chip.on { border-color: var(--accent-weak); color: var(--accent); background: var(--accent-weak); }
+  .chip.off { border-color: var(--hot-weak); color: var(--hot); background: var(--hot-weak); }
+  .spec-body p { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; }
+  .spec-row:last-child { border-bottom: 0; }
   @media (max-width: 700px) {
     .spec-row { grid-template-columns: 1fr; gap: 6px; }
   }
 
+  /* ---------- 页脚 ---------- */
   .footer {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     gap: 12px;
-    padding: 22px 0 0;
+    padding: 20px 0 0;
     border-top: 1px solid var(--line);
-    color: var(--muted);
-    font-size: 12.5px;
+    color: var(--faint);
+    font-size: 12px;
   }
-  .footer .mono { font-size: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .spinner { animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -618,8 +610,8 @@
 
   <section id="overview" class="overview">
     <h1>OFD 解析、渲染与双向转换</h1>
-    <p class="lede">四个可以单独使用的模块：核心引擎把 OFD 解析成 SVG，预览器负责阅读，ofd2pdf 导出 PDF，pdf2ofd 把 PDF 转回 OFD。演示文件全部来自本机，不上传。</p>
-    <div class="flow" aria-label="模块链路">
+    <p class="lede">四个模块可以单独使用。核心引擎把 OFD 解析成 SVG，预览器负责阅读，ofd2pdf 导出 PDF，pdf2ofd 把 PDF 转回 OFD。演示文件全部来自本机，不上传。</p>
+    <div class="flow" aria-label="OFD 经 ofd-core 解析渲染，由 viewer 阅读，再由 ofd2pdf 导出 PDF；PDF 经 pdf2ofd 转回 OFD">
       <div class="flow-lane">
         <span class="flow-node end">OFD</span>
         <span class="flow-arrow">→</span>
@@ -643,10 +635,11 @@
 
   <section id="ofd-core" class="section">
     <div class="mod-head">
+      <span class="idx">01</span>
       <h2><span class="mono">ofd-core</span> 核心引擎</h2>
       <span class="tag">browser + node ≥ 19</span>
     </div>
-    <p class="lede">把 OFD 包解析成 SVG 页面，提供页数、尺寸、元信息、签名校验与字体配置。加载时只读目录结构，页面内容在首次渲染时再解析。</p>
+    <p class="lede">把 OFD 包解析成 SVG 页面，可以取页数、页面尺寸和文档元信息，校验签名，指定字体目录。加载时只读目录结构，页面内容在首次渲染时才解析。</p>
 
     <div class="facts">
       <div class="fact"><span class="k">产物</span><span class="v">build/ofd/ofd.min.js</span></div>
@@ -674,7 +667,7 @@
           </div>
           <div class="glass" id="renderGlass" hidden>
             <span class="spinner"></span>
-            <span id="renderGlassText">解析中...</span>
+            <span id="renderGlassText" role="status" aria-live="polite">解析中...</span>
           </div>
         </div>
         <div class="pager" id="renderPager" hidden>
@@ -758,10 +751,11 @@ const OFD = require('ofd-core');
 
   <section id="ofd2pdf" class="section">
     <div class="mod-head">
+      <span class="idx">02</span>
       <h2><span class="mono">ofd2pdf</span> 导出 PDF</h2>
       <span class="tag">browser + node ≥ 19</span>
     </div>
-    <p class="lede">复用引擎的 SVG 输出，逐页拼成 PDF 内容流。纯前端运行，不依赖后端服务。</p>
+    <p class="lede">复用引擎输出的 SVG，逐页拼成 PDF 内容流。转换在浏览器里完成，不需要后端服务。</p>
 
     <div class="facts">
       <div class="fact"><span class="k">产物</span><span class="v">build/ofd2pdf/ofd2pdf.js</span></div>
@@ -843,10 +837,11 @@ const TOPDF = require('ofd2pdf');
 
   <section id="viewer" class="section">
     <div class="mod-head">
+      <span class="idx">03</span>
       <h2><span class="mono">viewer</span> 预览器</h2>
       <span class="tag">browser</span>
     </div>
-    <p class="lede">完整的阅读界面：懒渲染翻页、缩放旋转、全文搜索、缩略图与大纲、签章放置、打印与导出 PDF。</p>
+    <p class="lede">阅读界面。翻到哪页才渲染哪页，支持缩放、旋转、全文搜索、缩略图与大纲、放置签章、打印、导出 PDF。</p>
 
     <div class="facts">
       <div class="fact"><span class="k">产物</span><span class="v">web/viewer.html</span></div>
@@ -857,7 +852,7 @@ const TOPDF = require('ofd2pdf');
 
     <p class="npm-note">
       <span class="mono">npm</span>
-      viewer 是应用，不单独发布 npm 包；直接部署仓库或发行包中的 web/ 目录，并与 ofd.min.js、ofd2pdf.js 一起引入。
+      viewer 是应用，不单独发布 npm 包。部署仓库或发行包里的 web/ 目录，同时引入 ofd.min.js 和 ofd2pdf.js。
     </p>
 
     <div class="demo">
@@ -870,12 +865,13 @@ const TOPDF = require('ofd2pdf');
           <label class="field field-sample"><span>仓库样本</span><select id="viewerSample"></select></label>
           <label class="field field-path"><span>文件路径</span><input id="viewerPath" type="text" placeholder="./ofdFile/文档.ofd" autocomplete="off"></label>
           <button class="btn" id="viewerOpen" type="button">打开</button>
+          <button class="btn ghost" id="viewerPopup" type="button">新窗口打开</button>
         </div>
         <div class="frame-wrap">
           <iframe id="viewerFrame" src="about:blank" title="OFD 预览器"></iframe>
           <div class="glass" id="viewerGlass">
             <span class="spinner"></span>
-            <span id="viewerGlassText">选择样本后打开</span>
+            <span id="viewerGlassText" role="status" aria-live="polite">选择样本后打开</span>
           </div>
         </div>
       </div>
@@ -966,10 +962,11 @@ const TOPDF = require('ofd2pdf');
 
   <section id="pdf2ofd" class="section">
     <div class="mod-head">
+      <span class="idx">04</span>
       <h2><span class="mono">pdf2ofd</span> 反向转换</h2>
       <span class="tag">node ≥ 18</span>
     </div>
-    <p class="lede">把 PDF 转成 OFD 包，保留矢量路径、文本、图像与渐变。依赖 Node 文件系统与 pdf.js，只在 Node 或命令行运行。</p>
+    <p class="lede">把 PDF 转成 OFD 包，保留矢量路径、文本、图像与渐变。依赖 Node 文件系统和 pdf.js，只能在 Node 或命令行里运行。</p>
 
     <div class="facts">
       <div class="fact"><span class="k">产物</span><span class="v">build/pdf2ofd/pdf2ofd.js</span></div>
@@ -1034,6 +1031,7 @@ const bytes = zip.build();</code></pre>
 
   <section id="limits" class="section">
     <div class="mod-head">
+      <span class="idx">05</span>
       <h2>运行环境与已知限制</h2>
     </div>
 
@@ -1046,7 +1044,7 @@ const bytes = zip.build();</code></pre>
             <span class="chip on">Firefox 113+</span>
             <span class="chip on">Safari 16.4+</span>
           </div>
-          <p>ZIP 解压依赖原生 DecompressionStream，旧版浏览器无法打开 OFD。</p>
+          <p>ZIP 解压依赖原生的 DecompressionStream。低于上面列出的版本打不开 OFD。</p>
         </div>
       </div>
       <div class="spec-row">
@@ -1056,21 +1054,21 @@ const bytes = zip.build();</code></pre>
             <span class="chip on">ofd-core / ofd2pdf：Node ≥19</span>
             <span class="chip on">pdf2ofd：Node ≥18</span>
           </div>
-          <p>ofd-core 与 ofd2pdf 需要全局 crypto.getRandomValues；pdf2ofd 仅支持 Node。</p>
+          <p>ofd-core 和 ofd2pdf 需要全局的 crypto.getRandomValues。pdf2ofd 只能在 Node 里运行。</p>
         </div>
       </div>
       <div class="spec-row">
         <div class="spec-name">加载方式</div>
         <div class="spec-body">
           <div class="chips"><span class="chip">HTTP(S)</span></div>
-          <p>预览器用 fetch 读取文件，file:// 协议下无法自动加载，手选文件仍可用。</p>
+          <p>预览器用 fetch 读取文件，file:// 协议下无法自动加载。手动选择文件仍然可用。</p>
         </div>
       </div>
       <div class="spec-row">
         <div class="spec-name">字体</div>
         <div class="spec-body">
           <div class="chips"><span class="chip">可选</span></div>
-          <p>外部字体放 font/，所在目录需要被服务器输出列表才会生效，失败时回退内嵌字体与系统字体栈。</p>
+          <p>外部字体放在 font/ 目录。服务器要输出目录列表才能读到，读取失败时回退到内嵌字体或系统字体。</p>
         </div>
       </div>
       <div class="spec-row">
@@ -1081,28 +1079,28 @@ const bytes = zip.build();</code></pre>
             <span class="chip off">未做吊销</span>
             <span class="chip off">未做时间戳</span>
           </div>
-          <p>只验证 SM2 签名值、文件摘要与有效期，不判断签发者是否被信任。</p>
+          <p>只验证 SM2 签名值、文件摘要和有效期。签发者是否可信不在验证范围内。</p>
         </div>
       </div>
       <div class="spec-row">
         <div class="spec-name">ofd2pdf</div>
         <div class="spec-body">
           <div class="chips"><span class="chip off">beta</span></div>
-          <p>演示级转换，不保证与 OFD 原件逐像素一致，正式使用前请人工核对输出。</p>
+          <p>演示级转换，不保证与 OFD 原件逐像素一致。正式使用前请人工核对输出。</p>
         </div>
       </div>
       <div class="spec-row">
         <div class="spec-name">pdf2ofd</div>
         <div class="spec-body">
           <div class="chips"><span class="chip off">浏览器不可用</span></div>
-          <p>依赖 Node 文件系统与 pdf.js，只能在 Node 或 CLI 运行。</p>
+          <p>依赖 Node 文件系统和 pdf.js，浏览器里不可用。</p>
         </div>
       </div>
       <div class="spec-row">
         <div class="spec-name">安全</div>
         <div class="spec-body">
           <div class="chips"><span class="chip off">未审计</span></div>
-          <p>已限制解压体积、图像像素与 URL 协议，但未经过专业安全审计。</p>
+          <p>已限制解压体积、图像像素数量和 URL 协议。未经过专业安全审计。</p>
         </div>
       </div>
     </div>
@@ -1110,7 +1108,7 @@ const bytes = zip.build();</code></pre>
 
   <footer class="footer">
     <span>Apache-2.0</span>
-    <span class="mono">演示数据：test/ofdFile/</span>
+    <span class="mono">演示数据 test/ofdFile/</span>
   </footer>
 
 </main>
@@ -1149,9 +1147,13 @@ const bytes = zip.build();</code></pre>
     el.classList.toggle("error", !!isError);
   }
 
-  // 目录列表不输出时回退到默认样本，与 viewer 的 999.ofd 默认行为一致。
+  // 目录列表不输出时回退到 samples.json，再不行只用默认样本。
+  // 静态托管（如 GitHub Pages）不输出目录索引，靠 samples.json 才能列出全部样本。
   var FALLBACK_SAMPLES = ["999.ofd"];
-  function listSamples() {
+  function sortNames(names) {
+    return names.sort(function (a, b) { return a.localeCompare(b, "zh"); });
+  }
+  function listFromDirectory() {
     return fetch("./ofdFile/", { cache: "no-store" })
       .then(function (res) {
         if (!res.ok) throw new Error(String(res.status));
@@ -1169,9 +1171,30 @@ const bytes = zip.build();</code></pre>
           name = name.split("/").filter(Boolean).pop() || "";
           if (/\.ofd$/i.test(name) && names.indexOf(name) === -1) names.push(name);
         }
-        names.sort(function (a, b) { return a.localeCompare(b, "zh"); });
-        return names.length ? names : FALLBACK_SAMPLES.slice();
+        if (!names.length) throw new Error("empty directory listing");
+        return sortNames(names);
+      });
+  }
+  function listFromManifest() {
+    return fetch("./ofdFile/samples.json", { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
       })
+      .then(function (list) {
+        if (!Array.isArray(list)) throw new Error("samples.json is not an array");
+        var names = [];
+        for (var i = 0; i < list.length; i++) {
+          var name = String(list[i]);
+          if (/\.ofd$/i.test(name) && names.indexOf(name) === -1) names.push(name);
+        }
+        if (!names.length) throw new Error("samples.json has no .ofd entries");
+        return sortNames(names);
+      });
+  }
+  function listSamples() {
+    return listFromDirectory()
+      .catch(listFromManifest)
       .catch(function () { return FALLBACK_SAMPLES.slice(); });
   }
 
@@ -1288,7 +1311,7 @@ const bytes = zip.build();</code></pre>
       return;
     }
     if (typeof OFD === "undefined" || !OFD || typeof OFD.load !== "function") {
-      renderError("引擎产物未加载：缺少 build/ofd/ofd.min.js");
+      renderError("引擎产物未加载，缺少 build/ofd/ofd.min.js");
       return;
     }
     var token = ++renderToken;
@@ -1345,11 +1368,11 @@ const bytes = zip.build();</code></pre>
       return;
     }
     if (typeof OFD === "undefined" || !OFD || typeof OFD.load !== "function") {
-      setResult(pdfResult, "引擎产物未加载：缺少 build/ofd/ofd.min.js", true);
+      setResult(pdfResult, "引擎产物未加载，缺少 build/ofd/ofd.min.js", true);
       return;
     }
     if (typeof TOPDF === "undefined" || !TOPDF || typeof TOPDF.ofdToPdf !== "function") {
-      setResult(pdfResult, "转换产物未加载：缺少 build/ofd2pdf/ofd2pdf.js", true);
+      setResult(pdfResult, "转换产物未加载，缺少 build/ofd2pdf/ofd2pdf.js", true);
       return;
     }
 
@@ -1366,8 +1389,8 @@ const bytes = zip.build();</code></pre>
     }).then(function (bytes) {
       var name = (pdfPick.label() || "document").replace(/\.ofd$/i, "") + ".pdf";
       downloadPdf(bytes, name);
-      setResult(pdfResult, "已生成 " + name + "，" + Math.max(1, Math.round(bytes.length / 1024)) +
-        " KB，下载已开始");
+      setResult(pdfResult, "已生成 " + name + "，大小 " + Math.max(1, Math.round(bytes.length / 1024)) +
+        " KB。下载已开始。");
     }).catch(function (err) {
       setResult(pdfResult, err && err.message ? err.message : String(err), true);
     }).finally(function () {
@@ -1382,16 +1405,26 @@ const bytes = zip.build();</code></pre>
   var viewerGlassText = $("viewerGlassText");
   var viewerPending = false;
 
-  function openViewer() {
+  // iframe 与新窗口共用同一份 URL，避免两处各自拼参数后行为不一致
+  function viewerTarget() {
     var url = viewerPick.url();
-    if (!url) {
-      viewerGlassText.textContent = "请选择样本或填写路径";
-      viewerGlass.hidden = false;
-      return;
-    }
+    if (!url) return "";
     var decoded = url;
     try { decoded = decodeURIComponent(url); } catch (e) { /* 保留原始 URL */ }
-    var target = new URL("../web/viewer.html?file=" + encodeURIComponent(decoded), location.href).href;
+    return new URL("../web/viewer.html?file=" + encodeURIComponent(decoded), location.href).href;
+  }
+
+  function remindPickViewer() {
+    viewerGlassText.textContent = "请选择样本或填写路径";
+    viewerGlass.hidden = false;
+  }
+
+  function openViewer() {
+    var target = viewerTarget();
+    if (!target) {
+      remindPickViewer();
+      return;
+    }
     if (viewerFrame.src === target) {
       if (!viewerPending) hideGlass(viewerGlass);
       return;
@@ -1407,6 +1440,23 @@ const bytes = zip.build();</code></pre>
     hideGlass(viewerGlass);
   });
   $("viewerOpen").addEventListener("click", openViewer);
+
+  // 不用 noopener：带该参数时返回值恒为 null，无法区分「被拦截」和「已打开」
+  $("viewerPopup").addEventListener("click", function () {
+    var target = viewerTarget();
+    if (!target) {
+      remindPickViewer();
+      return;
+    }
+    var win = window.open(target, "_blank");
+    if (!win) {
+      viewerGlassText.textContent = "新窗口被浏览器拦截，请允许本站弹出窗口";
+      viewerGlass.hidden = false;
+      setTimeout(function () { hideGlass(viewerGlass); }, 2600);
+      return;
+    }
+    try { win.opener = null; } catch (e) { /* 跨域时无法赋值，忽略 */ }
+  });
 
   // ---------------- 启动 ----------------
   listSamples().then(function (names) {
