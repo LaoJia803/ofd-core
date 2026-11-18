@@ -20,6 +20,21 @@ OFD is the Chinese national standard format for electronic official documents (s
 | **OFD → PDF** | Pure front-end conversion, zero dependencies (`build/ofd2pdf/ofd2pdf.js`) |
 | **PDF → OFD** | Node CLI script / npm package (`build/pdf2ofd/pdf2ofd.js`, beta) |
 
+## Online demos
+
+GitHub Pages serves the current `master`:
+
+| Page | URL |
+| --- | --- |
+| Intro and local demos | https://laojia803.github.io/ofd-core/test/example-intro.html |
+| Viewer | https://laojia803.github.io/ofd-core/web/viewer.html |
+| Viewer open APIs | https://laojia803.github.io/ofd-core/test/example-viewerApi.html |
+| Basic rendering | https://laojia803.github.io/ofd-core/test/example-basic.html |
+| OFD → PDF | https://laojia803.github.io/ofd-core/test/example-ofd2pdf.html |
+| Seal placement | https://laojia803.github.io/ofd-core/test/example-seal.html |
+| Benchmark | https://laojia803.github.io/ofd-core/test/benchmark.html |
+| Parse speed | https://laojia803.github.io/ofd-core/test/parse-speed.html |
+
 ## Quick start
 
 ### Option 1: just run it (no build)

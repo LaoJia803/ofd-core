@@ -288,6 +288,144 @@ OFD.onPageChange((page, total) => {
 });
 ```
 
+### OFD.onSelectionChange(cb)
+
+注册正文选区变化回调。用户在页面上拖动选中文字、或清空选区时触发，`null` 表示当前没有页面选区。
+
+```js
+OFD.onSelectionChange((sel) => {
+  if (!sel) return;
+  // sel.page      0-based 页码
+  // sel.quote     选中的原文
+  // sel.runs      [{ textIdx, start, end }]，页面内第几个 <text> 及其内部的字符区间
+  // sel.rects     [{ x, y, w, h }]，页面坐标系
+  // sel.prefix    quote 之前最多 32 字
+  // sel.suffix    quote 之后最多 32 字
+  // sel.continued 选区是否延续到下一页（延续时只包含起始页的内容）
+});
+```
+
+`rects` 与搜索高亮共用同一套坐标算法，缩放和旋转后仍然有效，可以直接用来画标注框。回调在松开鼠标、松开手指或键盘选完之后触发一次，拖选途中不会回调；同一处选区只触发一次，传 `null` 注销。
+
+### OFD.getSelection()
+
+同步读取当前选区，返回结构与 `onSelectionChange` 的参数一致，没有选中页面文字时返回 `null`。
+
+```js
+document.addEventListener('mouseup', () => {
+  const sel = OFD.getSelection();
+  if (sel) console.log(sel.quote, sel.rects);
+});
+```
+
+### 完整示例：选中即标注，重新打开后回显
+
+选区接口返回的 `rects` 是页面坐标系，直接换算成 SVG 矩形贴回页面即可，不需要再算缩放和旋转。
+
+```js
+const KEY = 'ofd-annotations';
+let annotations = JSON.parse(localStorage.getItem(KEY) || '[]');
+
+// 1) 采集：用户拖选后追加一条标注
+OFD.onSelectionChange((sel) => {
+  if (!sel) return;
+  annotations.push({
+    id: 'a' + Date.now(),
+    page: sel.page,
+    quote: sel.quote,
+    runs: sel.runs,      // 精确锚点，用于同一份文档的回显
+    rects: sel.rects,    // 页面坐标，直接画
+    prefix: sel.prefix,  // 文档换版后靠 quote + 前后文重新定位
+    suffix: sel.suffix,
+  });
+  localStorage.setItem(KEY, JSON.stringify(annotations));
+  drawAnnotations();
+});
+
+// 2) 回显：矩形必须插在 SVG 根层，文字在图元组里带 transform
+function drawAnnotations() {
+  document.querySelectorAll('.ofd-annotation').forEach((el) => el.remove());
+  for (const a of annotations) {
+    const slot = document.querySelector('.ofd-page[data-page-index="' + a.page + '"]');
+    const svg = slot && slot.querySelector('svg');
+    if (!svg) continue;  // 该页还没渲染，翻过去再画
+    for (const r of a.rects) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('class', 'ofd-annotation');
+      rect.setAttribute('x', r.x);
+      rect.setAttribute('y', r.y);
+      rect.setAttribute('width', r.w);
+      rect.setAttribute('height', r.h);
+      rect.setAttribute('fill', 'rgba(245, 158, 11, .3)');
+      svg.appendChild(rect);
+    }
+  }
+}
+
+// 3) 页面是懒渲染的：换页后重新画一次
+OFD.onPageChange(drawAnnotations);
+drawAnnotations();
+```
+
+标注数据建议由宿主自己保存。`runs` 只在同一份文档、同一套渲染切分下有效；跨版本恢复时用 `quote` 加 `prefix` / `suffix` 在页面文字里重新查找。
+
+### OFD.setMark(payload)
+
+把一段内容标成高亮，鼠标悬停显示备注。`payload` 直接取 `onSelectionChange` 的返回值，再加一个 `mark` 字段。
+
+| 字段 | 说明 |
+| --- | --- |
+| page | 0 基页码，与 `onSelectionChange` 一致 |
+| rects | 页面坐标矩形，直接用返回值即可 |
+| runs | 没有 rects 时按 runs 现场计算矩形 |
+| quote | 原文，`remarks` 为空时悬停显示它 |
+| mark.id | 标注 ID，同一 ID 再调一次是更新 |
+| mark.remarks | 悬停提示的内容 |
+
+```js
+const sel = OFD.getSelection();
+if (sel) {
+  OFD.setMark({
+    page: sel.page,
+    quote: sel.quote,
+    runs: sel.runs,
+    rects: sel.rects,
+    mark: { id: '1234567', remarks: '我是备注' },
+  });
+}
+```
+
+高亮画在文字下层，不影响选中。页码越界或算不出矩形时返回 `false`。
+
+### OFD.highlightQuote(payload)
+
+按文字定位并高亮。适合 AI 只给出一段原文、页码和前后文的场景，不需要 runs 和 rects。
+
+| 字段 | 说明 |
+| --- | --- |
+| page | 页码，0 基；不传则用当前页 |
+| quote | 必填，要定位的原文，可以带换行和空格 |
+| prefix / suffix | 可选，同一段文字出现多次时用来挑出正确的那一处 |
+| mark.id / mark.remarks | 可选，带上就等同一次 `setMark`，支持悬停备注与 `removeMark` |
+
+```js
+const r = await OFD.highlightQuote({
+  page: 0,
+  quote: '版权提示允许的情况下，您可以复制、使用、修改',
+  prefix: '在所有副本中的',
+  mark: { id: 'ai-1', remarks: 'AI 引用' },
+});
+// r: { found, page, method, runs, rects, id }
+```
+
+做法是把整页所有 `<text>` 的文字按 DOM 顺序拼成一条，去掉空白后匹配，命中位置再按字符下标切回各自的 `<text>` 生成矩形。所以跨多个文本片段、带换行的引用也能命中。
+
+两点限制：页面文字在渲染后才存在，接口会先渲染目标页再匹配；如果片段与文档文字有实质差异（OCR 误字、标点不同），会返回 `found: false`。
+
+### OFD.removeMark(id) / OFD.clearMarks()
+
+按 ID 删除单条标注，或清空全部标注。两个接口都会立即重绘已渲染的页面。标注按文档定位，切换文件时自动清空。
+
 ### 工具栏操作接口
 
 | 接口 | 说明 |

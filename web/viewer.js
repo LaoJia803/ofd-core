@@ -32,6 +32,7 @@
     sealPlaced: [],
     sealContextTarget: null,
     pdfConverting: false,
+    marks: [],                // 外部标注：[{ id, page, quote, remarks, rects }]
     // 懒渲染：仅渲染可视区 + 缓冲页，滚动时增量渲染/卸载离屏页
     lazyBuffer: 2,            // 视口上下各预渲染的页数
     renderTokens: [],         // 每页渲染代次：卸载/重渲染时递增，使在途渲染结果作废
@@ -171,6 +172,7 @@
     hideSealMenu();
     state.sealPlaced = []; // 页面重建，已放置印章的 DOM 引用失效
     state.sealSeq = 0;
+    state.marks = [];      // 标注按文档定位，换文件后清空
     state.renderTokens = [];
     els.viewer.innerHTML = '';
     els.thumbnailView.innerHTML = '';
@@ -1022,6 +1024,7 @@
     applySealsToPage(i);
     applySigHighlight();
     applySearchHighlights(i);
+    applyMarks(i);
   }
 
   // 卸载离屏页：清空 slot 释放 SVG DOM 与内存，恢复占位；印章数据仍保留，重渲染时重放
@@ -1537,6 +1540,449 @@
       return "";
     }
   }
+
+  // ---------------- 选区采集 ----------------
+  // 选区可能横跨多个 <text>（一个 TextObject 对应一个 text 元素），
+  // 逐段换算成 { textIdx, start, end }，再复用搜索高亮的矩形算法取页面坐标。
+  // 坐标必须是页面坐标系而不是屏幕坐标：旋转是加在页面容器上的 CSS 变换，
+  // getScreenCTM 拿不到，只有走 SVG 用户空间的 getCTM 才不会被旋转带偏。
+  function rangePartInText(textEl, range) {
+    const nodes = [];
+    let base = 0;
+    const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      nodes.push({ node: node, base: base, len: node.data.length });
+      base += node.data.length;
+    }
+    let start = -1;
+    let end = -1;
+    for (const item of nodes) {
+      if (!item.len) continue;
+      if (range.comparePoint(item.node, item.len) === -1) continue; // 整个节点在选区之前
+      if (range.comparePoint(item.node, 0) === 1) break; // 整个节点在选区之后
+      const s = range.startContainer === item.node ? item.base + range.startOffset : item.base;
+      const e = range.endContainer === item.node ? item.base + range.endOffset : item.base + item.len;
+      if (start < 0) start = s;
+      end = e;
+    }
+    if (start < 0 || end <= start) return null;
+    return { start: start, end: end };
+  }
+
+  function pageSlotOf(node) {
+    const el = node && node.nodeType === 1 ? node : node && node.parentElement;
+    return el && el.closest ? el.closest('.ofd-page') : null;
+  }
+
+  // 读取当前正文选区，返回纯数据（可直接 JSON 序列化）
+  function readSelection() {
+    let sel;
+    let range;
+    try {
+      sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      range = sel.getRangeAt(0);
+    } catch (e) {
+      return null;
+    }
+    const slot = pageSlotOf(range.startContainer);
+    if (!slot) return null;
+    const page = parseInt(slot.dataset.pageIndex, 10);
+    const svg = slot.querySelector('svg');
+    if (!svg || isNaN(page)) return null;
+
+    const textEls = svg.querySelectorAll('text');
+    const runs = [];
+    const rects = [];
+    const pageText = [];
+    let before = 0;
+    let firstOffset = -1;
+    let lastOffset = -1;
+
+    for (let i = 0; i < textEls.length; i++) {
+      const tEl = textEls[i];
+      const content = tEl.textContent || '';
+      if (range.intersectsNode(tEl)) {
+        const part = rangePartInText(tEl, range);
+        if (part) {
+          runs.push({ textIdx: i, start: part.start, end: part.end });
+          const rect = makeHighlightRect(tEl, part.start, part.end);
+          if (rect) {
+            rects.push({
+              x: parseFloat(rect.getAttribute('x')),
+              y: parseFloat(rect.getAttribute('y')),
+              w: parseFloat(rect.getAttribute('width')),
+              h: parseFloat(rect.getAttribute('height')),
+            });
+          }
+          if (firstOffset < 0) firstOffset = before + part.start;
+          lastOffset = before + part.end;
+        }
+      }
+      pageText.push(content);
+      before += content.length;
+    }
+    if (!runs.length) return null;
+
+    const joined = pageText.join('');
+    const CONTEXT = 32;
+    const endSlot = pageSlotOf(range.endContainer);
+    return {
+      page: page,
+      quote: sel.toString(),
+      runs: runs,
+      rects: rects,
+      prefix: firstOffset > 0 ? joined.slice(Math.max(0, firstOffset - CONTEXT), firstOffset) : '',
+      suffix: lastOffset >= 0 ? joined.slice(lastOffset, lastOffset + CONTEXT) : '',
+      // 拖选跨到下一页时只返回起始页的部分
+      continued: !!endSlot && endSlot !== slot,
+    };
+  }
+
+  let selectionCb = null;
+  let selectionKey = '';
+  let hasSelection = false; // 上一次回调是否带了选区
+  let pointerDown = false;
+
+  function emitSelection() {
+    if (!selectionCb) return;
+    let info = null;
+    try {
+      info = readSelection();
+    } catch (e) {
+      info = null;
+    }
+    // 同一处选区只回调一次
+    const key = info
+      ? info.page + '|' + info.runs.map(function (r) { return r.textIdx + ':' + r.start + ':' + r.end; }).join(',')
+      : '';
+    if (key === selectionKey) return;
+    selectionKey = key;
+    hasSelection = !!info;
+    selectionCb(info);
+  }
+
+  // 拖选途中 selectionchange 会连续触发，这里只在松开鼠标 / 手指或键盘选完后回调，
+  // 调用方不会收到半截选区。
+  document.addEventListener('mousedown', function () { pointerDown = true; }, true);
+  document.addEventListener('touchstart', function () { pointerDown = true; }, true);
+  document.addEventListener('mouseup', function () {
+    pointerDown = false;
+    setTimeout(emitSelection, 0);
+  }, true);
+  document.addEventListener('touchend', function () {
+    pointerDown = false;
+    setTimeout(emitSelection, 0);
+  }, true);
+  document.addEventListener('keyup', function () { setTimeout(emitSelection, 0); }, true);
+
+  // 选区被别处清掉（关闭搜索、页面重渲染等）时补一次 null
+  document.addEventListener('selectionchange', function () {
+    if (!selectionCb || pointerDown || !hasSelection) return;
+    let sel = null;
+    try { sel = window.getSelection(); } catch (e) { sel = null; }
+    if (sel && !sel.isCollapsed) return;
+    setTimeout(emitSelection, 0);
+  });
+
+  OFD.getSelection = readSelection;
+
+  // 开放接口：OFD.onSelectionChange(cb)
+  // 注册正文选区变化回调，cb(selection)，没有选区时传 null。
+  //   selection: { page, quote, runs: [{ textIdx, start, end }],
+  //                rects: [{ x, y, w, h }], prefix, suffix, continued }
+  //   rects 是页面坐标系，缩放和旋转后仍可直接用来画高亮。
+  // 只统计 .ofd-page 内的选区；传 null 注销。
+  OFD.onSelectionChange = function (cb) {
+    selectionCb = typeof cb === 'function' ? cb : null;
+    selectionKey = '';
+  };
+
+  // ---------------- 外部标注 ----------------
+  // 传入的 rects 是页面坐标系，与 onSelectionChange 返回的一致；缩放、旋转后无需重算。
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  let markTipEl = null;
+
+  function ensureMarkTip() {
+    if (!markTipEl) {
+      markTipEl = document.createElement('div');
+      markTipEl.className = 'ofd-mark-tip';
+      markTipEl.hidden = true;
+      document.body.appendChild(markTipEl);
+    }
+    return markTipEl;
+  }
+
+  function placeMarkTip(ev) {
+    const tip = ensureMarkTip();
+    const x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
+    const y = Math.min(ev.clientY + 16, window.innerHeight - tip.offsetHeight - 8);
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+
+  function showMarkTip(mark, ev) {
+    const tip = ensureMarkTip();
+    tip.textContent = mark.remarks || mark.quote || '';
+    tip.hidden = false;
+    placeMarkTip(ev);
+  }
+
+  function hideMarkTip() {
+    if (markTipEl) markTipEl.hidden = true;
+  }
+
+  // 矩形插在第一个图元组之前：位于白底之上、文字之下，不影响选中
+  function applyMarks(i) {
+    const svg = state.pageSvgs[i];
+    if (!svg) return;
+    svg.querySelectorAll('.ofd-mark').forEach(function (el) { el.remove(); });
+    for (const m of state.marks) {
+      if (m.page !== i) continue;
+      for (const r of m.rects) {
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('class', 'ofd-mark');
+        rect.setAttribute('x', r.x);
+        rect.setAttribute('y', r.y);
+        rect.setAttribute('width', r.w);
+        rect.setAttribute('height', r.h);
+        const firstGroup = Array.prototype.find.call(svg.children, function (el) {
+          return el.tagName.toLowerCase() === 'g';
+        });
+        if (firstGroup) svg.insertBefore(rect, firstGroup);
+        else svg.appendChild(rect);
+      }
+    }
+  }
+
+  // 标注在下层，直接被文字抢走命中测试，所以按坐标判断悬停
+  els.viewerContainer.addEventListener('mousemove', function (ev) {
+    if (!state.marks.length) { hideMarkTip(); return; }
+    const slot = ev.target && ev.target.closest ? ev.target.closest('.ofd-page') : null;
+    if (!slot) { hideMarkTip(); return; }
+    const page = parseInt(slot.dataset.pageIndex, 10);
+    const svg = state.pageSvgs[page];
+    const ctm = svg && svg.getScreenCTM();
+    if (!svg || isNaN(page) || !ctm) { hideMarkTip(); return; }
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX;
+    pt.y = ev.clientY;
+    const p = pt.matrixTransform(ctm.inverse());
+    const hit = state.marks.find(function (m) {
+      return m.page === page && m.rects.some(function (r) {
+        return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+      });
+    });
+    if (hit) showMarkTip(hit, ev);
+    else hideMarkTip();
+  });
+
+  function normalizeRects(input, page) {
+    if (Array.isArray(input.rects) && input.rects.length) {
+      return input.rects
+        .map(function (r) { return { x: +r.x, y: +r.y, w: +r.w, h: +r.h }; })
+        .filter(function (r) { return isFinite(r.x) && isFinite(r.y) && r.w > 0 && r.h > 0; });
+    }
+    // 只给了 runs 时，按已渲染的页面重新算矩形
+    const svg = state.pageSvgs[page];
+    if (!svg || !Array.isArray(input.runs)) return [];
+    const textEls = svg.querySelectorAll('text');
+    const out = [];
+    for (const run of input.runs) {
+      const tEl = textEls[run.textIdx];
+      if (!tEl) continue;
+      const rect = makeHighlightRect(tEl, run.start, run.end);
+      if (!rect) continue;
+      out.push({
+        x: parseFloat(rect.getAttribute('x')),
+        y: parseFloat(rect.getAttribute('y')),
+        w: parseFloat(rect.getAttribute('width')),
+        h: parseFloat(rect.getAttribute('height'))
+      });
+    }
+    return out;
+  }
+
+  // 开放接口：OFD.setMark(payload)
+  // payload 直接取 onSelectionChange 的返回值，另加 mark: { id, remarks }。
+  //   page 0 基，与 onSelectionChange 一致；rects 缺失时按 runs 现场计算。
+  // 同一个 id 再次调用是更新，返回是否成功。
+  function upsertMark(record) {
+    const idx = state.marks.findIndex(function (m) { return m.id === record.id; });
+    if (idx >= 0) state.marks[idx] = record;
+    else state.marks.push(record);
+    applyMarks(record.page);
+    return record;
+  }
+
+  OFD.setMark = function (payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    const page = parseInt(payload.page, 10);
+    if (!(page >= 0 && page < state.pageCount)) return false;
+    const mark = payload.mark || {};
+    const id = mark.id != null && mark.id !== '' ? String(mark.id) : 'mark-' + Date.now();
+    const rects = normalizeRects(payload, page);
+    if (!rects.length) return false;
+    upsertMark({
+      id: id,
+      page: page,
+      quote: payload.quote || '',
+      remarks: mark.remarks == null ? '' : String(mark.remarks),
+      rects: rects
+    });
+    return true;
+  };
+
+  // 开放接口：OFD.highlightQuote(payload)
+  // AI 只给「页码 + 文字片段 + 前后文」时用：把整页文字拼成一条再匹配，
+  // 命中位置换算回各自的 <text> 和字符区间，再走 setMark 那套高亮。
+  //   payload: { page?, quote, prefix?, suffix?, mark?: { id, remarks } }
+  //   返回: { found, page, method, runs, rects, id }
+  function buildTextIndex(svg) {
+    const textEls = svg.querySelectorAll('text');
+    const segs = [];
+    const normChars = [];
+    const normStart = [];
+    const normEnd = [];
+    let rawPos = 0;
+    for (let i = 0; i < textEls.length; i++) {
+      const content = textEls[i].textContent || '';
+      segs.push({ start: rawPos, end: rawPos + content.length, textIdx: i });
+      let p = 0;
+      for (const ch of content) {
+        const len = ch.length;
+        // 归一化去掉所有空白：选区原文里会带换行，页面文字里未必有
+        if (!/\s/.test(ch)) {
+          normChars.push(ch);
+          normStart.push(rawPos + p);
+          normEnd.push(rawPos + p + len);
+        }
+        p += len;
+      }
+      rawPos += content.length;
+    }
+    return { segs: segs, norm: normChars.join(''), normStart: normStart, normEnd: normEnd };
+  }
+
+  function rawRunsFrom(segs, startRaw, endRaw) {
+    const runs = [];
+    for (const seg of segs) {
+      const s = Math.max(startRaw, seg.start);
+      const e = Math.min(endRaw, seg.end);
+      if (e > s) runs.push({ textIdx: seg.textIdx, start: s - seg.start, end: e - seg.start });
+    }
+    return runs;
+  }
+
+  function runsToRects(runs, svg) {
+    const textEls = svg.querySelectorAll('text');
+    const rects = [];
+    for (const run of runs) {
+      const tEl = textEls[run.textIdx];
+      if (!tEl) continue;
+      const rect = makeHighlightRect(tEl, run.start, run.end);
+      if (!rect) continue;
+      rects.push({
+        x: parseFloat(rect.getAttribute('x')),
+        y: parseFloat(rect.getAttribute('y')),
+        w: parseFloat(rect.getAttribute('width')),
+        h: parseFloat(rect.getAttribute('height'))
+      });
+    }
+    return rects;
+  }
+
+  function scoreOccurrence(norm, pos, quoteLen, prefix, suffix) {
+    let score = 0;
+    if (prefix) {
+      const p = prefix.replace(/\s+/g, '');
+      const before = norm.slice(Math.max(0, pos - p.length), pos);
+      let k = 0;
+      while (k < before.length && k < p.length && before[before.length - 1 - k] === p[p.length - 1 - k]) k++;
+      score += k;
+    }
+    if (suffix) {
+      const p = suffix.replace(/\s+/g, '');
+      const after = norm.slice(pos + quoteLen, pos + quoteLen + p.length);
+      let k = 0;
+      while (k < after.length && k < p.length && after[k] === p[k]) k++;
+      score += k;
+    }
+    return score;
+  }
+
+  OFD.highlightQuote = async function (payload) {
+    const fail = { found: false, page: null, method: 'none', runs: [], rects: [], id: null };
+    if (!payload || typeof payload.quote !== 'string') return fail;
+    const quoteNorm = payload.quote.replace(/\s+/g, '');
+    if (!quoteNorm) return fail;
+
+    let page = parseInt(payload.page, 10);
+    if (isNaN(page)) page = state.currentPage;
+    if (!(page >= 0 && page < state.pageCount)) return fail;
+
+    // 文字只在渲染后存在：目标页没渲染就先渲染
+    if (!state.pageSvgs[page]) await renderPage(page);
+    const svg = state.pageSvgs[page];
+    if (!svg) return fail;
+
+    const index = buildTextIndex(svg);
+    if (!index.norm) return fail;
+
+    let pos = -1;
+    let best = -1;
+    let from = index.norm.indexOf(quoteNorm);
+    while (from >= 0) {
+      const s = scoreOccurrence(index.norm, from, quoteNorm.length, payload.prefix, payload.suffix);
+      if (s > best) { best = s; pos = from; }
+      if (from + 1 >= index.norm.length) break;
+      from = index.norm.indexOf(quoteNorm, from + 1);
+    }
+    if (pos < 0) return fail;
+
+    const startRaw = index.normStart[pos];
+    const endRaw = index.normEnd[pos + quoteNorm.length - 1];
+    const runs = rawRunsFrom(index.segs, startRaw, endRaw);
+    if (!runs.length) return fail;
+    const rects = runsToRects(runs, svg);
+    if (!rects.length) return fail;
+
+    const mark = payload.mark || {};
+    const id = mark.id != null && mark.id !== '' ? String(mark.id) : 'quote-' + Date.now();
+    upsertMark({
+      id: id,
+      page: page,
+      quote: payload.quote,
+      remarks: mark.remarks == null ? '' : String(mark.remarks),
+      rects: rects
+    });
+
+    return {
+      found: true,
+      page: page,
+      method: payload.prefix || payload.suffix ? 'context' : 'exact',
+      runs: runs,
+      rects: rects,
+      id: id
+    };
+  };
+
+  // 开放接口：OFD.removeMark(id) / OFD.clearMarks()
+  OFD.removeMark = function (id) {
+    const before = state.marks.length;
+    state.marks = state.marks.filter(function (m) { return m.id !== String(id); });
+    if (state.marks.length === before) return false;
+    for (let i = 0; i < state.pageCount; i++) applyMarks(i);
+    hideMarkTip();
+    return true;
+  };
+
+  OFD.clearMarks = function () {
+    state.marks = [];
+    for (let i = 0; i < state.pageCount; i++) applyMarks(i);
+    hideMarkTip();
+  };
 
   function openFindbar(skipSearch) {
     // 用 position:fixed 定位，与 #secondaryToolbar 弹出框一致，避免父级 overflow 裁剪

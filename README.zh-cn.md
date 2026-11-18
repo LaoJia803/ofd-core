@@ -20,6 +20,21 @@ OFD 是电子公文的国标格式（类似 PDF，但更贴合中文排版与电
 | **OFD → PDF** | 纯前端转换，零依赖（`build/ofd2pdf/ofd2pdf.js`） |
 | **PDF → OFD** | Node 命令行脚本 / npm 包（`build/pdf2ofd/pdf2ofd.js`，beta） |
 
+## 在线演示
+
+GitHub Pages 部署的是当前 `master`：
+
+| 页面 | 地址 |
+| --- | --- |
+| 介绍页与本地演示 | https://laojia803.github.io/ofd-core/test/example-intro.html |
+| 预览器 | https://laojia803.github.io/ofd-core/web/viewer.html |
+| 预览器开放接口 | https://laojia803.github.io/ofd-core/test/example-viewerApi.html |
+| 基础渲染 | https://laojia803.github.io/ofd-core/test/example-basic.html |
+| OFD 转 PDF | https://laojia803.github.io/ofd-core/test/example-ofd2pdf.html |
+| 签章放置 | https://laojia803.github.io/ofd-core/test/example-seal.html |
+| 性能基准 | https://laojia803.github.io/ofd-core/test/benchmark.html |
+| 解析速度 | https://laojia803.github.io/ofd-core/test/parse-speed.html |
+
 ## 快速开始
 
 ### 方式一：直接用（零构建）

@@ -1,5 +1,5 @@
 /*!
- * ofd.js v1.0.0 — OFD 纯前端解析与 SVG 渲染引擎
+ * ofd.js v1.0.1 — OFD 纯前端解析与 SVG 渲染引擎
  * 零依赖，ZIP 解压使用浏览器原生 DecompressionStream
  */
 (function () {
@@ -6478,7 +6478,7 @@
       decodeEntities
     }
   };
-  OFD.version = "1.0.0";
+  OFD.version = "1.0.1";
   globalThis.OFD = OFD;
 })();
 

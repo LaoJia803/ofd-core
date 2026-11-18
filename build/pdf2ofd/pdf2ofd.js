@@ -1,5 +1,5 @@
 /*!
- * pdf2ofd.js v1.0.0 — PDF → OFD 转换器（Node 环境，beta）
+ * pdf2ofd.js v1.0.1 — PDF → OFD 转换器（Node 环境，beta）
  * 由 pdf2ofd/ 的 ESM 模块打包为 CommonJS；CLI 与 module.exports 均可用。
  * 仅供 Node：pdf.js 通过动态 import 从 pdfjs-dist 加载（peerDependency）。
  */

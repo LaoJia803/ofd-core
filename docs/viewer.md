@@ -283,6 +283,144 @@ OFD.onPageChange((page, total) => {
 });
 ```
 
+### OFD.onSelectionChange(cb)
+
+Register a callback for text selection changes in the document. Fires when the user drags over page text or clears the selection; `null` means no page text is selected.
+
+```js
+OFD.onSelectionChange((sel) => {
+  if (!sel) return;
+  // sel.page      0-based page index
+  // sel.quote     selected text
+  // sel.runs      [{ textIdx, start, end }]: which <text> and the character range inside it
+  // sel.rects     [{ x, y, w, h }] in page coordinates
+  // sel.prefix    up to 32 characters before quote
+  // sel.suffix    up to 32 characters after quote
+  // sel.continued whether the selection runs into the next page (only the start page is included)
+});
+```
+
+`rects` shares the coordinate algorithm used by search highlights, so it stays valid after zoom and rotation and can be used to draw annotation boxes directly. The callback fires once when the mouse or finger is released or the keyboard selection ends, never mid-drag; it fires once per distinct selection, and passing `null` unregisters.
+
+### OFD.getSelection()
+
+Reads the current selection synchronously. Returns the same structure as the `onSelectionChange` argument, or `null` when no page text is selected.
+
+```js
+document.addEventListener('mouseup', () => {
+  const sel = OFD.getSelection();
+  if (sel) console.log(sel.quote, sel.rects);
+});
+```
+
+### Full example: annotate on selection, redraw after reload
+
+The `rects` returned by the selection API are in page coordinates, so you can turn them into SVG rectangles and attach them to the page without redoing zoom or rotation math.
+
+```js
+const KEY = 'ofd-annotations';
+let annotations = JSON.parse(localStorage.getItem(KEY) || '[]');
+
+// 1) Capture: append one annotation after the user drags over text
+OFD.onSelectionChange((sel) => {
+  if (!sel) return;
+  annotations.push({
+    id: 'a' + Date.now(),
+    page: sel.page,
+    quote: sel.quote,
+    runs: sel.runs,      // exact anchor, valid for the same document
+    rects: sel.rects,    // page coordinates, draw directly
+    prefix: sel.prefix,  // re-locate with quote + context after the file changes
+    suffix: sel.suffix,
+  });
+  localStorage.setItem(KEY, JSON.stringify(annotations));
+  drawAnnotations();
+});
+
+// 2) Redraw: rectangles must go on the SVG root, text sits inside transformed groups
+function drawAnnotations() {
+  document.querySelectorAll('.ofd-annotation').forEach((el) => el.remove());
+  for (const a of annotations) {
+    const slot = document.querySelector('.ofd-page[data-page-index="' + a.page + '"]');
+    const svg = slot && slot.querySelector('svg');
+    if (!svg) continue;  // page not rendered yet, redraw after navigating there
+    for (const r of a.rects) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('class', 'ofd-annotation');
+      rect.setAttribute('x', r.x);
+      rect.setAttribute('y', r.y);
+      rect.setAttribute('width', r.w);
+      rect.setAttribute('height', r.h);
+      rect.setAttribute('fill', 'rgba(245, 158, 11, .3)');
+      svg.appendChild(rect);
+    }
+  }
+}
+
+// 3) Pages render lazily: redraw after each page change
+OFD.onPageChange(drawAnnotations);
+drawAnnotations();
+```
+
+Store annotation data in the host app. `runs` is only valid for the same document and the same text splitting; after the file changes, re-locate with `quote` plus `prefix` / `suffix` against the page text.
+
+### OFD.setMark(payload)
+
+Highlights a range and shows a remark on hover. `payload` is the object returned by `onSelectionChange`, plus a `mark` field.
+
+| Field | Meaning |
+| --- | --- |
+| page | 0-based page index, same as `onSelectionChange` |
+| rects | page-coordinate rectangles, pass the returned value as is |
+| runs | used to compute rectangles when `rects` is missing |
+| quote | source text, shown on hover when `remarks` is empty |
+| mark.id | mark ID; calling again with the same ID updates it |
+| mark.remarks | text shown on hover |
+
+```js
+const sel = OFD.getSelection();
+if (sel) {
+  OFD.setMark({
+    page: sel.page,
+    quote: sel.quote,
+    runs: sel.runs,
+    rects: sel.rects,
+    mark: { id: '1234567', remarks: 'my note' },
+  });
+}
+```
+
+The highlight is painted under the text, so selection still works. Returns `false` when the page index is out of range or no rectangle can be derived.
+
+### OFD.highlightQuote(payload)
+
+Locates content by text and highlights it. Meant for AI callers that only provide a quoted snippet, a page number, and surrounding text, without `runs` or `rects`.
+
+| Field | Meaning |
+| --- | --- |
+| page | 0-based page index; defaults to the current page |
+| quote | required, the text to locate; may contain line breaks and spaces |
+| prefix / suffix | optional, used to pick the right occurrence when a snippet repeats |
+| mark.id / mark.remarks | optional; including them is equivalent to calling `setMark` |
+
+```js
+const r = await OFD.highlightQuote({
+  page: 0,
+  quote: 'you may copy, use, modify, sell and distribute',
+  prefix: 'provided that the copyright notice',
+  mark: { id: 'ai-1', remarks: 'AI citation' },
+});
+// r: { found, page, method, runs, rects, id }
+```
+
+The page text from every `<text>` element is concatenated in DOM order, whitespace is stripped, and the match is mapped back through character offsets to the owning `<text>` elements. Quotes that span several runs or contain newlines still match.
+
+Two limits: page text only exists after rendering, so the API renders the target page first; and when the snippet differs materially from the document text (OCR errors, different punctuation) it returns `found: false`.
+
+### OFD.removeMark(id) / OFD.clearMarks()
+
+Removes one mark by ID, or clears all marks. Both redraw every rendered page. Marks are tied to the document and are cleared when a new file is opened.
+
 ### Toolbar operation APIs
 
 | API | Description |

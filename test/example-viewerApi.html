@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>OFD 预览器开放接口演示</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --strip: #fafbfc;
+    --line: #e5e7eb;
+    --line-soft: #f1f3f5;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --faint: #9ca3af;
+    --accent: #0b57d0;
+    --hot: #c2410c;
+    --mono: Consolas, Monaco, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.6 "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg); color: var(--text); display: flex; flex-direction: column; overflow: hidden; }
+
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; flex: none; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+  header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+
+  .layout { display: flex; gap: 12px; padding: 14px; flex: 1; min-height: 0; }
+
+  /* 左：预览器 */
+  .viewer-box { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; overflow: hidden; }
+  .viewer-box iframe { width: 100%; height: 100%; border: 0; }
+
+  /* 右：接口清单 + 监听事件 */
+  .side { width: 440px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex;
+    flex-direction: column; min-height: 0; overflow: hidden; }
+  .card-head { flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-bottom: 1px solid var(--line); }
+  .card-head h2 { margin: 0; font-size: 13px; font-weight: 600; }
+  .card-head .hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .card-head .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  #apiCard { flex: 1; }
+  #apiBodyWrap { flex: 1; min-height: 0; overflow: auto; }
+  #eventCard { flex: none; height: 232px; }
+
+  button { height: 26px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 4px;
+    background: var(--accent); color: #fff; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #0842a0; border-color: #0842a0; }
+  button.ghost { background: var(--panel); color: var(--text); border-color: var(--line); }
+  button.ghost:hover { background: var(--strip); border-color: var(--faint); }
+  button:disabled { opacity: .45; cursor: default; }
+  button:disabled:hover { background: var(--panel); border-color: var(--line); }
+
+  /* 接口表 */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { position: sticky; top: 0; z-index: 1; background: var(--strip); font-weight: 500;
+    font-size: 12px; color: var(--faint); text-align: left; padding: 7px 12px;
+    border-bottom: 1px solid var(--line); }
+  td { padding: 6px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tbody tr:hover td { background: var(--strip); }
+  td.api { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+  td.desc { color: var(--muted); font-size: 12px; }
+  td.act { width: 1%; white-space: nowrap; text-align: right; }
+  td.act .done { color: var(--faint); font-size: 12px; }
+  tr.group td { background: var(--panel); font-weight: 600; color: var(--text);
+    padding-top: 12px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+  tr.group:hover td { background: var(--panel); }
+
+  /* 折叠示例：点整行展开 */
+  tr.api-row { cursor: pointer; }
+  tr.api-row.open td { background: var(--strip); }
+  .caret { display: inline-block; width: 12px; color: var(--faint); font-size: 10px;
+    transition: transform .15s; }
+  tr.api-row.open .caret { transform: rotate(90deg); }
+  tr.detail td { padding: 0 12px 10px; background: var(--strip); border-bottom: 1px solid var(--line); }
+  tr.detail .snippet { margin: 0; }
+
+  /* 事件与调用记录 */
+  #log { flex: 1; overflow: auto; margin: 0; padding: 4px 12px 8px; list-style: none;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6; min-height: 0; }
+  #log:empty::before { content: '在页面上选中文字或翻页，事件参数以 JSON 记在这里';
+    display: block; color: var(--faint); font-family: inherit; padding: 6px 0; }
+  #log li { padding: 3px 0; border-bottom: 1px solid var(--line-soft); word-break: break-all; }
+  #log li:last-child { border-bottom: 0; }
+  #log .n { color: var(--accent); }
+  #log .ev { color: #0f9d77; }
+  #log .r { color: var(--muted); }
+  #log .e { color: var(--hot); }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .layout { height: auto; flex-direction: column; }
+    .viewer-box { height: 60vh; flex: none; }
+    .side { width: auto; }
+    #eventCard { height: 260px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OFD 预览器开放接口演示</h1>
+  <p>左边是预览器。右上是全部接口，点「调用」执行一次；右下记录调用结果和监听事件。</p>
+</header>
+
+<div class="layout">
+  <div class="viewer-box">
+    <iframe id="frame" src="about:blank" title="OFD 预览器"></iframe>
+  </div>
+
+  <div class="side">
+    <div class="card" id="apiCard">
+      <div class="card-head">
+        <h2>接口清单</h2>
+        <span class="hint">34 个</span>
+      </div>
+      <div id="apiBodyWrap">
+        <table>
+          <thead>
+            <tr><th>接口</th><th>说明</th><th></th></tr>
+          </thead>
+          <tbody id="apiBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="eventCard">
+      <div class="card-head">
+        <h2>监听事件</h2>
+        <div class="actions">
+          <button class="ghost" id="clearLog">清除日志</button>
+        </div>
+      </div>
+      <ul id="log"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var frame = $("frame");
+  var api = null;
+  var SAMPLE = new URL("./ofdFile/999.ofd", location.href).href;
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // 事件面板只记监听回调，参数按 JSON 展示
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function log(name, payload) {
+    var text = payload === undefined ? "" : JSON.stringify(payload);
+    var li = document.createElement("li");
+    li.innerHTML = '<span class="ev">' + esc(name) + "</span> " +
+      '<span class="r">' + esc(text) + "</span>";
+    $("log").prepend(li);
+  }
+
+  // ---------------- 接口清单 ----------------
+  // 每组：[接口签名, 说明, 执行函数, 示例代码]；执行函数为 null 表示是已注册的事件回调
+  var GROUPS = [
+    ["文档", [
+      ["openFile(source, name?)", "打开文档：URL / Blob / ArrayBuffer", function () { return api.openFile(SAMPLE, "999.ofd"); },
+        "const ok = await OFD.openFile('./document.ofd', 'document.ofd');"],
+      ["chooseFile()", "弹出文件选择框", function () { api.chooseFile(); return "已打开选择框"; },
+        "OFD.chooseFile();"],
+      ["download()", "原样下载当前 OFD", function () { return api.download(); },
+        "await OFD.download();"],
+      ["convertToPdf()", "转成 PDF 并下载", function () { return api.convertToPdf(); },
+        "await OFD.convertToPdf();"],
+      ["print()", "打开打印对话框", function () { return api.print(); },
+        "OFD.print();"],
+      ["showDocumentInfo()", "打开文档属性弹窗", function () { return api.showDocumentInfo(); },
+        "OFD.showDocumentInfo();"]
+    ]],
+    ["翻页", [
+      ["firstPage()", "跳到首页", function () { return api.firstPage(); },
+        "OFD.firstPage();"],
+      ["prevPage()", "上一页", function () { return api.prevPage(); },
+        "OFD.prevPage();"],
+      ["nextPage()", "下一页", function () { return api.nextPage(); },
+        "OFD.nextPage();"],
+      ["lastPage()", "跳到末页", function () { return api.lastPage(); },
+        "OFD.lastPage();"],
+      ["goToPage(page)", "跳到指定页，从 1 开始", function () { return api.goToPage(2); },
+        "OFD.goToPage(3);              // 页码从 1 开始"]
+    ]],
+    ["缩放与旋转", [
+      ["setScale(v)", "auto / page-width / page-fit / 0.2 到 5", function () { return api.setScale("page-width"); },
+        "OFD.setScale('page-width');   // 或 0.2 到 5 的数字"],
+      ["zoomIn()", "放大一档", function () { return api.zoomIn(); },
+        "OFD.zoomIn();"],
+      ["zoomOut()", "缩小一档", function () { return api.zoomOut(); },
+        "OFD.zoomOut();"],
+      ["rotate(deg)", "相对当前角度旋转", function () { return api.rotate(90); },
+        "OFD.rotate(90);               // 相对当前角度"],
+      ["setRotation(deg)", "设为绝对角度", function () { return api.setRotation(0); },
+        "OFD.setRotation(0);           // 绝对角度"]
+    ]],
+    ["侧栏", [
+      ["setSidebar(view)", "thumb / outline / sign", function () { return api.setSidebar("thumb"); },
+        "OFD.setSidebar('thumb');      // thumb | outline | sign"],
+      ["toggleSidebar(view)", "展开或收起指定侧栏", function () { return api.toggleSidebar("outline"); },
+        "OFD.toggleSidebar('outline');"],
+      ["closeSidebar()", "关闭侧栏", function () { return api.closeSidebar(); },
+        "OFD.closeSidebar();"]
+    ]],
+    ["搜索", [
+      ["openSearch()", "打开搜索框", function () { return api.openSearch(); },
+        "OFD.openSearch();"],
+      ["search(query)", "搜索全文，返回命中数", function () { return api.search("发票"); },
+        "const count = await OFD.search('发票');"],
+      ["findNext()", "跳到下一处", function () { return api.findNext(); },
+        "OFD.findNext();"],
+      ["findPrev()", "跳到上一处", function () { return api.findPrev(); },
+        "OFD.findPrev();"],
+      ["closeSearch()", "关闭搜索并清除高亮", function () { return api.closeSearch(); },
+        "OFD.closeSearch();"]
+    ]],
+    ["工具栏与盖章", [
+      ["toggleTools(show?)", "显示或隐藏工具面板", function () { return api.toggleTools(true); },
+        "OFD.toggleTools(true);"],
+      ["setSeal(opts)", "提供印章并进入盖章模式", function () { return setSeal(); },
+        "OFD.setSeal({\n  sealImg: 'data:image/png;base64,...',\n  width: 36, height: 36, sealId: 'S001',\n});"],
+      ["stamp()", "进入盖章选位模式", function () { return api.stamp(); },
+        "OFD.stamp();"],
+      ["exitStamp()", "退出盖章模式", function () { return api.exitStamp(); },
+        "OFD.exitStamp();"]
+    ]],
+    ["状态", [
+      ["getViewerState()", "页码、总页数、缩放、旋转", function () { return JSON.stringify(api.getViewerState()); },
+        "const st = OFD.getViewerState();\n// { page, pageCount, scale, rotation, ... }"],
+      ["getSelection()", "同步读取当前选区", function () { var s = api.getSelection(); return s ? s.quote : "null"; },
+        "const sel = OFD.getSelection();\nif (sel) console.log(sel.quote, sel.rects);"]
+    ]],
+    ["标注", [
+      ["setMark(payload)", "把当前选区标成高亮，悬停显示备注", function () { return markSelection(); },
+        "const sel = OFD.getSelection();\nOFD.setMark({\n  page: sel.page,\n  quote: sel.quote,\n  rects: sel.rects,\n  mark: { id: 'a1', remarks: '备注' },\n});"],
+      ["highlightQuote(payload)", "只给原文就能定位并高亮（AI 引用）", function () { return markByQuote(); },
+        "await OFD.highlightQuote({\n  page: 0,\n  quote: '您要引用的那段原文',\n  prefix: '前一句', suffix: '后一句',\n  mark: { id: 'ai-1', remarks: 'AI 引用' },\n});"],
+      ["removeMark(id)", "按 ID 删除标注", function () { return api.removeMark(lastMarkId); },
+        "OFD.removeMark('1234567');"],
+      ["clearMarks()", "清空全部标注", function () { api.clearMarks(); return "已清空"; },
+        "OFD.clearMarks();"]
+    ]],
+    ["事件（已注册）", [
+      ["onSelectionChange(cb)", "选区变化，参数为选区或 null", null,
+        "OFD.onSelectionChange((sel) => {\n  if (!sel) return;\n  console.log(sel.page, sel.quote, sel.rects);\n});"],
+      ["onPageChange(cb)", "翻页后回调", null,
+        "OFD.onPageChange((page, total) => {\n  console.log(page, total);\n});"],
+      ["onGetSeal(cb)", "点「盖章」时取章", null,
+        "OFD.onGetSeal(async () => {\n  OFD.setSeal({ sealImg, width: 36, height: 36 });\n});"],
+      ["onSealChange(cb)", "放置或删除印章后回调", null,
+        "OFD.onSealChange((list, action) => {\n  console.log(action, list);\n});"]
+    ]]
+  ];
+
+  var SEAL_SVG = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' +
+    '<circle cx="100" cy="100" r="92" fill="none" stroke="#d32f2f" stroke-width="8"/>' +
+    '<text x="100" y="116" text-anchor="middle" font-size="34" fill="#d32f2f" font-family="SimSun">示例章</text>' +
+    "</svg>"
+  )));
+
+  function setSeal() {
+    api.setSeal({ sealImg: SEAL_SVG, width: 36, height: 36, sealId: "demo-" + Date.now() });
+    return "已进入盖章模式，点页面放置";
+  }
+
+  var lastMarkId = null;
+
+  // 先选中文字，再点这一行：把当前选区标成高亮，悬停显示备注
+  function markSelection() {
+    var sel = api.getSelection();
+    if (!sel) return "先在页面上选中文字";
+    lastMarkId = "mark-" + Date.now();
+    var ok = api.setMark({
+      page: sel.page,
+      quote: sel.quote,
+      runs: sel.runs,
+      rects: sel.rects,
+      mark: { id: lastMarkId, remarks: "我是备注：" + sel.quote.slice(0, 20) },
+    });
+    return ok ? "已标记，鼠标悬停查看备注" : "标记失败";
+  }
+
+  // 模拟 AI 只给原文：不带 runs / rects，靠文字定位
+  function markByQuote() {
+    lastMarkId = "ai-" + Date.now();
+    return api.highlightQuote({
+      page: 0,
+      quote: "重庆增值税电子普通发票",
+      prefix: "",
+      mark: { id: lastMarkId, remarks: "AI 引用定位" },
+    }).then(function (r) {
+      return r && r.found ? "命中 " + r.rects.length + " 块" : "没找到";
+    });
+  }
+
+  // 接口调用只执行，不写事件日志；失败时留一条控制台记录
+  function invoke(name, fn) {
+    if (!api) { console.warn(name, "预览器未就绪"); return; }
+    var out;
+    try {
+      out = fn();
+    } catch (e) {
+      console.warn(name, e);
+      return;
+    }
+    if (out && typeof out.then === "function") {
+      out.catch(function (e) { console.warn(name, e); });
+    }
+  }
+
+  function renderApiTable() {
+    var body = $("apiBody");
+    var opened = null; // 风琴式：同时只展开一行
+    GROUPS.forEach(function (group) {
+      var tr = document.createElement("tr");
+      tr.className = "group";
+      var td = document.createElement("td");
+      td.colSpan = 3;
+      td.textContent = group[0];
+      tr.appendChild(td);
+      body.appendChild(tr);
+
+      group[1].forEach(function (item) {
+        var row = document.createElement("tr");
+        row.className = "api-row";
+        row.innerHTML = '<td class="api"><span class="caret">▸</span></td><td class="desc"></td><td class="act"></td>';
+        row.querySelector(".api").appendChild(document.createTextNode(item[0]));
+        row.querySelector(".desc").textContent = item[1];
+        var act = row.querySelector(".act");
+        if (item[2]) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "ghost";
+          btn.textContent = "调用";
+          btn.addEventListener("click", function (ev) {
+            ev.stopPropagation(); // 只执行，不展开
+            invoke(item[0], item[2]);
+          });
+          act.appendChild(btn);
+        } else {
+          var tag = document.createElement("span");
+          tag.className = "done";
+          tag.textContent = "已注册";
+          act.appendChild(tag);
+        }
+        body.appendChild(row);
+
+        // 折叠行：点该行展开示例代码
+        var detail = document.createElement("tr");
+        detail.className = "detail";
+        detail.hidden = true;
+        var cell = document.createElement("td");
+        cell.colSpan = 3;
+        var pre = document.createElement("pre");
+        pre.className = "snippet";
+        pre.textContent = item[3] || "";
+        cell.appendChild(pre);
+        detail.appendChild(cell);
+        body.appendChild(detail);
+
+        row.addEventListener("click", function () {
+          var willOpen = detail.hidden;
+          if (opened && opened.detail !== detail) {
+            opened.detail.hidden = true;
+            opened.row.classList.remove("open");
+            opened = null;
+          }
+          detail.hidden = !willOpen;
+          row.classList.toggle("open", willOpen);
+          if (willOpen) opened = { row: row, detail: detail };
+        });
+      });
+    });
+  }
+
+  // ---------------- 选区 ----------------
+  function renderSelection(sel) {
+    log("onSelectionChange", sel);
+  }
+
+  $("clearLog").addEventListener("click", function () {
+    $("log").innerHTML = "";
+  });
+
+  // ---------------- 启动 ----------------
+  async function boot() {
+    frame.src = new URL("../web/viewer.html?file=" + encodeURIComponent(SAMPLE), location.href).href;
+    for (var i = 0; i < 100; i++) {
+      var a = null;
+      try { a = frame.contentWindow && frame.contentWindow.OFD; } catch (e) { a = null; }
+      if (a && a.onSelectionChange) { api = a; break; }
+      await sleep(100);
+    }
+    if (!api) { console.warn("预览器加载超时"); return; }
+
+    // 四个监听接口全部注册，事件写进右下面板
+    api.onSelectionChange(renderSelection);
+    api.onPageChange(function (page, total) {
+      log("onPageChange", "第 " + page + " / " + total + " 页");
+    });
+    api.onSealChange(function (list, action) {
+      log("onSealChange", action + " · 共 " + list.length + " 个印章");
+    });
+    api.onGetSeal(async function () {
+      api.setSeal({ sealImg: SEAL_SVG, width: 36, height: 36, sealId: "demo-" + Date.now() });
+    });
+
+    renderApiTable();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

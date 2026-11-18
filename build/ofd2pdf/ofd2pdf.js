@@ -1,5 +1,5 @@
 /*!
- * ofd2pdf.js v1.0.0 — OFD → PDF 转换模块（演示级）
+ * ofd2pdf.js v1.0.1 — OFD → PDF 转换模块（演示级）
  * 逐页取 ofd.js 的 renderPageToString 输出，再映射为 PDF 内容流。
  * 运行时依赖同目录/同包的 ofd.js（浏览器取 globalThis.OFD，Node 由本文件收尾段注入）。
  */
